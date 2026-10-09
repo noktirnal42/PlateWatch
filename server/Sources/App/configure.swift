@@ -30,6 +30,7 @@ func configure(_ app: Application) async throws {
     try app.register(collection: VehiclesController())
     try app.register(collection: AgenciesController())
     try app.register(collection: StatsController())
+    try app.register(collection: ExportController())
 
     app.get("health") { _ in ["status": "ok"] }
 }

@@ -159,6 +159,31 @@ final class DTOTests: XCTestCase {
     }
 }
 
+final class GeohashTests: XCTestCase {
+    // Reference vectors from geohash.org / public test corpora.
+    func testEncodeReferenceVectors() {
+        XCTAssertEqual(Geohash.encode(latitude: 57.64911, longitude: 10.40744, precision: 11),
+                       "u4pruydqqvj")
+        // Austin, TX and Washington, DC — verified against geohash.org.
+        XCTAssertEqual(Geohash.encode(latitude: 30.2672, longitude: -97.7431), "9v6kpv")
+        XCTAssertEqual(Geohash.encode(latitude: 38.8977, longitude: -77.0365), "dqcjqc")
+    }
+
+    func testDecodeRoundTripWithinCell() {
+        let hash = Geohash.encode(latitude: 30.2672, longitude: -97.7431)
+        let center = Geohash.decodeCenter(hash)!
+        // Precision-6 cells are ≤ ~610 m; center error must stay sub-km.
+        XCTAssertEqual(center.latitude, 30.2672, accuracy: 0.01)
+        XCTAssertEqual(center.longitude, -97.7431, accuracy: 0.01)
+    }
+
+    func testGeoBucketFromCoords() {
+        let bucket = GeoBucket(latitude: 30.2672, longitude: -97.7431)
+        XCTAssertEqual(bucket.geohash6, "9v6kpv")
+        XCTAssertNil(bucket.exactLatitude) // exact geo only via fleet-confirm path
+    }
+}
+
 final class WatchlistTests: XCTestCase {
     func testPlateMatch() {
         let entry = WatchlistEntry(plateText: "abc-123")
