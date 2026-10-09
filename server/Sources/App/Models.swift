@@ -60,6 +60,9 @@ final class Sighting: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
     @OptionalParent(key: "vehicle_id") var vehicle: Vehicle?
     @OptionalField(key: "plate_text") var plateText: String?
+    /// Parsed unit/fleet number — the join key into agency rosters.
+    /// Nullable pre-enrichment; exports surface it when present.
+    @OptionalField(key: "unit_number") var unitNumber: String?
     @Field(key: "captured_at") var capturedAt: Date
     @Field(key: "geohash6") var geohash6: String
     @OptionalField(key: "exact_lat") var exactLat: Double?

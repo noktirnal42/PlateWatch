@@ -44,6 +44,26 @@ final class ExportRendererTests: XCTestCase {
     }
 }
 
+final class WireProtocolTests: XCTestCase {
+    /// The fields a client sends must survive the wire decode on the server
+    /// — QA regression: unit numbers from markings were silently dropped
+    /// pre-fix (caught by live API test, 2026-10-09).
+    func testSubmissionDTOCarriesUnitNumber() throws {
+        let json = """
+        {"capturedAt":"2026-10-09T04:00:00Z","geohash6":"9v6kpv",
+         "deviceIDHash":"dev-qa-1","fleetConfidence":0.85,
+         "plate":{"text":"1ABC234","issuingRegion":"US-CA","country":"US","plateDesign":"US-CA-exempt","confidence":0.9},
+         "vehicle":{"vehicleClass":"patrol","classConfidence":0.8},
+         "markings":{"agencyText":"AUSTIN POLICE","unitNumber":"4421"}}
+        """
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let dto = try decoder.decode(SightingSubmissionDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.markings?.unitNumber, "4421")
+        XCTAssertEqual(dto.plate?.text, "1ABC234")
+        XCTAssertEqual(dto.plate?.plateDesign, "US-CA-exempt")
+    }
+}
+
 final class RedactionGateServiceTests: XCTestCase {
     private func dto(fleetConfidence: Double,
                      agencyText: String? = nil,

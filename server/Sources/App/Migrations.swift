@@ -67,6 +67,7 @@ struct CreateSightings: AsyncMigration {
             .id()
             .field("vehicle_id", .uuid, .references("vehicles", "id"))
             .field("plate_text", .string)
+            .field("unit_number", .string)
             .field("captured_at", .datetime, .required)
             .field("geohash6", .string, .required)
             .field("exact_lat", .double)
