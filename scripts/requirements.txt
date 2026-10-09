@@ -1,0 +1,10 @@
+# Pinned for reproducibility (Python 3.12+)
+coremltools>=8.2,<10
+onnx>=1.16
+onnxruntime>=1.19
+numpy>=1.26
+pillow>=10.3
+huggingface_hub>=0.24
+# Ultralytics is only needed for the vehicle detector (YOLO11). AGPL-3.0 —
+# compatible with this project's license.
+ultralytics>=8.3

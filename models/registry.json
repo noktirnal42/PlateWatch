@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "name": "plate-detector-yolov9t-384",
+      "task": "plate-detection",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/OpenALPR/releases/download/models-v0.1.0/plate-detector-yolov9t-384.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "https://github.com/ankandrew/fast-alpr",
+      "license": "AGPL-3.0 (model weights used per upstream terms; see registry notes)",
+      "inputDescription": "IMAGE 384x640 BGR letterboxed; objectness+4box+class per anchor",
+      "minimumOS": "17.0",
+      "notes": "Converted from fast-alpr's yolo-v9-t-384-license-plate-end2end ONNX. Runs via VNCoreMLRequest (object detection)."
+    },
+    {
+      "name": "plate-ocr-global-vit-v2",
+      "task": "plate-ocr",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/OpenALPR/releases/download/models-v0.1.0/plate-ocr-global-vit-v2.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "https://github.com/ankandrew/fast-plate-ocr",
+      "license": "MIT",
+      "inputDescription": "IMAGE 94x24 grayscale plate strip; CTC char logits",
+      "minimumOS": "17.0",
+      "notes": "Specialized plate OCR; beat Vision baseline on small/oblique plates in upstream benchmarks."
+    },
+    {
+      "name": "vehicle-detector-yolo11n",
+      "task": "vehicle-detection",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/OpenALPR/releases/download/models-v0.1.0/vehicle-detector-yolo11n.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "https://github.com/ultralytics/ultralytics",
+      "license": "AGPL-3.0 (compatible with project license)",
+      "inputDescription": "IMAGE 640x640 BGR letterboxed; YOLO11 detection heads",
+      "minimumOS": "17.0",
+      "notes": "COCO vehicle classes gate the fleet classifier stages; fine-tune on fleet imagery later (ROADMAP M2)."
+    },
+    {
+      "name": "vehicle-reid-osnet-x0_25",
+      "task": "vehicle-reid",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/OpenALPR/releases/download/models-v0.1.0/vehicle-reid-osnet-x0_25.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "https://github.com/KaiyangZhou/deep-person-reid",
+      "license": "MIT",
+      "inputDescription": "IMAGE 128x256 RGB; outputs 512-dim embedding",
+      "minimumOS": "17.0",
+      "notes": "Person-ReID-trained OSNet as interim vehicle re-ID backbone; replace with VeRi-Wild-finetuned variant (ROADMAP M2)."
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [PlateKit, CaptureKit, VehicleML, PlateSync]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + test packages/${{ matrix.package }}
+        run: |
+          swift build --package-path packages/${{ matrix.package }}
+          swift test  --package-path packages/${{ matrix.package }}
+
+  server:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + test reference server
+        run: |
+          swift build --package-path server
+          swift test  --package-path server
+
+  apps:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate projects
+        run: |
+          (cd apps/ios && xcodegen)
+          (cd apps/macos-hub && xcodegen)
+          (cd apps/watchos && xcodegen)
+      - name: Build iOS app (simulator, unsigned)
+        run: xcodebuild -project apps/ios/PlateWatch.xcodeproj -scheme PlateWatch -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - name: Build macOS hub (unsigned)
+        run: xcodebuild -project apps/macos-hub/PlateWatchHub.xcodeproj -scheme PlateWatchHub -destination 'generic/platform=macOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - name: Build watchOS app (simulator, unsigned)
+        run: xcodebuild -project apps/watchos/PlateWatchWatch.xcodeproj -scheme PlateWatchWatch -destination 'generic/platform=watchOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+
+  model-pipeline:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Lint conversion script (no weight downloads in CI)
+        run: |
+          python -m py_compile scripts/convert_models.py
+          python -c "import json; json.load(open('models/registry.json'))"

@@ -1,0 +1,46 @@
+name: PlateWatch
+options:
+  bundleIdPrefix: org.openalpr
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  PlateWatch:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - Sources
+    info:
+      path: Support/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSCameraUsageDescription: "PlateWatch identifies taxpayer-funded vehicles on public roads using on-device ML. Video is analyzed on-device; raw footage is never uploaded."
+        NSLocationWhenInUseUsageDescription: "Sightings are bucketed to ~1 km; precise location is only attached to fleet-confirmed vehicles."
+        CFBundleDisplayName: PlateWatch
+        ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes: [remote-notification]
+    entitlements:
+      path: Support/PlateWatch.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.icloud-container-identifiers: [iCloud.org.openalpr.platewatch]
+        com.apple.developer.icloud-services: [CloudKit]
+    dependencies:
+      - package: PlateKit
+      - package: CaptureKit
+      - package: VehicleML
+      - package: PlateSync
+
+packages:
+  PlateKit: { path: ../../packages/PlateKit }
+  CaptureKit: { path: ../../packages/CaptureKit }
+  VehicleML: { path: ../../packages/VehicleML }
+  PlateSync: { path: ../../packages/PlateSync }

@@ -1,0 +1,42 @@
+# macOS / Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+docs/.build
+
+# Generated Xcode projects (regenerate with `xcodegen` in each apps/* dir)
+apps/*/*.xcodeproj
+
+# SwiftPM
+.swiftpm/
+.build/
+
+# Model artifacts — downloaded/converted weights are NEVER committed
+models/cache/
+models/*.mlmodel
+models/*.mlpackage
+models/*.mlmodelc
+models/*.onnx
+models/*.pt
+
+# Python
+scripts/.venv/
+__pycache__/
+*.pyc
+
+# Server
+server/.build/
+server/.env
+*.sqlite
+*.db
+
+# Secrets — never commit any of these
+.env
+*.p8
+*.p12
+*.mobileprovision
+**/Secrets*.plist
+**/GoogleService-Info.plist

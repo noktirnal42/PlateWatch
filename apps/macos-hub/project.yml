@@ -1,0 +1,38 @@
+name: PlateWatchHub
+options:
+  bundleIdPrefix: org.openalpr
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  PlateWatchHub:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Sources
+    info:
+      path: Support/Info.plist
+      properties:
+        LSUIElement: true   # menu-bar resident hub
+        NSCameraUsageDescription: "The Hub can analyze cameras (including iPhones via Continuity Camera) for fleet vehicle identification, on-device."
+        NSBonjourServices: [_http._tcp]   # advertises the snapshot ingest endpoint to IP cameras on the LAN
+        CFBundleDisplayName: PlateWatch Hub
+        ITSAppUsesNonExemptEncryption: false
+    dependencies:
+      - package: PlateKit
+      - package: CaptureKit
+      - package: VehicleML
+      - package: PlateSync
+
+packages:
+  PlateKit: { path: ../../packages/PlateKit }
+  CaptureKit: { path: ../../packages/CaptureKit }
+  VehicleML: { path: ../../packages/VehicleML }
+  PlateSync: { path: ../../packages/PlateSync }
