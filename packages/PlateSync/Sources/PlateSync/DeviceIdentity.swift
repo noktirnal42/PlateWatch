@@ -15,7 +15,7 @@ public struct DeviceIdentity: Sendable {
         self.publicKeyHash = digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private static let keyTag = "org.openalpr.platewatch.device-key"
+    private static let keyTag = "org.platewatch.platewatch.device-key"
 
     /// Load or create the device key. Keychain-backed with Secure Enclave off
     /// (SE keys can't be exported, which breaks dev workflows); the key is

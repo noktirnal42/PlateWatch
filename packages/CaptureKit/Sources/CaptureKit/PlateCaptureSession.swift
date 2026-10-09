@@ -10,7 +10,7 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
     public let configuration: CaptureConfiguration
     private let session = AVCaptureSession()
     private let videoOutput = AVCaptureVideoDataOutput()
-    private let outputQueue = DispatchQueue(label: "org.openalpr.capture.frames", qos: .userInitiated)
+    private let outputQueue = DispatchQueue(label: "org.platewatch.capture.frames", qos: .userInitiated)
     private var frameCounter: UInt64 = 0
     private var consumer: (@Sendable (FramePacket) -> Void)?
 

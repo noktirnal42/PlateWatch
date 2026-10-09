@@ -1,6 +1,6 @@
 name: PlateWatchHub
 options:
-  bundleIdPrefix: org.openalpr
+  bundleIdPrefix: org.platewatch
   deploymentTarget:
     macOS: "14.0"
 settings:

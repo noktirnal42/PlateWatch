@@ -2,7 +2,7 @@
 
 ## What this project is
 
-OpenALPR Platform ("PlateWatch") — an open-source ALPR system focused on
+PlateWatch — an open-source ALPR system focused on
 government / taxpayer-funded vehicle accountability. Swift-first
 (macOS/iOS/watchOS, Xcode 27 / Swift 6.4), CloudKit backend (free tier),
 Vapor reference server for cross-platform expansion.

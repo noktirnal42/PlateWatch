@@ -1,6 +1,6 @@
 name: PlateWatch
 options:
-  bundleIdPrefix: org.openalpr
+  bundleIdPrefix: org.platewatch
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -31,7 +31,7 @@ targets:
       path: Support/PlateWatch.entitlements
       properties:
         aps-environment: development
-        com.apple.developer.icloud-container-identifiers: [iCloud.org.openalpr.platewatch]
+        com.apple.developer.icloud-container-identifiers: [iCloud.org.platewatch.platewatch]
         com.apple.developer.icloud-services: [CloudKit]
     dependencies:
       - package: PlateKit

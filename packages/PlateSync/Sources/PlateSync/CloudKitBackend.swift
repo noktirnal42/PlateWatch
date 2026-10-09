@@ -12,7 +12,7 @@ public struct CloudKitBackend: SyncBackend {
     /// CKRecordZone restrictions enforced by role records.
     public let publicZoneID: CKRecordZone.ID
 
-    public init(containerIdentifier: String = "iCloud.org.openalpr.platewatch") {
+    public init(containerIdentifier: String = "iCloud.org.platewatch.platewatch") {
         self.container = CKContainer(identifier: containerIdentifier)
         self.publicZoneID = CKRecordZone.ID(zoneName: "fleet-main")
     }

@@ -30,7 +30,7 @@ final class CaptureViewModel: ObservableObject {
         let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                in: .userDomainMask).first!
             .appending(path: "PlateWatch/Models", directoryHint: .isDirectory)
-        let registryURL = URL(string: "https://raw.githubusercontent.com/noktirnal42/OpenALPR/main/models/registry.json")!
+        let registryURL = URL(string: "https://raw.githubusercontent.com/noktirnal42/PlateWatch/main/models/registry.json")!
         return ModelManager(config: .init(registryURL: registryURL, cacheDirectory: support))
     }
 

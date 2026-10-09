@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "openalpr-server",
+    name: "platewatch-server",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),

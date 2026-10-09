@@ -14,7 +14,7 @@ other platforms. CloudKit satisfies both:
 | Push alerts | `CKQuerySubscription` delivers watchlist hits as silent pushes — free APNs, no server code. This powers the watchOS alert feature. |
 | Offline-first mobile capture | `PlateSync` outbox + CloudKit retry semantics. |
 
-Container: `iCloud.org.openalpr.platewatch` (register under the project's
+Container: `iCloud.org.platewatch` (register under the project's
 Apple Developer account). Record types mirror `docs/DATA-MODEL.md`.
 
 ### What CloudKit deliberately does not do here

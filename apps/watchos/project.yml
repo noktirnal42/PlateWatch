@@ -1,6 +1,6 @@
 name: PlateWatchWatch
 options:
-  bundleIdPrefix: org.openalpr
+  bundleIdPrefix: org.platewatch
   deploymentTarget:
     watchOS: "10.0"
 settings:

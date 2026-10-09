@@ -1,4 +1,4 @@
-# OpenALPR Platform — "PlateWatch"
+# PlateWatch
 
 **Open-source Automatic License Plate Recognition for public accountability.**
 Turning the tables on mass surveillance: a community platform for identifying,
@@ -69,7 +69,7 @@ scripts/.venv/bin/python scripts/convert_models.py --all
 (cd apps/ios && xcodegen) && (cd apps/macos-hub && xcodegen) && (cd apps/watchos && xcodegen)
 open apps/ios/PlateWatch.xcodeproj
 
-# 4. Enable the CloudKit capability (container iCloud.org.openalpr.platewatch),
+# 4. Enable the CloudKit capability (container iCloud.org.platewatch),
 #    build, run.
 ```
 
