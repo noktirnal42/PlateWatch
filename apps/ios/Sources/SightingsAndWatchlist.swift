@@ -38,11 +38,14 @@ struct SightingsListView: View {
     }
 }
 
-/// Watchlist management. Entries stay on this device (never published);
-/// matching happens locally + via silent CloudKit pushes.
+/// Watchlist management. Entries stay on this device (persisted via
+/// SwiftData, never published); matching runs locally in the capture loop
+/// and via silent CloudKit pushes for fleet-confirmed shareable hits.
 struct WatchlistView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \WatchlistItem.createdAt, order: .reverse)
+    private var items: [WatchlistItem]
     @State private var newPlate = ""
-    @State private var entries: [WatchlistEntry] = []
 
     var body: some View {
         NavigationStack {
@@ -53,18 +56,22 @@ struct WatchlistView: View {
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                         Button("Add") {
-                            let entry = WatchlistEntry(plateText: Plate.normalize(newPlate))
-                            entries.append(entry)
+                            let normalized = Plate.normalize(newPlate)
+                            modelContext.insert(WatchlistItem(plateText: normalized))
+                            try? modelContext.save()
                             newPlate = ""
                         }
                         .disabled(Plate.normalize(newPlate).count < 3)
                     }
                 }
-                Section("Active (\(entries.count))") {
-                    ForEach(entries) { entry in
-                        Label(entry.plateText ?? "re-ID anchor", systemImage: "car")
+                Section("Active (\(items.count))") {
+                    ForEach(items) { item in
+                        Label(item.plateText ?? "re-ID anchor", systemImage: "car")
                     }
-                    .onDelete { idx in entries.remove(atOffsets: idx) }
+                    .onDelete { idx in
+                        for i in idx { modelContext.delete(items[i]) }
+                        try? modelContext.save()
+                    }
                 }
             }
             .navigationTitle("Watchlist")

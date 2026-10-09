@@ -5,11 +5,13 @@ import SwiftUI
 
 @main
 struct PlateWatchApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     let modelContainer: ModelContainer
     let backend: any SyncBackend
 
     init() {
-        let schema = Schema([PendingSubmission.self])
+        let schema = Schema([PendingSubmission.self, WatchlistItem.self])
         let config = ModelConfiguration("PlateWatch", schema: schema)
         do {
             modelContainer = try ModelContainer(for: schema, configurations: config)
@@ -17,6 +19,7 @@ struct PlateWatchApp: App {
             fatalError("SwiftData unavailable: \(error)")
         }
         backend = CloudKitBackend()
+        LocationProvider.shared.authorizeIfNeeded()
     }
 
     var body: some Scene {
@@ -31,10 +34,26 @@ struct PlateWatchApp: App {
             }
             .task {
                 try? await backend.ensureWatchlistSubscription()
+                // Steady drain loop: outbox empties opportunistically, never
+                // blocking the capture path.
+                while !Task.isCancelled {
+                    await drainOutbox()
+                    try? await Task.sleep(for: .seconds(30))
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await drainOutbox() }
+                }
             }
         }
         .modelContainer(modelContainer)
         .environment(\.syncBackend, backend)
+    }
+
+    private func drainOutbox() async {
+        let context = ModelContext(modelContainer)
+        await OutboxDrainer(backend: backend).drain(context: context)
     }
 }
 

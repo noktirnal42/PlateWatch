@@ -30,3 +30,65 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertEqual(back, registry)
     }
 }
+
+final class MultiFrameFusorTests: XCTestCase {
+
+    private func frame(with plates: [(text: String, conf: Double, box: NormalizedBox)]) -> DetectionFrame {
+        let vehicles = plates.map { p in
+            VehicleObservation(
+                boundingBox: p.box,
+                plates: [PlateObservation(boundingBox: p.box, candidates: [Plate(text: p.text, confidence: p.conf)])])
+        }
+        return DetectionFrame(timestamp: Date(), imageSize: .init(width: 1920, height: 1080),
+                              vehicles: vehicles)
+    }
+
+    private let boxA = NormalizedBox(x: 0.4, y: 0.6, width: 0.12, height: 0.05)
+
+    func testSingleReadBelowMinFramesNotReported() async {
+        let fusor = MultiFrameFusor()
+        let readings = await fusor.ingest(frame(with: [("1ABC234", 0.9, boxA)]))
+        XCTAssertTrue(readings.isEmpty, "single-frame reads must not surface")
+    }
+
+    func testStablePlateAcrossFramesFuses() async {
+        let fusor = MultiFrameFusor()
+        _ = await fusor.ingest(frame(with: [("1ABC234", 0.5, boxA)]))
+        _ = await fusor.ingest(frame(with: [("1ABC234", 0.5, boxA)]))
+        let readings = await fusor.ingest(frame(with: [("1ABC234", 0.5, boxA)]))
+        XCTAssertEqual(readings.first?.text, "1ABC234")
+        XCTAssertEqual(readings.first?.supportingFrames, 3)
+        // 1 − (1−0.5)³ = 0.875 — multi-frame evidence beats any single read.
+        XCTAssertEqual(readings.first?.confidence ?? 0, 0.875, accuracy: 0.001)
+    }
+
+    func testNearMissOCRVariantVotesMerge() async {
+        let fusor = MultiFrameFusor()
+        _ = await fusor.ingest(frame(with: [("1ABC234", 0.5, boxA)]))
+        _ = await fusor.ingest(frame(with: [("1ABC23A", 0.5, boxA)]))   // 4↔A misread
+        let readings = await fusor.ingest(frame(with: [("1ABC234", 0.6, boxA)]))
+        XCTAssertEqual(readings.first?.text, "1ABC234")
+        XCTAssertEqual(readings.first?.supportingFrames, 3)
+    }
+
+    func testSeparateTracksStaySeparate() async {
+        let fusor = MultiFrameFusor()
+        let boxB = NormalizedBox(x: 0.6, y: 0.8, width: 0.12, height: 0.05)
+        for _ in 0..<3 {
+            _ = await fusor.ingest(frame(with: [("AAA111", 0.8, boxA), ("BBB222", 0.8, boxB)]))
+        }
+        let readings = await fusor.ingest(frame(with: [("AAA111", 0.8, boxA), ("BBB222", 0.8, boxB)]))
+        XCTAssertEqual(Set(readings.map(\.text)), ["AAA111", "BBB222"])
+    }
+
+    func testTrackExpiry() async {
+        let fusor = MultiFrameFusor(config: .init(trackIoUThreshold: 0.2, maxSilence: 2,
+                                                  editDistanceMerge: 1, minFusedConfidence: 0.25))
+        _ = await fusor.ingest(frame(with: [("AAA111", 0.8, boxA)]))
+        _ = await fusor.ingest(frame(with: [("AAA111", 0.8, boxA)]))
+        // 3 empty frames → expired; a later single read must not report.
+        for _ in 0..<3 { _ = await fusor.ingest(frame(with: [])) }
+        let readings = await fusor.ingest(frame(with: [("AAA111", 0.9, boxA)]))
+        XCTAssertTrue(readings.isEmpty)
+    }
+}

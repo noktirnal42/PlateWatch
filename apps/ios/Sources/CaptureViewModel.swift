@@ -87,7 +87,7 @@ final class CaptureViewModel: ObservableObject {
         var confidences: [UUID: Double] = [:]
         var approved: [(VehicleObservation, Double)] = []
         for vehicle in frame.vehicles {
-            let markings = SceneTextHeuristics.parse(vehicle.sceneText)
+            let markings = await parseMarkings(vehicle.sceneText)
             let confidence = gate.fleetConfidence(
                 vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
                 hasFleetMarkings: markings.hasFleetKeyword,
@@ -103,10 +103,13 @@ final class CaptureViewModel: ObservableObject {
 
         // Persist through the outbox; the drainer owns retries.
         guard let modelContext else { return }
+        let bucket = LocationProvider.shared.currentBucket()
         for (vehicle, confidence) in approved {
             let dto = SightingSubmissionDTO(
                 capturedAt: frame.timestamp,
-                geohash6: LocationBucketer.currentGeohash6() ?? "",
+                geohash6: bucket?.geohash6 ?? "",
+                exactLatitude: nil,  // exact geo attaches post-confirmation
+                exactLongitude: nil,
                 deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
                 fleetConfidence: confidence,
                 plate: vehicle.plates.first?.best.map(PlateDTO.init),
@@ -120,15 +123,26 @@ final class CaptureViewModel: ObservableObject {
         // Draining policy: the app drains on scene activation + a repeating
         // timer (Task in PlateWatchApp), not per-frame — a dead zone must
         // never stall the capture loop on network.
-    }
-}
 
-/// ~1 km geo bucket helper. Exact coords are attached later, only for
-/// fleet-confirmed sightings, per LEGAL-ETHICS.
-enum LocationBucketer {
-    static func currentGeohash6() -> String? {
-        // CoreLocation hook lands with entitlements; geohash-6 is computed
-        // from the last known location to avoid continuous GPS.
-        nil  // placeholder until CLLocationManager integration (M1)
+        if !approved.isEmpty {
+            let items = (try? modelContext.fetch(FetchDescriptor<WatchlistItem>())) ?? []
+            let hits = WatchlistEvaluator.evaluate(frame, items: items)
+            if !hits.isEmpty { statusText = "watchlist hit · \(hits.count)" }
+        }
+    }
+
+    /// LLM-first markings parse with deterministic fallback. FleetMarkings
+    /// LLM runs on-device (Apple Intelligence); pre-iOS 26 falls back to the
+    /// regex heuristics without a network round-trip either.
+    private func parseMarkings(_ observations: [SceneTextObservation]) async -> FleetMarkings {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let lines = observations.map(\.text)
+            if let parsed = await FleetMarkingsLLMParser.parse(lines) {
+                return parsed
+            }
+        }
+        #endif
+        return SceneTextHeuristics.parse(observations)
     }
 }

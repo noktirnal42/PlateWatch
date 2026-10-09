@@ -1,4 +1,5 @@
 import CaptureKit
+import PlateSync
 import Foundation
 import PlateKit
 import SwiftData
@@ -20,11 +21,20 @@ final class HubController: ObservableObject {
     private let gate = RedactionGate(config: .standard)
     private var watchDescriptor: DispatchSourceFileSystemObject?
 
+    private var modelContext: ModelContext?
+    /// Hub operator-set location bucket (these are fixed installations —
+    /// the geohash-6 of the camera's own location).
+    var homeGeohash6 = ""
+
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
+    }
+
+    func attach(context: ModelContext) {
+        self.modelContext = context
     }
 
     func chooseIngestFolder() {
@@ -80,8 +90,23 @@ final class HubController: ObservableObject {
                         exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
                     if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
                         fleetHitsToday += 1
-                        // Outbox enqueue via PlateSync lands with the hub's
-                        // SwiftData store (same pattern as iOS app).
+                        if let context = modelContext {
+                            let dto = SightingSubmissionDTO(
+                                capturedAt: frame.timestamp,
+                                geohash6: homeGeohash6,
+                                deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
+                                fleetConfidence: confidence,
+                                plate: vehicle.plates.first?.best.map(PlateDTO.init),
+                                vehicle: VehicleObservationDTO(vehicle),
+                                markings: FleetMarkingsDTO(markings))
+                            if let payload = try? JSONEncoder.withISODates.encode(dto) {
+                                context.insert(PendingSubmission(
+                                    idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
+                                    payloadJSON: payload))
+                                try? context.save()
+                                pendingCount += 1
+                            }
+                        }
                     }
                 }
                 // Rolling source media: hub keeps only fleet-hit crops,
