@@ -54,6 +54,7 @@ struct SightingsController: RouteCollection {
         record.moderationState = outcome.state.rawValue
         record.idempotencyKey = idem
         record.plateText = dto.plate?.text
+        record.unitNumber = dto.markings?.unitNumber
         record.cropSHA256 = dto.cropHashSHA256
         record.headingDeg = dto.headingDegrees
         if outcome.exactGeoAllowed {
@@ -84,7 +85,7 @@ struct SightingsController: RouteCollection {
             guard let id = row.id else { return nil }
             return PublicSightingDTO(
                 id: id, capturedAt: row.capturedAt, geohash6: row.geohash6,
-                plateText: row.plateText, unitNumber: nil,
+                plateText: row.plateText, unitNumber: row.unitNumber,
                 fleetConfidence: row.fleetConfidence)
         }
         let next = items.last.map {

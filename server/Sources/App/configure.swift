@@ -17,8 +17,10 @@ func configure(_ app: Application) async throws {
         app.databases.use(.postgres(configuration: config), as: .psql)
     }
 
-    app.migrations.add(CreateVehicles())
+    // Order matters: foreign keys. Agencies first, then vehicles, then the
+    // tables that reference them. Caught by live QA (postgres 42P01).
     app.migrations.add(CreateAgencies())
+    app.migrations.add(CreateVehicles())
     app.migrations.add(CreateUnitAssignments())
     app.migrations.add(CreateSightings())
     app.migrations.add(CreateDeviceReputations())
