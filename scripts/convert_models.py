@@ -36,22 +36,31 @@ CACHE = ROOT / "models" / "cache"
 # conversion pulls from. Keep both accurate — the AGENTS.md provenance rule
 # is enforced by listing these in the registry entry itself.
 SOURCES = {
-    "plate-detector-yolov9t-384": {
-        "kind": "onnx",
-        "hf_repo": "ankandrew/yolo-v9-t-384-license-plate-end2end",
-        "hf_filename": "yolo-v9-t-384-license-plate-end2end.onnx",
+    "plate-detector-yolov8n": {
+        "kind": "ultralytics",
+        "hf_repo": "joker5914/yolov8n-license-plate",
+        "hf_filename": "best.pt",
         "compute": "cpuAndNeuralEngine",
+        "imgsz": 640,
     },
-    "plate-ocr-global-vit-v2": {
-        "kind": "onnx",
-        "hf_repo": "ankandrew/fast-plate-ocr",
-        "hf_filename": "models/global-plates-mobile-vit-v2/model.onnx",
+    "plate-ocr-trocr-small": {
+        "kind": "transformers_ocr",
+        "hf_repo": "mariovigliar/trocr-base-printed_license_plates_ocr",
         "compute": "cpuAndNeuralEngine",
+        "note": "TrOCR (vision-encoder-decoder) - requires transformers export path; use Vision fallback for now",
     },
     "vehicle-detector-yolo11n": {
         "kind": "ultralytics",  # natively exports CoreML; no manual ONNX step
         "weights": "yolo11n.pt",
         "compute": "cpuAndNeuralEngine",
+        "hf_repo": "Ultralytics/YOLO11",
+        "note": "YOLO11 CoreML export broken in coremltools 9.0; use vehicle-detector-yolov8n instead",
+    },
+    "vehicle-detector-yolov8n": {
+        "kind": "ultralytics",
+        "weights": "yolov8n.pt",
+        "compute": "cpuAndNeuralEngine",
+        "hf_repo": "Ultralytics/YOLOv8",
     },
     "vehicle-reid-osnet-x0_25": {
         "kind": "torchscript_placeholder",
@@ -108,12 +117,12 @@ def convert_onnx(src: Path, dst: Path, compute: str) -> None:
     model.save(str(dst))
 
 
-def convert_ultralytics(src: Path, dst: Path) -> None:
+def convert_ultralytics(src: Path, dst: Path, imgsz: int = 640) -> None:
     """Ultralytics has first-party CoreML export; wrap it for uniformity."""
     from ultralytics import YOLO
 
     model = YOLO(str(src))
-    out = model.export(format="coreml", int8=True, nms=True, imgsz=640)
+    out = model.export(format="coreml", int8=True, nms=True, imgsz=imgsz)
     shutil.move(str(out), str(dst))
 
 
@@ -139,8 +148,8 @@ def main() -> int:
         if not spec:
             print(f"[skip] {name}: no conversion source wired")
             continue
-        if spec["kind"] == "torchscript_placeholder":
-            print(f"[skip] {name}: {spec['note']}")
+        if spec["kind"] in ("torchscript_placeholder", "transformers_ocr"):
+            print(f"[skip] {name}: {spec.get('note', 'unsupported kind')}")
             continue
 
         out_pkg = CACHE / f"{name}.mlpackage"
@@ -155,8 +164,11 @@ def main() -> int:
             elif spec["kind"] == "ultralytics":
                 from huggingface_hub import hf_hub_download
 
-                weights = Path(hf_hub_download("Ultralytics/YOLO11", spec["weights"], local_dir=tmp))
-                convert_ultralytics(weights, out_pkg)
+                repo = spec.get("hf_repo", "Ultralytics/YOLO11")
+                filename = spec.get("hf_filename", spec.get("weights", "yolo11n.pt"))
+                print(f"[fetch] {repo}/{filename}")
+                weights = Path(hf_hub_download(repo, filename, local_dir=tmp))
+                convert_ultralytics(weights, out_pkg, imgsz=spec.get("imgsz", 640))
             else:  # pragma: no cover
                 raise RuntimeError(f"unknown kind {spec['kind']}")
 

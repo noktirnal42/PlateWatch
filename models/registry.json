@@ -2,40 +2,40 @@
   "schemaVersion": 1,
   "entries": [
     {
-      "name": "plate-detector-yolov9t-384",
+      "name": "plate-detector-yolov8n",
       "task": "plate-detection",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-detector-yolov9t-384.mlpackage",
-      "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "https://github.com/ankandrew/fast-alpr",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-detector-yolov8n.mlpackage",
+      "sha256": "a1e4aa235cbd3ff5bc54cdb5984830f5482360a21df79b2da2881443159c2196",
+      "sourceURL": "https://github.com/joker5914/yolov8n-license-plate",
       "license": "AGPL-3.0 (model weights used per upstream terms; see registry notes)",
-      "inputDescription": "IMAGE 384x640 BGR letterboxed; objectness+4box+class per anchor",
+      "inputDescription": "IMAGE 640x640 BGR letterboxed; YOLOv8 license plate detection",
       "minimumOS": "17.0",
-      "notes": "Converted from fast-alpr's yolo-v9-t-384-license-plate-end2end ONNX. Runs via VNCoreMLRequest (object detection)."
+      "notes": "Converted from joker5914/yolov8n-license-plate (Ultralytics YOLOv8). Runs via VNCoreMLRequest (object detection)."
     },
     {
-      "name": "plate-ocr-global-vit-v2",
+      "name": "plate-ocr-trocr-small",
       "task": "plate-ocr",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-ocr-global-vit-v2.mlpackage",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-ocr-trocr-small.mlpackage",
       "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "https://github.com/ankandrew/fast-plate-ocr",
+      "sourceURL": "https://github.com/mariovigliar/trocr-base-printed_license_plates_ocr",
       "license": "MIT",
-      "inputDescription": "IMAGE 94x24 grayscale plate strip; CTC char logits",
+      "inputDescription": "IMAGE 384x96 RGB plate crop; TrOCR vision-encoder-decoder",
       "minimumOS": "17.0",
-      "notes": "Specialized plate OCR; beat Vision baseline on small/oblique plates in upstream benchmarks."
+      "notes": "TrOCR-based plate OCR (transformers). Requires transformers\u2192CoreML export path; Vision fallback used until then."
     },
     {
-      "name": "vehicle-detector-yolo11n",
+      "name": "vehicle-detector-yolov8n",
       "task": "vehicle-detection",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-detector-yolo11n.mlpackage",
-      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-detector-yolov8n.mlpackage",
+      "sha256": "f0dd457cc256f922bc8fa534f7303fc8ac23c7a86a59df8c34dedb4071456e14",
       "sourceURL": "https://github.com/ultralytics/ultralytics",
       "license": "AGPL-3.0 (compatible with project license)",
-      "inputDescription": "IMAGE 640x640 BGR letterboxed; YOLO11 detection heads",
+      "inputDescription": "IMAGE 640x640 BGR letterboxed; YOLOv8 COCO detection heads",
       "minimumOS": "17.0",
-      "notes": "COCO vehicle classes gate the fleet classifier stages; fine-tune on fleet imagery later (ROADMAP M2)."
+      "notes": "COCO vehicle classes (car, truck, bus, motorcycle) gate the fleet classifier stages; fine-tune on fleet imagery later (ROADMAP M2)."
     },
     {
       "name": "vehicle-reid-osnet-x0_25",
