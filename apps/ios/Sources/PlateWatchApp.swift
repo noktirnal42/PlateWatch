@@ -18,7 +18,7 @@ struct PlateWatchApp: App {
         } catch {
             fatalError("SwiftData unavailable: \(error)")
         }
-        backend = CloudKitBackend()
+        backend = SyncBackends.makeDefault()
         LocationProvider.shared.authorizeIfNeeded()
     }
 
@@ -58,7 +58,7 @@ struct PlateWatchApp: App {
 }
 
 private struct SyncBackendKey: EnvironmentKey {
-    static let defaultValue: any SyncBackend = CloudKitBackend()
+    static let defaultValue: any SyncBackend = SyncBackends.makeDefault()
 }
 
 public extension EnvironmentValues {

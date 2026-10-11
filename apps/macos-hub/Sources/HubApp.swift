@@ -14,7 +14,7 @@ struct PlateWatchHubApp: App {
             // A hub with no local persistence still runs degraded (log-only).
             ?? (try! ModelContainer(for: schema, configurations:
                 ModelConfiguration("PlateWatchHub-fallback", schema: schema, isStoredInMemoryOnly: true)))
-        backend = CloudKitBackend()
+        backend = SyncBackends.makeDefault()
     }
 
     var body: some Scene {
