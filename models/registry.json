@@ -73,17 +73,29 @@
       "minimumOS": "17.0",
       "notes": "Vehicle color classifier (MobileViT v2). Outputs color probabilities."
     },
-    {
+{
       "name": "vehicle-reid-osnet-x0_25",
       "task": "vehicle-reid",
       "version": "0.1.0",
       "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-reid-osnet-x0_25.mlpackage",
       "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "https://github.com/KaiyangZhou/deep-person-reid",
+      "sourceURL": "https://huggingface.co/anriha/osnet_x0_25_msmt17",
       "license": "MIT",
-      "inputDescription": "IMAGE 128x256 RGB; outputs 512-dim embedding",
+      "inputDescription": "IMAGE 128x256 RGB; outputs 512-dim embedding (OSNet x0.25 on MSMT17)",
       "minimumOS": "17.0",
-      "notes": "Person-ReID-trained OSNet as interim vehicle re-ID backbone; replace with VeRi-Wild-finetuned variant (ROADMAP M2)."
+      "notes": "OSNet x0.25 trained on MSMT17 (person re-ID), transfers to vehicle re-ID. Replaces feature-print re-ID. Conversion pending coremltools ONNX support; feature-print re-ID active as fallback."
+    },
+    {
+      "name": "plate-design-classifier",
+      "task": "plate-design-classification",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-design-classifier.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "custom-training-required",
+      "license": "PlateWatch",
+      "inputDescription": "IMAGE 224x224 RGB; plate crop; outputs design family (CA-standard, CA-exempt, US-GOV, etc.)",
+      "minimumOS": "17.0",
+      "notes": "Plate design classifier (state/exempt/federal plate families). No pre-trained model available; requires custom training on US plate design dataset. Placeholder for M2."
     }
   ]
 }
