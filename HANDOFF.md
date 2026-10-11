@@ -2,8 +2,56 @@
 
 **Project:** PlateWatch — Open-source ALPR for government vehicle accountability
 **Date:** 2026-10-11
-**Branch:** `fix/sighting-unit-number` (8 commits ahead of origin)
-**Status:** M2 substantially complete; M3–M5 pending
+**Branch:** `fix/sighting-unit-number` (10 commits ahead of origin)
+**Status:** M2 substantially complete; M3–M5 pending; QA bug-sweep 2026-10-11 complete
+
+---
+
+## 0. Session Log — 2026-10-11 QA Sweep (protocol + stability bugs)
+
+Six real bugs found and fixed by auditing the wire protocol and capture
+pipeline; all packages + server build and all tests pass (65 tests).
+
+1. **Server `VehicleObservationDTO` protocol break** (`server/Sources/App/DTO.swift`):
+   server expected flat `hasLightBar/hasPushBar/hasFleetDecals` booleans while
+   PlateKit nests them under `attributes: VehicleAttributes` — classifier
+   output was silently dropped on every ingest. Server DTO now mirrors
+   PlateKit's nested shape (`VehicleAttributesDTO`), with wire-decode tests.
+2. **Delta-sync pagination broken** (`server/Sources/App/SightingsController.swift`):
+   the client sends `?cursor=…` but the server only read `since` — every pull
+   returned page 1 forever. Additionally, a second-precision `nextCursor`
+   plus a strict `>` filter skipped rows sharing the boundary timestamp.
+   Fixed: compound cursor `"<ISO-8601-with-fractional-seconds>|<last-UUID>"`,
+   sort `(capturedAt DESC, id DESC)`, OR-group filter `(capturedAt < t) OR
+   (capturedAt == t AND id < lastID)`; legacy bare-date cursors still
+   accepted. Contract documented in `docs/BACKEND.md`.
+3. **Replay receipts lied about `serverReceivedAt`** — the idempotent-replay
+   path returned `capturedAt`. `Sighting` now carries a `created_at`
+   timestamp (`AddSightingCreatedAt` migration registered in `configure`).
+4. **Outbox idempotency keys were per-process** (`PlateSync/Outbox.swift`):
+   `Hasher` is seeded per launch, so a drained outbox after an app restart
+   produced NEW keys — the server's idempotency dedupe never fired and
+   duplicates were stored. Replaced with a deterministic SHA-256 digest over
+   a canonical byte serialization; golden-value test pins the algorithm.
+5. **CloudKit cursor never round-tripped** (`PlateSync/CloudKitBackend.swift`):
+   next-cursor was stored via `String(describing:)` (unarchivable) and the
+   decoded cursor was never passed to the query — every pull re-queried from
+   the top. Now keyed-archived base64 tokens + `records(continuingMatchFrom:)`.
+   Replay receipts also derive a stable `sightingID` from the record name
+   (was `UUID()` on the already-exists path).
+6. **Rolling-buffer crash on wrap** (`CaptureKit`): `FrameRollingBuffer
+   .extractClip` used array positions while `PlateCaptureSession
+   .extractEventClip` passes absolute frame counters — after the buffer
+   wrapped, extraction formed an invalid Array range (`frames[940...134]`)
+   and would crash on the first fleet event. `extractClip` now filters by
+   `sequenceNumber`, evicted/inverted windows return `[]`, and the trigger
+   frame is located by sequence number (anchored to the nearest retained
+   frame if evicted). Regression tests added.
+   Also: `RTSPFrameSource` no longer injects a synthetic black 1080p frame
+   (with a force-unwrapped CVPixelBuffer) into the pipeline on stream error.
+
+All 50 pre-existing tests still pass; new tests bring the count to 65
+(PlateKit 22, CaptureKit 12, VehicleML 7, PlateSync 9, FMP 3, server 13).
 
 ---
 

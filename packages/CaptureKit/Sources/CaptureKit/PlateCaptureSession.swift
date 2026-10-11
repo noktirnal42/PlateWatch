@@ -145,18 +145,26 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
         #endif
     }
 
-    /// Extracts an event clip around the current frame index.
+    /// Extracts an event clip around the trigger frame's absolute index.
+    /// The buffer only retains analyzed frames (and drops the oldest under
+    /// pressure), so the trigger frame itself may be missing — the clip is
+    /// then anchored to the closest retained frame at-or-before the trigger.
     public func extractEventClip(triggerFrameIndex: Int) -> EventClip? {
         let preFrames = Int(configuration.eventClipPreRollSeconds * 30.0)
         let postFrames = Int(configuration.eventClipPostRollSeconds * 30.0)
         let start = max(0, triggerFrameIndex - preFrames)
-        let end = min(Int(frameCounter) - 1, triggerFrameIndex + postFrames)
+        let end = triggerFrameIndex + postFrames
         let frames = rollingBuffer.extractClip(from: start, to: end)
-        guard !frames.isEmpty else { return nil }
+        guard let triggerPosition: Int = {
+            if let exact = frames.firstIndex(where: { Int($0.sequenceNumber) == triggerFrameIndex }) {
+                return exact
+            }
+            return frames.lastIndex(where: { Int($0.sequenceNumber) < triggerFrameIndex })
+        }() else { return nil }
         return EventClip(
             frames: frames,
-            triggerFrameIndex: triggerFrameIndex - start,
-            triggerTimestamp: frames[triggerFrameIndex - start].timestamp
+            triggerFrameIndex: triggerPosition,
+            triggerTimestamp: frames[triggerPosition].timestamp
         )
     }
 }

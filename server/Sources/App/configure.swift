@@ -24,6 +24,7 @@ func configure(_ app: Application) async throws {
     app.migrations.add(CreateUnitAssignments())
     app.migrations.add(CreateSightings())
     app.migrations.add(CreateDeviceReputations())
+    app.migrations.add(AddSightingCreatedAt())
     if app.environment != .testing {
         try await app.autoMigrate()
     }

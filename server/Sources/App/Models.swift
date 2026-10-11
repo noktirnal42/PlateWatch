@@ -74,6 +74,8 @@ final class Sighting: Model, @unchecked Sendable {
     @Field(key: "moderation_state") var moderationState: String
     /// Idempotency dedupe — replays return the original receipt.
     @Field(key: "idempotency_key") var idempotencyKey: String
+    /// When the server accepted the row — the receipt's serverReceivedAt.
+    @Timestamp(key: "created_at", on: .create) var createdAt: Date?
 
     init() {}
 }

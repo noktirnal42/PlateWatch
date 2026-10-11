@@ -51,6 +51,9 @@ public struct CloudKitBackend: SyncBackend {
                        idempotencyKey: String) async throws -> SubmissionReceipt {
         let recordID = CKRecord.ID(recordName: "sighting-\(idempotencyKey)",
                                    zoneID: publicZoneID)
+        // Same stable derivation pullSightings uses, so the receipt ID
+        // matches the record even on idempotent replays.
+        let stableID = Self.uuid(fromRecordName: idempotencyKey)
         let record = CKRecord(recordType: RecordType.sighting, recordID: recordID)
         record["capturedAt"] = sighting.capturedAt as NSDate
         record["geohash6"] = sighting.geohash6
@@ -65,7 +68,7 @@ public struct CloudKitBackend: SyncBackend {
 
         do {
             let saved = try await publicDB.save(record)
-            return SubmissionReceipt(sightingID: UUID(uuidString: idempotencyKey.prefix(36).description) ?? UUID(),
+            return SubmissionReceipt(sightingID: stableID,
                                      moderationState: .pending,
                                      serverReceivedAt: saved.modificationDate ?? Date())
         } catch let error as CKError {
@@ -73,7 +76,7 @@ public struct CloudKitBackend: SyncBackend {
             case .quotaExceeded, .requestRateLimited: throw SyncError.quotaExceeded
             case .serverRecordChanged, .unknownItem:
                 // Retry loop hit an existing idempotent write → treat published.
-                return SubmissionReceipt(sightingID: UUID(), moderationState: .pending,
+                return SubmissionReceipt(sightingID: stableID, moderationState: .pending,
                                          serverReceivedAt: Date())
             case .notAuthenticated: throw SyncError.notAuthenticated
             default: throw SyncError.serverRejected(reason: error.localizedDescription)
@@ -81,19 +84,42 @@ public struct CloudKitBackend: SyncBackend {
         }
     }
 
-    public func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta {
-        // Delta pull over a plate-search query keeps the free tier happy and
-        // pushes heavy lifting to the nightly export for analysts.
-        let predicate = NSPredicate(value: true)
-        let query = CKQuery(recordType: RecordType.sighting, predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "capturedAt", ascending: false)]
-        let cursorObj = cursor.flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKQueryOperation.Cursor.self, from: Data($0.token.utf8)) }
-        let (results, nextCursor) = try await publicDB.records(
-            matching: query, inZoneWith: nil,
-            desiredKeys: ["capturedAt", "geohash6", "plateText", "unitNumber", "fleetConfidence"],
-            resultsLimit: 200)
+    /// CKQueryOperation.Cursor only round-trips through keyed archiving;
+    /// a `String(describing:)` token cannot be unarchived and would force
+    /// every pull back to page one.
+    static func encodeCursor(_ cursor: CKQueryOperation.Cursor) -> String {
+        let data = (try? NSKeyedArchiver.archivedData(withRootObject: cursor,
+                                                      requiringSecureCoding: true)) ?? Data()
+        return data.base64EncodedString()
+    }
 
-        _ = cursorObj // change-token path activates with zone config; MVP query pull
+    static func decodeCursor(_ token: String) -> CKQueryOperation.Cursor? {
+        guard let data = Data(base64Encoded: token) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKQueryOperation.Cursor.self,
+                                                       from: data) as? CKQueryOperation.Cursor
+    }
+
+    public func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta {
+        let desiredKeys = ["capturedAt", "geohash6", "plateText", "unitNumber", "fleetConfidence"]
+        let resultsLimit = 200
+        let results: [(CKRecord.ID, Result<CKRecord, Error>)]
+        let nextCursor: CKQueryOperation.Cursor?
+        if let cursorObj = cursor.flatMap({ Self.decodeCursor($0.token) }) {
+            (results, nextCursor) = try await publicDB.records(
+                continuingMatchFrom: cursorObj,
+                desiredKeys: desiredKeys,
+                resultsLimit: resultsLimit)
+        } else {
+            // Fresh pull: newest first, so deltas read as "newest since the
+            // last page" and the nightly export does the heavy lifting.
+            let query = CKQuery(recordType: RecordType.sighting, predicate: NSPredicate(value: true))
+            query.sortDescriptors = [NSSortDescriptor(key: "capturedAt", ascending: false)]
+            (results, nextCursor) = try await publicDB.records(
+                matching: query, inZoneWith: nil,
+                desiredKeys: desiredKeys,
+                resultsLimit: resultsLimit)
+        }
+
         var items: [PublicSightingDTO] = []
         for (_, result) in results {
             guard case .success(let record) = result,
@@ -109,7 +135,7 @@ public struct CloudKitBackend: SyncBackend {
                 fleetConfidence: (record["fleetConfidence"] as? Double) ?? 0))
         }
         return SightingDelta(sightings: items,
-                             newCursor: nextCursor.map { SyncCursor(token: String(describing: $0)) })
+                             newCursor: nextCursor.map { SyncCursor(token: Self.encodeCursor($0)) })
     }
 
     public func vehicles(matchingPlate plateText: String) async throws -> [PublicVehicleDTO] {

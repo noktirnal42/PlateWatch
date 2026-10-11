@@ -13,12 +13,21 @@ struct PlateDTO: Content {
     var confidence: Double
 }
 
-struct VehicleObservationDTO: Content {
-    var vehicleClass: String
-    var classConfidence: Double
+/// Field-compatible with PlateKit.VehicleAttributes (SyncDTOs.swift).
+struct VehicleAttributesDTO: Content {
+    var make: String?
+    var model: String?
+    var color: String?
+    var bodyType: String?
     var hasLightBar: Bool?
     var hasPushBar: Bool?
     var hasFleetDecals: Bool?
+}
+
+struct VehicleObservationDTO: Content {
+    var vehicleClass: String
+    var classConfidence: Double
+    var attributes: VehicleAttributesDTO?
 }
 
 struct FleetMarkingsDTO: Content {

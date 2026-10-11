@@ -152,19 +152,11 @@ public final class RTSPFrameSource: @unchecked Sendable {
             consumer?(packet)
         }
 
-        // Handle end of stream or error
-        if reader.error != nil {
-            if isRunning { // not a clean cancel
-                consumer?(FramePacket(pixelBuffer: makeDummyBuffer(), timestamp: Date(), sequenceNumber: 0))
-            }
-        }
+        // Stream error or clean end: stop emitting. Never synthesize a
+        // frame here — a black dummy buffer would enter the analysis
+        // pipeline (and the rolling event clip) as if it were a real
+        // observation, and CVPixelBufferCreate can fail.
         isRunning = false
-    }
-
-    private func makeDummyBuffer() -> CVPixelBuffer {
-        var buffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, 1920, 1080, kCVPixelFormatType_32BGRA, nil, &buffer)
-        return buffer!
     }
 }
 

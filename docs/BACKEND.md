@@ -41,6 +41,21 @@ use the **reference REST protocol**. Two free ways to serve it:
   (server-to-server token) so Apple users and everyone else share one truth.
   Sync service is a small Swift job in `server/` (`CloudKitMirrorService`).
 
+### REST delta-sync protocol (stable contract for non-Apple clients)
+
+- `POST /v1/sightings` with an `Idempotency-Key` header. The key is the
+  client's content-addressed digest (SHA-256 prefix, see
+  `OutboxDrainer.idempotencyKey`) — the same detection resubmitted after a
+  restart or retry must produce the same key, or the server stores it twice.
+- `GET /v1/sightings?cursor=…&limit=…` pages newest-first, ordered by
+  `(capturedAt DESC, id DESC)`. The response's `nextCursor` is
+  `"<ISO-8601-with-fractional-seconds>|<last-row-UUID>"` — echo it back
+  verbatim to resume strictly after the boundary row. Second-precision
+  timestamps collide constantly, so the ID tiebreaker is load-bearing: a
+  bare-timestamp filter would skip or loop rows at the page boundary.
+  A cursor that is only a date (legacy `since` style) is still accepted
+  and treated as "rows newer than this instant".
+
 ### Option B — Cloudflare free tier (documented alternative)
 Workers + D1 (SQLite) free tier can serve the read API + nightly exports for
 essentially unlimited read traffic. A community TypeScript port of

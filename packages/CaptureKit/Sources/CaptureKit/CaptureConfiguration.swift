@@ -85,14 +85,19 @@ public final class FrameRollingBuffer: @unchecked Sendable {
         if frames.count > maxFrames { frames.removeFirst(frames.count - maxFrames) }
     }
 
-    /// Extracts a clip covering [startIndex, endIndex] inclusive.
+    /// Extracts the frames whose sequence numbers fall in
+    /// [startIndex, endIndex] inclusive. Indices are ABSOLUTE frame numbers
+    /// (the `FramePacket.sequenceNumber` space), not buffer positions:
+    /// frames already evicted by the rolling window are simply absent, and
+    /// an empty or inverted range returns [] rather than crashing. This is
+    /// what `PlateCaptureSession.extractEventClip` assumes when it passes
+    /// raw frame-counter indices.
     public func extractClip(from startIndex: Int, to endIndex: Int) -> [FramePacket] {
         lock.lock()
         defer { lock.unlock() }
         let start = max(0, startIndex)
-        let end = min(frames.count - 1, endIndex)
-        guard start <= end else { return [] }
-        return Array(frames[start...end])
+        let end = max(0, endIndex)
+        return frames.filter { $0.sequenceNumber >= start && $0.sequenceNumber <= end }
     }
 
     /// Returns frames within a time window ending at the most recent frame.

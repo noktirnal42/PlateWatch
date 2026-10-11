@@ -107,3 +107,16 @@ struct CreateDeviceReputations: AsyncMigration {
         try await database.schema(DeviceReputation.schema).delete()
     }
 }
+
+struct AddSightingCreatedAt: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .field("created_at", .datetime)
+            .update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .deleteField("created_at")
+            .update()
+    }
+}

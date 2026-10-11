@@ -62,6 +62,65 @@ final class WireProtocolTests: XCTestCase {
         XCTAssertEqual(dto.plate?.text, "1ABC234")
         XCTAssertEqual(dto.plate?.plateDesign, "US-CA-exempt")
     }
+
+    /// QA regression: the server DTO used flat `hasLightBar/…` booleans
+    /// while PlateKit nests them under `attributes` — classifier output was
+    /// silently dropped on ingest (2026-10-11).
+    func testSubmissionDTOCarriesNestedAttributes() throws {
+        let json = """
+        {"capturedAt":"2026-10-09T04:00:00Z","geohash6":"9v6kpv",
+         "deviceIDHash":"dev-qa-1","fleetConfidence":0.85,
+         "vehicle":{"vehicleClass":"patrol","classConfidence":0.8,
+           "attributes":{"make":"Ford","model":"Explorer","color":"black",
+             "hasLightBar":true,"hasFleetDecals":true}}}
+        """
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let dto = try decoder.decode(SightingSubmissionDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.vehicle.attributes?.make, "Ford")
+        XCTAssertEqual(dto.vehicle.attributes?.color, "black")
+        XCTAssertEqual(dto.vehicle.attributes?.hasLightBar, true)
+        XCTAssertEqual(dto.vehicle.attributes?.hasFleetDecals, true)
+        XCTAssertNil(dto.vehicle.attributes?.hasPushBar)
+    }
+
+    func testVehicleAttributesDTOMatchesPlateKitShape() throws {
+        // Encode with PlateKit's exact JSON shape (Sendable Codable struct)
+        // and decode with the server DTO.
+        let attributesJSON = """
+        {"make":"Ford","model":null,"color":"white","bodyType":null,
+         "hasLightBar":true,"hasPushBar":false,"hasFleetDecals":true}
+        """
+        let dto = try JSONDecoder().decode(VehicleAttributesDTO.self,
+                                           from: Data(attributesJSON.utf8))
+        XCTAssertEqual(dto.make, "Ford")
+        XCTAssertEqual(dto.hasPushBar, false)
+        XCTAssertEqual(dto.hasFleetDecals, true)
+    }
+}
+
+final class SightingCursorTests: XCTestCase {
+    func testTokenRoundTrip() throws {
+        let date = Date(timeIntervalSince1970: 1_760_000_000.25)
+        let cursor = SightingCursor(timestamp: date,
+                                    lastID: UUID(uuidString: "ABCDEF01-2345-6789-ABCD-EF0123456789")!)
+        let parsed = try XCTUnwrap(SightingCursor.parse(cursor.token))
+        XCTAssertEqual(parsed, cursor)
+    }
+
+    func testParseRejectsGarbage() {
+        XCTAssertNil(SightingCursor.parse(nil))
+        XCTAssertNil(SightingCursor.parse(""))
+        XCTAssertNil(SightingCursor.parse("not-a-cursor"))
+        XCTAssertNil(SightingCursor.parse("2026-10-09T04:00:00Z|not-a-uuid"))
+    }
+
+    func testParseAcceptsLegacySinceDate() throws {
+        // Old-style bare-timestamp tokens keep working as resume points
+        // pinned to that second (the ID tiebreaker is unknown).
+        let parsed = try XCTUnwrap(SightingCursor.parse(
+            SightingCursor.plainFormatter.string(from: Date(timeIntervalSince1970: 0)) + "|00000000-0000-0000-0000-000000000000"))
+        XCTAssertEqual(parsed.timestamp.timeIntervalSince1970, 0, accuracy: 0.001)
+    }
 }
 
 final class RedactionGateServiceTests: XCTestCase {

@@ -84,10 +84,11 @@ final class FrameRollingBufferTests: XCTestCase {
             buffer.append(frame)
         }
 
+        // Indices are absolute frame numbers: [2, 7] inclusive = seq 2…7.
         let clip = buffer.extractClip(from: 2, to: 7)
         XCTAssertEqual(clip.count, 6)
-        XCTAssertEqual(clip.first?.sequenceNumber, 3)
-        XCTAssertEqual(clip.last?.sequenceNumber, 8)
+        XCTAssertEqual(clip.first?.sequenceNumber, 2)
+        XCTAssertEqual(clip.last?.sequenceNumber, 7)
     }
 
     func testExtractClipBoundsClamped() {
@@ -103,6 +104,31 @@ final class FrameRollingBufferTests: XCTestCase {
         // Out of bounds should be clamped
         let clip = buffer.extractClip(from: -2, to: 10)
         XCTAssertEqual(clip.count, 5)
+    }
+
+    /// Regression: extractEventClip passes ABSOLUTE frame counters, so the
+    /// buffer must survive windows that start past the retained prefix.
+    /// Position-based slicing here formed an invalid Array range and
+    /// crashed the capture session on the first post-wrap fleet event.
+    func testExtractClipAfterEviction() {
+        let buffer = FrameRollingBuffer(maxFrames: 5)
+        for i in 1...20 {
+            buffer.append(FramePacket(
+                pixelBuffer: makeTestPixelBuffer(),
+                timestamp: Date(),
+                sequenceNumber: UInt64(i)
+            ))
+        }
+        XCTAssertEqual(buffer.count, 5) // seq 16…20 retained
+
+        let clip = buffer.extractClip(from: 17, to: 22)
+        XCTAssertEqual(clip.first?.sequenceNumber, 17)
+        XCTAssertEqual(clip.last?.sequenceNumber, 20)
+
+        // Fully-evicted window: empty, not a crash.
+        XCTAssertTrue(buffer.extractClip(from: 1, to: 10).isEmpty)
+        // Inverted range: empty, not a crash.
+        XCTAssertTrue(buffer.extractClip(from: 10, to: 2).isEmpty)
     }
 
     func testFramesInLast() {
