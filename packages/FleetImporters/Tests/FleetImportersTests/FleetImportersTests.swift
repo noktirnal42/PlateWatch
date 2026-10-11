@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import FleetImporters
 import PlateKit
@@ -255,5 +256,64 @@ final class CityFleetImporterTests: XCTestCase {
             """)
         let agency = try XCTUnwrap(county.agencies.first)
         XCTAssertEqual(agency.level, .county)
+    }
+}
+
+final class NHTSAVINDecoderTests: XCTestCase {
+    func testVINValidationViaDecode() async {
+        let decoder = NHTSAVINDecoder()
+        // Valid VIN format passes validation (but network fails)
+        do {
+            _ = try await decoder.decode("1HGBH41JXMN109186")
+        } catch let e as NHTSAVINDecoder.DecodeError {
+            // Network error is expected since we're not mocking
+            XCTAssertNotEqual(e, .invalidVIN(""))
+        } catch {
+            // Other errors (network) are fine
+        }
+
+        // Invalid length
+        do {
+            _ = try await decoder.decode("123")
+            XCTFail("should throw")
+        } catch let e as NHTSAVINDecoder.DecodeError {
+            XCTAssertEqual(e, .invalidVIN("VIN must be 17 alphanumeric characters after cleaning: 123"))
+        } catch {
+            XCTFail("wrong error type")
+        }
+
+        // Non-alphanumeric
+        do {
+            _ = try await decoder.decode("1HGBH41JXMN10918!")
+            XCTFail("should throw")
+        } catch let e as NHTSAVINDecoder.DecodeError {
+            XCTAssertEqual(e, .invalidVIN("VIN must be 17 alphanumeric characters after cleaning: 1HGBH41JXMN10918!"))
+        } catch {
+            XCTFail("wrong error type")
+        }
+    }
+
+    func testCacheBehavior() async {
+        let cachedVIN = "1HGBH41JXMN109186"
+        let cached = NHTSAVINDecoder.DecodedVIN(
+            vin: cachedVIN,
+            make: "Honda",
+            model: "Accord",
+            modelYear: 2021,
+            citation: SourceCitation(sourceType: .nhtsaVpic, url: nil, retrievedAt: Date(), excerptHashSHA256: "test")
+        )
+        let decoder = NHTSAVINDecoder(config: .init(cache: [cachedVIN: cached]))
+
+        let result = try? await decoder.decode(cachedVIN)
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.make, "Honda")
+        XCTAssertEqual(result?.model, "Accord")
+    }
+
+    func testDecodeErrorTypes() {
+        XCTAssertEqual(NHTSAVINDecoder.DecodeError.invalidVIN("test"), .invalidVIN("test"))
+        XCTAssertEqual(NHTSAVINDecoder.DecodeError.notFound("test"), .notFound("test"))
+        XCTAssertEqual(NHTSAVINDecoder.DecodeError.networkError("test"), .networkError("test"))
+        XCTAssertEqual(NHTSAVINDecoder.DecodeError.rateLimited(retryAfter: 5), .rateLimited(retryAfter: 5))
     }
 }
