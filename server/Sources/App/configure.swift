@@ -36,4 +36,7 @@ func configure(_ app: Application) async throws {
     try app.register(collection: ExportController())
 
     app.get("health") { _ in ["status": "ok"] }
+
+    // Nightly public dataset export (M4).
+    app.lifecycle.use(NightlyExportJob())
 }

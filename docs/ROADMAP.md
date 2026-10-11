@@ -34,7 +34,8 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 - ⬜ Damage/decal uniqueness cues folded into re-ID anchor
 
 ## M3 — Enrichment & records
-- ⬜ Importers: GSA federal fleet, top-20 city fleet open-data sets
+- ✅ Importers: GSA federal fleet CSV → Vehicle + SourceCitation (packages/FleetImporters)
+- ⬜ City fleet open-data feeds (top 20)
 - ⬜ Auction-listing importer (GovDeals/PublicSurplus item pages → citations)
 - ⬜ NHTSA vPIC VIN-decode connector
 - ⬜ FOIA request generator (MuckRock-linked templates, prefilled agency/unit)
@@ -44,7 +45,7 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 - ◐ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save implemented; push payload handling pending)
 - ⬜ Heatmap + timeline views (agency-level, not individual-movement maps)
 - ⬜ "Agency report card": fleet size, sightings density, budget links
-- ◐ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job pending
+- ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
 - ⬜ CarPlay passive capture mode
 
 ## M5 — Beyond Apple

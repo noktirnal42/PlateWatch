@@ -55,6 +55,38 @@ All 50 pre-existing tests still pass; new tests bring the count to 65
 
 ---
 
+## 0b. Session Log — 2026-10-11 M3/M4 Work (GSA Importer + Nightly Export)
+
+Continuation of the QA sweep — delivered two M3/M4 roadmap items:
+
+7. **GSA Federal Fleet CSV Importer** (`packages/FleetImporters`, M3 first item):
+   New package depending only on `PlateKit` (guardrail: importers are
+   client-side jobs, per BACKEND.md). Parses GSA Federal Fleet Report–style
+   CSV → `Vehicle` + `Agency` with deterministic IDs (SHA-256 of content)
+   so re-imports dedupe. Every vehicle carries a `SourceCitation` bound to
+   the exact source row (SHA-256 excerpt hash + retrieval URL + date) —
+   provenance everywhere. VIN-like columns are deliberately unmapped and
+   never persisted. Includes: RFC 4180 CSV parser (quoted fields, embedded
+   commas/newlines, CRLF), `VehicleClassMapper` for GSA category text
+   (Law Enforcement → .patrol, Fire Engine → .fireEngine, etc.), configurable
+   column alias map, 12 tests including golden deterministic-ID test and
+   VIN-absence guardrail. Added to CI matrix.
+
+8. **Server Nightly Export Scheduled Job** (`server/Sources/App/NightlyExportJob.swift`, M4):
+   `LifecycleHandler` + `DispatchSourceTimer` running daily at 03:00 UTC.
+   Reuses `ExportRenderer` + fleetConfirmed query to write CSV/GeoJSON
+   snapshots with timestamped filenames + stable `sightings.csv`/`.geojson`
+   symlinks for static hosting. Configurable via `EXPORT_DIR` (defaults
+   `Public/exports`). Uses `LifecycleHandler` rather than `ScheduledJob`
+   because Vapor 4.122's `ScheduledJob` types aren't publicly exported in
+   the module surface.
+
+All 6 packages + server build; **77 tests pass** (PlateKit 22, CaptureKit 12,
+VehicleML 7, PlateSync 9, FoundationModelsParser 3, FleetImporters 12,
+server 13). `FleetImporters` added to CI matrix.
+
+---
+
 ## 1. Executive Summary
 
 PlateWatch is a Swift-first, on-device ALPR system focused on **taxpayer-funded vehicle accountability** (police, fire, EMS, public works, transit, federal fleets). It is **not** a general people-tracking system. All code respects the legal/ethical guardrails in `docs/LEGAL-ETHICS.md`: fleet-only ingestion, public-records-only enrichment, provenance everywhere, on-device first, no secrets in repo.
