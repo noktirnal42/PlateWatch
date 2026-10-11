@@ -257,16 +257,303 @@ public enum VehicleClassMapper {
     public static func map(category: String?, fallback: VehicleClass) -> VehicleClass {
         guard let category else { return fallback }
         let c = category.lowercased()
-        if c.contains("law enforcement") || c.contains("police") { return .patrol }
+        if c.contains("law enforcement") || c.contains("police") || c.contains("patrol") { return .patrol }
         if c.contains("ambulance") || c.contains("ems") { return .ambulance }
         if c.contains("fire") { return .fireEngine }
         if c.contains("school bus") { return .schoolBus }
         if c.contains("bus") || c.contains("transit") { return .transit }
         if c.contains("street sweeper") || c.contains("snow") || c.contains("public works")
-            || c.contains("maintenance") || c.contains("utility") { return .publicWorks }
+            || c.contains("maintenance") || c.contains("utility") || c.contains("pickup") || c.contains("truck") { return .publicWorks }
         if c.contains("military") { return .military }
         if c.contains("park") || c.contains("ranger") { return .parkRanger }
         if c.contains("highway") { return .highway }
         return fallback
     }
+}
+
+/// Generic city/municipal fleet importer — same pipeline as GSA but with
+/// configurable agency level and city-specific column aliases.
+public struct CityFleetImporter: Sendable {
+
+    public struct ColumnMap: Sendable {
+        public var department: Set<String>
+        public var division: Set<String>
+        public var unit: Set<String>
+        public var plate: Set<String>
+        public var plateState: Set<String>
+        public var make: Set<String>
+        public var model: Set<String>
+        public var modelYear: Set<String>
+        public var vehicleType: Set<String>
+        public var fuelType: Set<String>
+
+        public init(department: Set<String> = ["department", "dept", "agency", "organization"],
+                    division: Set<String> = ["division", "bureau", "unit", "section"],
+                    unit: Set<String> = ["unit number", "unit #", "vehicle number", "asset number", "tag number", "fleet number"],
+                    plate: Set<String> = ["license plate", "plate number", "plate", "license plate number"],
+                    plateState: Set<String> = ["state", "plate state", "registration state"],
+                    make: Set<String> = ["make", "manufacturer"],
+                    model: Set<String> = ["model"],
+                    modelYear: Set<String> = ["year", "model year", "vehicle year"],
+                    vehicleType: Set<String> = ["vehicle type", "type", "class", "vehicle class", "category"],
+                    fuelType: Set<String> = ["fuel", "fuel type", "propulsion"]) {
+            self.department = department; self.division = division; self.unit = unit
+            self.plate = plate; self.plateState = plateState; self.make = make
+            self.model = model; self.modelYear = modelYear
+            self.vehicleType = vehicleType; self.fuelType = fuelType
+        }
+
+        public static let `default` = ColumnMap()
+    }
+
+    public struct Config: Sendable {
+        public var sourceType: SourceCitation.SourceType
+        public var sourceURL: URL?
+        public var retrievedAt: Date
+        public var columns: ColumnMap
+        /// City feeds are typically municipal or county level.
+        public var agencyLevel: AgencyLevel
+
+        public init(sourceType: SourceCitation.SourceType = .fleetRegistry,
+                    sourceURL: URL? = nil,
+                    retrievedAt: Date = Date(),
+                    columns: ColumnMap = .default,
+                    agencyLevel: AgencyLevel = .municipal) {
+            self.sourceType = sourceType; self.sourceURL = sourceURL
+            self.retrievedAt = retrievedAt; self.columns = columns
+            self.agencyLevel = agencyLevel
+        }
+    }
+
+    public struct SkippedRow: Sendable, Equatable {
+        public var lineNumber: Int
+        public var reason: String
+    }
+
+    public struct ImportedVehicle: Sendable {
+        public var vehicle: Vehicle
+        public var agency: Agency
+    }
+
+    public struct Result: Sendable {
+        public var vehicles: [ImportedVehicle]
+        public var agencies: [Agency]
+        public var skipped: [SkippedRow]
+        public var rowCount: Int
+    }
+
+    private let config: Config
+    private let parser = CSVParser()
+
+    public init(config: Config = Config()) {
+        self.config = config
+    }
+
+    public func importCSV(_ text: String) -> Result {
+        let rows = parser.parse(text)
+        guard let header = rows.first else {
+            return Result(vehicles: [], agencies: [], skipped: [], rowCount: 0)
+        }
+        let index = columnIndex(header: header)
+        var vehiclesByID: [UUID: ImportedVehicle] = [:]
+        var agenciesByID: [UUID: Agency] = [:]
+        var skipped: [SkippedRow] = []
+
+        for (offset, row) in rows.dropFirst().enumerated() {
+            let lineNumber = offset + 2
+            let rawRow = row.joined(separator: ",")
+            let excerpt = StableID.sha256Hex(rawRow)
+
+            guard let deptName = value(row, index.department) ?? value(row, index.division),
+                  !deptName.isEmpty else {
+                skipped.append(SkippedRow(lineNumber: lineNumber,
+                                          reason: "no department — enrichment requires a cited source org"))
+                continue
+            }
+
+            let plateRaw = value(row, index.plate)
+            let unitRaw = value(row, index.unit)
+            let make = value(row, index.make)
+            let model = value(row, index.model)
+            let plateText = plateRaw.map { Plate.normalize($0) } ?? ""
+            let unitNumber = unitRaw?.trimmingCharacters(in: .whitespaces)
+
+            guard !plateText.isEmpty || !(unitNumber ?? "").isEmpty else {
+                skipped.append(SkippedRow(lineNumber: lineNumber,
+                                          reason: "no plate and no unit number — nothing identifying"))
+                continue
+            }
+
+            let agencyID = StableID.uuid(namespace: "platewatch-agency", deptName)
+            let agency = agenciesByID[agencyID] ?? Agency(
+                id: agencyID,
+                name: deptName,
+                level: config.agencyLevel,
+                parentAgencyID: nil)
+            agenciesByID[agencyID] = agency
+
+            // Namespace includes city-level prefix to avoid cross-city collisions.
+            let vehicleID = StableID.uuid(namespace: "platewatch-vehicle-city",
+                                          deptName, unitNumber ?? "", plateText)
+            let citation = SourceCitation(
+                sourceType: config.sourceType,
+                url: config.sourceURL,
+                retrievedAt: config.retrievedAt,
+                excerptHashSHA256: excerpt)
+
+            let vehicle = Vehicle(
+                id: vehicleID,
+                primaryPlate: plateText.isEmpty ? nil
+                    : Plate(text: plateRaw ?? plateText,
+                            issuingRegion: normalizedState(value(row, index.plateState)),
+                            country: "US"),
+                unitNumber: unitNumber,
+                agencyID: agencyID,
+                kind: VehicleClassMapper.map(category: value(row, index.vehicleType),
+                                             fallback: config.agencyLevel == .federal ? .federal : .otherFleet),
+                make: make,
+                model: model,
+                yearRange: modelYearRange(value(row, index.modelYear)),
+                colors: [],
+                status: .active,
+                provenance: [citation])
+
+            vehiclesByID[vehicleID] = ImportedVehicle(vehicle: vehicle, agency: agency)
+        }
+
+        let vehicles = vehiclesByID.values.sorted { $0.vehicle.id.uuidString < $1.vehicle.id.uuidString }
+        let agencies = agenciesByID.values.sorted { $0.id.uuidString < $1.id.uuidString }
+        return Result(vehicles: vehicles, agencies: agencies,
+                      skipped: skipped, rowCount: rows.count - 1)
+    }
+
+    // MARK: - Header mapping (mirrors GSA importer)
+
+    private struct FieldIndexes {
+        var department: Int?
+        var division: Int?
+        var unit: Int?
+        var plate: Int?
+        var plateState: Int?
+        var make: Int?
+        var model: Int?
+        var modelYear: Int?
+        var vehicleType: Int?
+        var fuelType: Int?
+    }
+
+    private func columnIndex(header: [String]) -> FieldIndexes {
+        func find(_ aliases: Set<String>) -> Int? {
+            header.firstIndex { aliases.contains(canonical($0)) }
+        }
+        return FieldIndexes(
+            department: find(config.columns.department),
+            division: find(config.columns.division),
+            unit: find(config.columns.unit),
+            plate: find(config.columns.plate),
+            plateState: find(config.columns.plateState),
+            make: find(config.columns.make),
+            model: find(config.columns.model),
+            modelYear: find(config.columns.modelYear),
+            vehicleType: find(config.columns.vehicleType),
+            fuelType: find(config.columns.fuelType))
+    }
+
+    private func canonical(_ header: String) -> String {
+        header.lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private func value(_ row: [String], _ index: Int?) -> String? {
+        guard let index, index < row.count else { return nil }
+        let v = row[index].trimmingCharacters(in: .whitespaces)
+        return v.isEmpty ? nil : v
+    }
+
+    private func normalizedState(_ raw: String?) -> String? {
+        guard let raw, raw.count == 2 else { return raw }
+        return "US-\(raw.uppercased())"
+    }
+
+    private func modelYearRange(_ raw: String?) -> ClosedRange<Int>? {
+        guard let raw, let year = Int(raw.filter(\.isNumber)), (1900...2100).contains(year) else {
+            return nil
+        }
+        return year...year
+    }
+}
+
+/// Pre-built column maps for known city open-data portals.
+public enum CityFeedPresets {
+    /// Chicago Data Portal — Fleet Vehicles dataset
+    public static let chicago = CityFleetImporter.ColumnMap(
+        department: ["department", "dept name"],
+        division: ["division", "bureau"],
+        unit: ["unit number", "vehicle number", "asset number"],
+        plate: ["license plate", "plate"],
+        plateState: ["state"],
+        make: ["make"],
+        model: ["model"],
+        modelYear: ["model year", "year"],
+        vehicleType: ["vehicle type", "vehicle class"],
+        fuelType: ["fuel type"]
+    )
+
+    /// San Francisco OpenData — Fleet Vehicles
+    public static let sanFrancisco = CityFleetImporter.ColumnMap(
+        department: ["department", "dept"],
+        division: ["division", "bureau"],
+        unit: ["vehicle number", "asset tag", "unit number"],
+        plate: ["license plate", "plate"],
+        plateState: ["state"],
+        make: ["make"],
+        model: ["model"],
+        modelYear: ["model year", "year"],
+        vehicleType: ["vehicle type", "type"],
+        fuelType: ["fuel"]
+    )
+
+    /// NYC OpenData — Fleet Vehicles
+    public static let newYorkCity = CityFleetImporter.ColumnMap(
+        department: ["agency", "agency name"],
+        division: ["bureau", "unit"],
+        unit: ["vehicle id", "fleet number", "unit number"],
+        plate: ["license plate", "plate number"],
+        plateState: ["state"],
+        make: ["make"],
+        model: ["model"],
+        modelYear: ["model year", "year"],
+        vehicleType: ["vehicle type", "class"],
+        fuelType: ["fuel type", "propulsion"]
+    )
+
+    /// Los Angeles OpenData — Fleet Inventory
+    public static let losAngeles = CityFleetImporter.ColumnMap(
+        department: ["department name", "dept"],
+        division: ["division name", "bureau"],
+        unit: ["vehicle number", "asset number", "unit number"],
+        plate: ["license plate", "plate"],
+        plateState: ["state"],
+        make: ["make"],
+        model: ["model"],
+        modelYear: ["model year", "year"],
+        vehicleType: ["vehicle type", "vehicle class"],
+        fuelType: ["fuel type"]
+    )
+
+    /// Austin OpenData — Fleet Vehicles
+    public static let austin = CityFleetImporter.ColumnMap(
+        department: ["department", "dept name"],
+        division: ["division", "bureau"],
+        unit: ["unit number", "vehicle number", "asset number"],
+        plate: ["license plate", "plate number"],
+        plateState: ["state"],
+        make: ["make"],
+        model: ["model"],
+        modelYear: ["model year", "year"],
+        vehicleType: ["vehicle type", "type"],
+        fuelType: ["fuel type"]
+    )
 }

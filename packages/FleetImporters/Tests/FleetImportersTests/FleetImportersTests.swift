@@ -128,3 +128,132 @@ final class GSAFleetImporterTests: XCTestCase {
         XCTAssertEqual(result.skipped.count, 0)
     }
 }
+
+final class CityFleetImporterTests: XCTestCase {
+    private let sampleCSV = """
+    Department,Division,Unit Number,License Plate,State,Make,Model,Model Year,Vehicle Type,Fuel Type
+    "Austin Police Department","Patrol","APD-4421","APD 4421","TX","Ford","Explorer",2024,"Patrol Sedan","Gasoline"
+    "Austin Police Department","Patrol","APD-4421","APD4421","TX","Ford","Explorer",2024,"Patrol Sedan","Gasoline"
+    "Austin Fire Department","Engine Co 1","AFD-E1","AFD E1","TX","Pierce","Arrow XT",2022,"Fire Engine","Diesel"
+    "Austin Public Works","Street Maintenance","APW-100","PW 100","TX","Ford","F-350",2021,"Pickup","Gasoline"
+    "Traffic Engineering",,,,TX,,,
+    """
+
+    private func makeImporter(retrievedAt: Date = Date(timeIntervalSince1970: 1_760_000_000),
+                              sourceURL: URL? = URL(string: "https://data.austintexas.gov/api/example.csv"),
+                              agencyLevel: AgencyLevel = .municipal) -> CityFleetImporter {
+        CityFleetImporter(config: .init(sourceType: .fleetRegistry,
+                                        sourceURL: sourceURL,
+                                        retrievedAt: retrievedAt,
+                                        agencyLevel: agencyLevel))
+    }
+
+    func testParsesVehiclesWithProvenance() throws {
+        let result = makeImporter().importCSV(sampleCSV)
+        // 4 identifying rows; the duplicate APD row dedupes, the no-plate
+        // "Traffic Engineering" row is skipped.
+        XCTAssertEqual(result.vehicles.count, 3)
+        XCTAssertEqual(result.rowCount, 5)
+        XCTAssertEqual(result.skipped.map(\.lineNumber), [6])
+
+        let police = try XCTUnwrap(result.vehicles.first { $0.vehicle.primaryPlate?.text == "APD4421" })
+        XCTAssertEqual(police.vehicle.unitNumber, "APD-4421")
+        XCTAssertEqual(police.vehicle.kind, .patrol)
+        XCTAssertEqual(police.vehicle.make, "Ford")
+        XCTAssertEqual(police.vehicle.yearRange, 2024...2024)
+        XCTAssertEqual(police.vehicle.status, .active)
+        XCTAssertEqual(police.agency.name, "Austin Police Department")
+        XCTAssertEqual(police.agency.level, .municipal)
+
+        let citation = try XCTUnwrap(police.vehicle.provenance.first)
+        XCTAssertEqual(citation.sourceType, .fleetRegistry)
+        XCTAssertEqual(citation.url, URL(string: "https://data.austintexas.gov/api/example.csv"))
+        XCTAssertEqual(citation.retrievedAt, Date(timeIntervalSince1970: 1_760_000_000))
+        XCTAssertNotNil(citation.excerptHashSHA256)
+
+        let fire = try XCTUnwrap(result.vehicles.first { $0.vehicle.primaryPlate?.text == "AFDE1" })
+        XCTAssertEqual(fire.vehicle.kind, .fireEngine)
+        XCTAssertEqual(fire.agency.name, "Austin Fire Department")
+
+        let pw = try XCTUnwrap(result.vehicles.first { $0.vehicle.primaryPlate?.text == "PW100" })
+        XCTAssertEqual(pw.vehicle.kind, .publicWorks)
+        XCTAssertEqual(pw.agency.name, "Austin Public Works")
+    }
+
+    func testDeterministicIDsAcrossImports() throws {
+        let a = makeImporter().importCSV(sampleCSV)
+        let b = makeImporter().importCSV(sampleCSV)
+        XCTAssertEqual(a.vehicles.map(\.vehicle.id), b.vehicles.map(\.vehicle.id))
+        XCTAssertEqual(a.agencies.map(\.id), b.agencies.map(\.id))
+    }
+
+    func testPlateNormalization() throws {
+        let result = makeImporter().importCSV(sampleCSV)
+        // "APD 4421" and "APD4421" normalize to same → single identity.
+        let apd = result.vehicles.filter { $0.vehicle.primaryPlate?.text == "APD4421" }
+        XCTAssertEqual(apd.count, 1)
+        XCTAssertEqual(apd.first?.vehicle.primaryPlate?.issuingRegion, "US-TX")
+    }
+
+    func testCrossCityIDCollisionAvoidance() throws {
+        // Same plate in different cities should produce different vehicle IDs.
+        let austin = makeImporter(agencyLevel: .municipal).importCSV("""
+            Department,Division,Unit Number,License Plate,State,Make,Model,Model Year,Vehicle Type,Fuel Type
+            Austin PD,Patrol,1,ABC123,TX,Ford,Explorer,2024,Patrol Sedan,Gas
+            """)
+        let dallas = CityFleetImporter(config: .init(agencyLevel: .municipal)).importCSV("""
+            Department,Division,Unit Number,License Plate,State,Make,Model,Model Year,Vehicle Type,Fuel Type
+            Dallas PD,Patrol,1,ABC123,TX,Ford,Explorer,2024,Patrol Sedan,Gas
+            """)
+        XCTAssertNotEqual(austin.vehicles.first?.vehicle.id, dallas.vehicles.first?.vehicle.id)
+    }
+
+    func testAgenciesDeduped() {
+        let result = makeImporter().importCSV(sampleCSV)
+        // APD (2 rows) + AFD + APW = 3 agencies.
+        XCTAssertEqual(result.agencies.count, 3)
+    }
+
+    func testClassMapping() throws {
+        XCTAssertEqual(VehicleClassMapper.map(category: "Patrol Sedan", fallback: .otherFleet), .patrol)
+        XCTAssertEqual(VehicleClassMapper.map(category: "Fire Engine", fallback: .otherFleet), .fireEngine)
+        XCTAssertEqual(VehicleClassMapper.map(category: "Pickup", fallback: .otherFleet), .publicWorks)
+        XCTAssertEqual(VehicleClassMapper.map(category: "Sedan", fallback: .otherFleet), .otherFleet)
+        XCTAssertEqual(VehicleClassMapper.map(category: nil, fallback: .otherFleet), .otherFleet)
+    }
+
+    func testPresetColumnMaps() {
+        // Verify preset column maps have expected keys.
+        let chicago = CityFeedPresets.chicago
+        XCTAssertFalse(chicago.department.isEmpty)
+        XCTAssertFalse(chicago.plate.isEmpty)
+        XCTAssertFalse(chicago.unit.isEmpty)
+
+        let sf = CityFeedPresets.sanFrancisco
+        XCTAssertFalse(sf.division.isEmpty)
+
+        let nyc = CityFeedPresets.newYorkCity
+        XCTAssertFalse(nyc.department.isEmpty)
+
+        let la = CityFeedPresets.losAngeles
+        XCTAssertFalse(la.plate.isEmpty)
+
+        let austin = CityFeedPresets.austin
+        XCTAssertFalse(austin.unit.isEmpty)
+    }
+
+    func testEmptyInput() {
+        let result = makeImporter().importCSV("")
+        XCTAssertEqual(result.vehicles.count, 0)
+        XCTAssertEqual(result.skipped.count, 0)
+    }
+
+    func testCountyLevelAgency() throws {
+        let county = CityFleetImporter(config: .init(agencyLevel: .county)).importCSV("""
+            Department,Division,Unit Number,License Plate,State,Make,Model,Model Year,Vehicle Type,Fuel Type
+            "Harris County Sheriff","Patrol",1,"HCS 100","TX","Chevrolet","Tahoe",2023,"Patrol SUV","Gasoline"
+            """)
+        let agency = try XCTUnwrap(county.agencies.first)
+        XCTAssertEqual(agency.level, .county)
+    }
+}
