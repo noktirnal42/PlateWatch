@@ -81,12 +81,12 @@ SOURCES = {
         "note": "MobileViT v2 car color/model classifier - missing image_processor_type; placeholder for now",
     },
     "vehicle-reid-osnet-x0_25": {
-        "kind": "torchscript_placeholder",
-        "note": (
-            "OSNet export requires torchscript trace of deep-person-reid. "
-            "Placeholder until M2 — VehicleML falls back to Vision feature "
-            "prints. Remove this note when a traceable checkpoint is wired."
-        ),
+        "kind": "pytorch_reid",
+        "model_name": "osnet_x0_25",
+        "source": "deep_person_reid",
+        "weights": "msmt17",
+        "compute": "cpuAndNeuralEngine",
+        "note": "OSNet x0.25 (MSMT17) via deep-person-reid PyTorch trace → CoreML",
     },
 }
 
@@ -134,8 +134,7 @@ def convert_onnx(src: Path, dst: Path, compute: str) -> None:
     # INT8 palettized: ~4x smaller, ANE-friendly, negligible plate-OCR loss.
     try:
         import coremltools.optimize.coreml as cto
-
-        model = cto.palettize_weights(model, nbits=8,
+        model = cto.palettize_weights(model, bits=8,
                                       mode="kmeans", granularity="per_grouped_channel")
     except Exception as exc:  # pragma: no cover — quantization failure is non-fatal
         print(f"  (palettization skipped: {exc})")
@@ -205,12 +204,75 @@ def convert_transformers_classifier(src_repo: str, dst: Path, compute: str) -> N
     # INT8 palettized
     try:
         import coremltools.optimize.coreml as cto
-        mlmodel = cto.palettize_weights(mlmodel, nbits=8,
+        mlmodel = cto.palettize_weights(mlmodel, bits=8,
                                         mode="kmeans", granularity="per_grouped_channel")
     except Exception as exc:
         print(f"  (palettization skipped: {exc})")
 
     mlmodel.save(str(dst))
+
+
+def convert_pytorch_reid(dst: Path, model_name: str = "osnet_x0_25",
+                          source: str = "deep_person_reid",
+                          weights: str = "msmt17",
+                          compute: str = "cpuAndNeuralEngine") -> None:
+    """Convert a deep-person-reid model (e.g., OSNet) to CoreML via PyTorch trace."""
+    import coremltools as ct
+    import torch
+
+    print(f"[coreml] deep-person-reid {model_name} ({weights}) → {dst.name}")
+
+    # Ensure torchreid is available (PyPI package is more reliable than GitHub source)
+    try:
+        from torchreid import models
+    except ImportError:
+        import subprocess
+        import sys
+        print("  installing torchreid from PyPI…")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "torchreid"])
+        from torchreid import models
+
+    # Build the model with the specified architecture and pretrained weights
+    print(f"  building {model_name} with {weights} weights…")
+    model = models.build_model(name=model_name, num_classes=1041,
+                               pretrained=weights, use_gpu=False)
+    model.eval()
+
+    # Trace with example input (batch=1, 3 channels, 256x128 — standard re-ID size)
+    example_input = torch.randn(1, 3, 256, 128)
+    traced_model = torch.jit.trace(model, example_input, strict=False)
+
+    # Convert to CoreML
+    cu_map = {
+        "cpuandneuralengine": "CPU_AND_NE",
+        "cpuandgpu": "CPU_AND_GPU",
+        "cpuonly": "CPU_ONLY",
+        "all": "ALL",
+    }
+    cu_key = compute.lower().replace("-", "")
+    cu_name = cu_map.get(cu_key, "CPU_AND_NE")
+    print(f"  compute_units={cu_name}")
+
+    mlmodel = ct.convert(
+        traced_model,
+        source="pytorch",
+        inputs=[ct.TensorType(name="input", shape=(1, 3, 256, 128))],
+        compute_units=ct.ComputeUnit[cu_name],
+        minimum_deployment_target=ct.target.macOS14,
+        convert_to="mlprogram",
+    )
+
+    # INT8 palettization for ANE efficiency
+    try:
+        import coremltools.optimize.coreml as cto
+        mlmodel = cto.palettize_weights(mlmodel, bits=8,
+                                        mode="kmeans", granularity="per_grouped_channel")
+        print("  INT8 palettization applied")
+    except Exception as exc:
+        print(f"  (palettization skipped: {exc})")
+
+    mlmodel.save(str(dst))
+    print(f"  saved {dst}")
 
 
 def main() -> int:
@@ -262,6 +324,14 @@ def main() -> int:
                 print(f"[fetch] {spec['hf_repo']} (full repo)")
                 local_repo = Path(snapshot_download(spec["hf_repo"], local_dir=tmp / "repo"))
                 convert_transformers_classifier(str(local_repo), out_pkg, spec.get("compute", "ALL"))
+            elif spec["kind"] == "pytorch_reid":
+                # deep-person-reid models are loaded directly from the library,
+                # no external weights file needed (weights are baked in the repo).
+                convert_pytorch_reid(out_pkg,
+                                     model_name=spec.get("model_name", "osnet_x0_25"),
+                                     source=spec.get("source", "deep_person_reid"),
+                                     weights=spec.get("weights", "msmt17"),
+                                     compute=spec.get("compute", "ALL"))
             else:  # pragma: no cover
                 raise RuntimeError(f"unknown kind {spec['kind']}")
 
