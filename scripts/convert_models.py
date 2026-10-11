@@ -70,9 +70,15 @@ SOURCES = {
     },
     "vehicle-make-model-classifier": {
         "kind": "transformers_image_classification",
-        "hf_repo": "ryosiswand/convnext_tiny-stanford-cars-brand",
+        "hf_repo": "dima806/car_models_image_detection",
         "compute": "cpuAndNeuralEngine",
-        "note": "ConvNeXt-Tiny on Stanford Cars (196 make+model classes) - timm model, needs custom preprocessing; placeholder for now",
+        "note": "ViT-B/16 car model classifier (transformers compatible)",
+    },
+    "vehicle-color-classifier": {
+        "kind": "transformers_image_classification",
+        "hf_repo": "EstherSan/car_identified_model_7",
+        "compute": "cpuAndNeuralEngine",
+        "note": "MobileViT v2 car color/model classifier - missing image_processor_type; placeholder for now",
     },
     "vehicle-reid-osnet-x0_25": {
         "kind": "torchscript_placeholder",

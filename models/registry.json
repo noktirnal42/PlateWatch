@@ -54,12 +54,24 @@
       "task": "vehicle-make-model-classification",
       "version": "0.1.0",
       "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-make-model-classifier.mlpackage",
-      "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "https://huggingface.co/ryosiswand/convnext_tiny-stanford-cars-brand",
+      "sha256": "8b1b1bdbc606b2c967ea234fb6e0bebd499101b038b06bf99bb78a5fd5066088",
+      "sourceURL": "https://huggingface.co/dima806/car_models_image_detection",
       "license": "Apache-2.0",
-      "inputDescription": "IMAGE 224x224 RGB; ConvNeXt-Tiny on Stanford Cars (196 make+model classes)",
+      "inputDescription": "IMAGE 224x224 RGB; ViT-B/16 car model classifier",
       "minimumOS": "17.0",
-      "notes": "196-class fine-grained car make+model classifier (Stanford Cars dataset). Outputs make/model/year probabilities."
+      "notes": "Fine-grained car make+model classifier (ViT-B/16). Outputs make/model probabilities."
+    },
+    {
+      "name": "vehicle-color-classifier",
+      "task": "vehicle-color-classification",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-color-classifier.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "https://huggingface.co/EstherSan/car_identified_model_7",
+      "license": "Apache-2.0",
+      "inputDescription": "IMAGE 256x256 RGB; MobileViT v2 vehicle color classifier",
+      "minimumOS": "17.0",
+      "notes": "Vehicle color classifier (MobileViT v2). Outputs color probabilities."
     },
     {
       "name": "vehicle-reid-osnet-x0_25",
