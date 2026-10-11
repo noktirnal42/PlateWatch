@@ -38,6 +38,30 @@
       "notes": "COCO vehicle classes (car, truck, bus, motorcycle) gate the fleet classifier stages; fine-tune on fleet imagery later (ROADMAP M2)."
     },
     {
+      "name": "vehicle-type-classifier",
+      "task": "vehicle-type-classification",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-type-classifier.mlpackage",
+      "sha256": "b71090c166631800f15eecf04424394a9e7b011cb112c10a226a45d9a0b6a1a7",
+      "sourceURL": "https://huggingface.co/dima806/vehicle_10_types_image_detection",
+      "license": "Apache-2.0",
+      "inputDescription": "IMAGE 224x224 RGB; ViT-B/16 10 vehicle types (car, truck, bus, motorcycle, bicycle, etc.)",
+      "minimumOS": "17.0",
+      "notes": "10-class vehicle type classifier. Used to route detection to specialized stages."
+    },
+    {
+      "name": "vehicle-make-model-classifier",
+      "task": "vehicle-make-model-classification",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-make-model-classifier.mlpackage",
+      "sha256": "REPLACE_AT_CONVERSION_TIME",
+      "sourceURL": "https://huggingface.co/ryosiswand/convnext_tiny-stanford-cars-brand",
+      "license": "Apache-2.0",
+      "inputDescription": "IMAGE 224x224 RGB; ConvNeXt-Tiny on Stanford Cars (196 make+model classes)",
+      "minimumOS": "17.0",
+      "notes": "196-class fine-grained car make+model classifier (Stanford Cars dataset). Outputs make/model/year probabilities."
+    },
+    {
       "name": "vehicle-reid-osnet-x0_25",
       "task": "vehicle-reid",
       "version": "0.1.0",

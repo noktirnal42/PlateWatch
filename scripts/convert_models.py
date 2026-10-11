@@ -62,6 +62,18 @@ SOURCES = {
         "compute": "cpuAndNeuralEngine",
         "hf_repo": "Ultralytics/YOLOv8",
     },
+    "vehicle-type-classifier": {
+        "kind": "transformers_image_classification",
+        "hf_repo": "dima806/vehicle_10_types_image_detection",
+        "compute": "cpuAndNeuralEngine",
+        "note": "ViT-B/16 10 vehicle types (car, truck, bus, motorcycle, etc.)",
+    },
+    "vehicle-make-model-classifier": {
+        "kind": "transformers_image_classification",
+        "hf_repo": "ryosiswand/convnext_tiny-stanford-cars-brand",
+        "compute": "cpuAndNeuralEngine",
+        "note": "ConvNeXt-Tiny on Stanford Cars (196 make+model classes) - timm model, needs custom preprocessing; placeholder for now",
+    },
     "vehicle-reid-osnet-x0_25": {
         "kind": "torchscript_placeholder",
         "note": (
@@ -97,12 +109,19 @@ def convert_onnx(src: Path, dst: Path, compute: str) -> None:
     import coremltools as ct
 
     print(f"[coreml] {src.name} → {dst.name} (compute_units={compute})")
+    cu_map = {
+        "cpuandneuralengine": "CPU_AND_NE",
+        "cpuandgpu": "CPU_AND_GPU",
+        "cpuonly": "CPU_ONLY",
+        "all": "ALL",
+    }
+    cu_key = compute.lower().replace("-", "")
+    cu_name = cu_map.get(cu_key, "CPU_AND_NE")
+    print(f"  compute_units={cu_name}")
     model = ct.convert(
         str(src),
         source="onnx",
-        compute_units=ct.ComputeUnit[compute.replace("-", "_").upper()]
-        if "-" not in compute
-        else ct.ComputeUnit.ALL,
+        compute_units=ct.ComputeUnit[cu_name],
         minimum_deployment_target=ct.target.macOS14,  # iOS 17/macOS 14 floor
         convert_to="mlprogram",
     )
@@ -124,6 +143,68 @@ def convert_ultralytics(src: Path, dst: Path, imgsz: int = 640) -> None:
     model = YOLO(str(src))
     out = model.export(format="coreml", int8=True, nms=True, imgsz=imgsz)
     shutil.move(str(out), str(dst))
+
+
+def convert_transformers_classifier(src_repo: str, dst: Path, compute: str) -> None:
+    """Convert a transformers image classification model to CoreML."""
+    import coremltools as ct
+    from transformers import AutoImageProcessor, AutoModelForImageClassification
+    import torch
+
+    print(f"[coreml] transformers {src_repo} → {dst.name} (compute_units={compute})")
+
+    # Load model and processor
+    processor = AutoImageProcessor.from_pretrained(src_repo)
+    model = AutoModelForImageClassification.from_pretrained(src_repo)
+    model.eval()
+
+    # Create example input for tracing
+    example_input = torch.randn(1, 3, 224, 224)
+
+    # Wrap model to return tuple (logits,) instead of dict
+    class ModelWrapper(torch.nn.Module):
+        def __init__(self, base_model):
+            super().__init__()
+            self.base_model = base_model
+        
+        def forward(self, pixel_values):
+            outputs = self.base_model(pixel_values=pixel_values)
+            return outputs.logits
+
+    wrapped_model = ModelWrapper(model)
+
+    # Trace the wrapped model
+    traced_model = torch.jit.trace(wrapped_model, example_input, strict=False)
+
+    # Convert to CoreML
+    cu_map = {
+        "cpuandneuralengine": "CPU_AND_NE",
+        "cpuandgpu": "CPU_AND_GPU",
+        "cpuonly": "CPU_ONLY",
+        "all": "ALL",
+    }
+    cu_key = compute.lower().replace("-", "")
+    cu_name = cu_map.get(cu_key, "CPU_AND_NE")
+    print(f"  compute_units={cu_name}")
+    mlmodel = ct.convert(
+        traced_model,
+        source="pytorch",
+        inputs=[ct.TensorType(name="pixel_values", shape=(1, 3, 224, 224))],
+        compute_units=ct.ComputeUnit[cu_name],
+        minimum_deployment_target=ct.target.macOS14,
+        convert_to="mlprogram",
+        classifier_config=ct.ClassifierConfig(class_labels=list(model.config.id2label.values())),
+    )
+
+    # INT8 palettized
+    try:
+        import coremltools.optimize.coreml as cto
+        mlmodel = cto.palettize_weights(mlmodel, nbits=8,
+                                        mode="kmeans", granularity="per_grouped_channel")
+    except Exception as exc:
+        print(f"  (palettization skipped: {exc})")
+
+    mlmodel.save(str(dst))
 
 
 def main() -> int:
@@ -169,6 +250,12 @@ def main() -> int:
                 print(f"[fetch] {repo}/{filename}")
                 weights = Path(hf_hub_download(repo, filename, local_dir=tmp))
                 convert_ultralytics(weights, out_pkg, imgsz=spec.get("imgsz", 640))
+            elif spec["kind"] == "transformers_image_classification":
+                from huggingface_hub import snapshot_download
+
+                print(f"[fetch] {spec['hf_repo']} (full repo)")
+                local_repo = Path(snapshot_download(spec["hf_repo"], local_dir=tmp / "repo"))
+                convert_transformers_classifier(str(local_repo), out_pkg, spec.get("compute", "ALL"))
             else:  # pragma: no cover
                 raise RuntimeError(f"unknown kind {spec['kind']}")
 
