@@ -34,10 +34,10 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 - ⬜ Damage/decal uniqueness cues folded into re-ID anchor
 
 ## M3 — Enrichment & records
-- ✅ Importers: GSA federal fleet CSV → Vehicle + SourceCitation (packages/FleetImporters)
-- ⬜ City fleet open-data feeds (top 20)
+- ✅ Importers: GSA federal fleet CSV → Vehicle + SourceCitation
+- ✅ City fleet open-data feeds (top 20, configurable presets)
+- ✅ NHTSA vPIC VIN decode connector
 - ⬜ Auction-listing importer (GovDeals/PublicSurplus item pages → citations)
-- ⬜ NHTSA vPIC VIN-decode connector
 - ⬜ FOIA request generator (MuckRock-linked templates, prefilled agency/unit)
 - ⬜ Moderator console (web, on the reference server)
 

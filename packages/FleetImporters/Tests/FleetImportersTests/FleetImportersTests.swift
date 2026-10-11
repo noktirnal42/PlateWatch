@@ -317,3 +317,33 @@ final class NHTSAVINDecoderTests: XCTestCase {
         XCTAssertEqual(NHTSAVINDecoder.DecodeError.rateLimited(retryAfter: 5), .rateLimited(retryAfter: 5))
     }
 }
+
+final class AuctionListingImporterTests: XCTestCase {
+    func testConfigDefaults() {
+        let config = AuctionListingImporter.Config(baseURL: URL(string: "https://example.com")!)
+        XCTAssertEqual(config.sourceType, .auctionListing)
+        XCTAssertEqual(config.maxPages, 10)
+        XCTAssertEqual(config.requestDelay, 1.0)
+    }
+
+    func testScrapeErrorEquatable() {
+        let url = URL(string: "https://example.com")!
+        let e1 = AuctionListingImporter.ScrapeError(url: url, reason: "test")
+        let e2 = AuctionListingImporter.ScrapeError(url: url, reason: "test")
+        let e3 = AuctionListingImporter.ScrapeError(url: url, reason: "other")
+        XCTAssertEqual(e1, e2)
+        XCTAssertNotEqual(e1, e3)
+    }
+
+    func testResultStruct() {
+        let vehicle = AuctionListingImporter.ImportedVehicle(
+            vehicle: Vehicle(id: UUID(), primaryPlate: Plate(text: "ABC123"), unitNumber: "1", agencyID: nil, kind: .patrol, make: "Ford", model: "Explorer", yearRange: 2024...2024, colors: [], status: .active, provenance: []),
+            agency: Agency(id: UUID(), name: "Test PD", level: .municipal),
+            listingURL: URL(string: "https://example.com/1")!,
+            saleDate: Date(),
+            mileage: 50000
+        )
+        let result = AuctionListingImporter.Result(vehicles: [vehicle], agencies: [], errors: [])
+        XCTAssertEqual(result.vehicles.count, 1)
+    }
+}
