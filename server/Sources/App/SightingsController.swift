@@ -84,7 +84,10 @@ struct SightingsController: RouteCollection {
         record.fleetConfidence = dto.fleetConfidence
         record.moderationState = outcome.state.rawValue
         record.idempotencyKey = idem
-        record.plateText = dto.plate?.text
+        // LEGAL-ETHICS Rule 1: a plate is only persisted once the sighting is
+        // fleet-confirmed. Pending/redacted rows keep the fleet signal
+        // (unit, confidence, crop hash) but never the plate text.
+        record.plateText = outcome.state == .fleetConfirmed ? dto.plate?.text : nil
         record.unitNumber = dto.markings?.unitNumber
         record.cropSHA256 = dto.cropHashSHA256
         record.headingDeg = dto.headingDegrees
@@ -104,8 +107,10 @@ struct SightingsController: RouteCollection {
     @Sendable
     func list(req: Request) async throws -> SightingPageDTO {
         let limit = min(req.query["limit"] ?? 200, 1000)
+        // Public feed: fleet-confirmed rows only. Pending/redacted rows are
+        // review-queue material and must never reach public clients.
         var query = Sighting.query(on: req.db)
-            .filter(\.$moderationState != "rejected")
+            .filter(\.$moderationState == RedactionGateService.ModerationState.fleetConfirmed.rawValue)
             .sort(\.$capturedAt, .descending)
             .sort(\.$id, .descending)
             .limit(limit)

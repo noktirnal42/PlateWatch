@@ -5,6 +5,11 @@ import Vapor
 /// App wiring: database, migrations, routes. Nothing else lives here —
 /// behavior is in Controllers/ and Services/.
 func configure(_ app: Application) async throws {
+    // Port 8083 by default: 8080 is commonly taken by a local Apache, and
+    // 8081/8082 by mitmproxy. Override with PORT / HOST for deployments.
+    app.http.server.configuration.port = Environment.get("PORT").flatMap(Int.init) ?? 8083
+    app.http.server.configuration.hostname = Environment.get("HOST") ?? "127.0.0.1"
+
     if app.environment == .testing {
         // Tests boot without a database; add in-memory SQLite here later if
         // route tests need persistence.
@@ -34,9 +39,12 @@ func configure(_ app: Application) async throws {
     try app.register(collection: AgenciesController())
     try app.register(collection: StatsController())
     try app.register(collection: ExportController())
+    try app.register(collection: ModeratorController(token: Environment.get("MODERATOR_TOKEN")))
 
     app.get("health") { _ in ["status": "ok"] }
 
-    // Nightly public dataset export (M4).
-    app.lifecycle.use(NightlyExportJob())
+    // Nightly public dataset export (M4). Not scheduled under test.
+    if app.environment != .testing {
+        app.lifecycle.use(NightlyExportJob())
+    }
 }

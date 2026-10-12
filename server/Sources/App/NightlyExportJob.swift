@@ -28,13 +28,18 @@ final class NightlyExportJob: LifecycleHandler {
 
     private func nextFireAt03UTC() -> DispatchTime {
         let now = Date()
-        var comps = Calendar.current.dateComponents(in: TimeZone(identifier: "UTC")!, from: now)
+        guard let utc = TimeZone(identifier: "UTC") else {
+            return DispatchTime.now() + 86_400 // fallback: 24h
+        }
+        var comps = Calendar.current.dateComponents(in: utc, from: now)
         comps.hour = 3
         comps.minute = 0
         comps.second = 0
-        let next = Calendar.current.nextDate(after: now,
-                                             matching: comps,
-                                             matchingPolicy: .nextTimePreservingSmallerComponents)!
+        guard let next = Calendar.current.nextDate(after: now,
+                                                    matching: comps,
+                                                    matchingPolicy: .nextTimePreservingSmallerComponents) else {
+            return DispatchTime.now() + 86_400 // fallback: 24h
+        }
         return DispatchTime.now() + next.timeIntervalSince(now)
     }
 
