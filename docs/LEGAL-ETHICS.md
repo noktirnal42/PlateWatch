@@ -20,6 +20,10 @@ function. It is **not** a general-purpose people-tracking system.
   markings + known unit format) does a record enter the shared database.
 - Non-fleet plate text in the background of an otherwise-fleet capture is
   **redacted before upload** (blur mask in stored crop; plate field dropped).
+- **Server-enforced (`server/`):** a plate is persisted only for
+  `fleetConfirmed` sightings. `pending` and `redacted` rows keep unit number,
+  bucketed area, and fleet confidence for moderator review, but never the
+  plate. The public sightings feed and exports serve `fleetConfirmed` rows only.
 
 ## Rule 2 — Public records only for enrichment
 

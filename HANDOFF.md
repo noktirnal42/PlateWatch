@@ -87,6 +87,47 @@ server 13). `FleetImporters` added to CI matrix.
 
 ---
 
+## 0. Update — 2026-10-11 (second pass)
+
+**What changed in this pass**
+- **Privacy fix (server):** plate text is now persisted only for `fleetConfirmed`
+  sightings, and `GET /v1/sightings` serves only `fleetConfirmed` rows. Before
+  this, pending and redacted rows stored and publicly served plate text, which
+  violated LEGAL-ETHICS Rule 1.
+- **Moderator console (M3):** `GET /moderator` on the reference server. Disabled
+  unless `MODERATOR_TOKEN` (≥ 24 chars) is set. Basic auth, HMAC-bound form
+  tokens, strict CSP, no plates shown.
+- **FOIA request generator (M3):** `packages/FleetImporters/.../FOIARequestGenerator.swift`.
+  Text-only drafts; validated unit numbers; requester identity left as a
+  placeholder. Guide: `docs/FOIA.md`.
+- **Server config cleanup:** `PORT` (default 8083) and `HOST` (default
+  127.0.0.1) are environment-driven. `NightlyExportJob` is registered again
+  (outside tests). Debug logging removed.
+- **iOS UI pass:** shared `DesignSystem.swift` (plate badges, on-device chip,
+  sync status pill); capture overlay uses corner brackets for fleet vehicles;
+  working "Open Settings" action (it was an empty closure); clearer outbox and
+  watchlist rows.
+- **Docs:** `BACKEND.md` (env vars, public-feed rule, moderator console),
+  `DATA-MODEL.md`, `LEGAL-ETHICS.md`, `ROADMAP.md`, new `docs/FOIA.md`.
+
+**Verified:** server 24 tests pass; FleetImporters 38 tests pass (11 new). iOS
+app builds for the simulator with no warnings in edited files. Other package
+suites were green at baseline and were not touched.
+
+**Not verified:** the moderator console and public-feed filter against a live
+Postgres (no database was available in this session). Native UI was verified by
+build only, not by running in the simulator.
+
+**Open items:**
+- `SyncBackends.cloudKitAvailable` on iOS always returns `false` (REST backend).
+  This is a deliberate workaround for the entitlement-check trap. It needs a
+  build-time flag before production iOS builds can use CloudKit.
+- `apps/ios/project.yml` now sets a `DEVELOPMENT_TEAM`. This is uncommitted and
+  should be reviewed before it lands on `main`.
+- M4 heatmap, agency report card, and M5 items are still open (see ROADMAP).
+
+---
+
 ## 1. Executive Summary
 
 PlateWatch is a Swift-first, on-device ALPR system focused on **taxpayer-funded vehicle accountability** (police, fire, EMS, public works, transit, federal fleets). It is **not** a general people-tracking system. All code respects the legal/ethical guardrails in `docs/LEGAL-ETHICS.md`: fleet-only ingestion, public-records-only enrichment, provenance everywhere, on-device first, no secrets in repo.

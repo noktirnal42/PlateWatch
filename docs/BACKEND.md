@@ -75,6 +75,30 @@ single host. "Librarians, not gatekeepers."
 - The REST mirror authenticates by the same ed25519 signature scheme, so a
   device identity works on both backends.
 
+### Reference server operations (`server/`)
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `PORT` | `8083` | HTTP port (8080 is often taken by a local Apache) |
+| `HOST` | `127.0.0.1` | Bind address; set `0.0.0.0` only behind a TLS proxy |
+| `DATABASE_URL` | local docker-compose Postgres | Use `sslmode=require` in production |
+| `MODERATOR_TOKEN` | unset (console disabled) | Password for the moderator console; ≥ 24 characters |
+
+**Public feed rule.** `GET /v1/sightings` and the exports return only
+`fleetConfirmed` rows. `pending` and `redacted` rows never leave the server.
+Plate text is persisted only for `fleetConfirmed` rows (LEGAL-ETHICS Rule 1).
+
+**Moderator console.** `GET /moderator` lists `pending` sightings (unit
+number, ~1 km area, fleet confidence, ID; never a plate). Each decision is a
+`POST` that must carry an HMAC form token derived from `MODERATOR_TOKEN`, so
+a cross-site form cannot act on a sighting. Responses are `no-store`, use a
+strict CSP, and contain no third-party assets. Authentication is HTTP Basic
+(any username, password = `MODERATOR_TOKEN`); unset or short tokens return 404.
+Every decision is logged by sighting ID only.
+
+**Nightly export.** `NightlyExportJob` writes the public dataset at 03:00 UTC.
+It is not scheduled under `swift test`.
+
 ## Cost ceiling targets (keep us free)
 
 | Resource | Budget rule |

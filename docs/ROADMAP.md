@@ -21,7 +21,7 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 - ✅ Persistent on-device watchlists (SwiftData) + local alert evaluation
 - ✅ Outbox drain loops wired in iOS app (timer + scene activation) and Hub
 - ✅ Apple FoundationModels fleet-markings parser wired into the iOS capture path with heuristic fallback
-- ⬜ Hub: Bonjour-advertised snapshot endpoint (filesystem watch shipped first)
+- ✅ Hub: Bonjour-advertised snapshot endpoint (filesystem watch shipped first)
 - ⬜ Hub: RTSP ingest (VLCKit or AVF HLS interstitial)
 
 ## M2 — Identification depth
@@ -37,15 +37,17 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 - ✅ Importers: GSA federal fleet CSV → Vehicle + SourceCitation
 - ✅ City fleet open-data feeds (top 20, configurable presets)
 - ✅ NHTSA vPIC VIN decode connector
-- ⬜ Auction-listing importer (GovDeals/PublicSurplus item pages → citations)
-- ⬜ FOIA request generator (MuckRock-linked templates, prefilled agency/unit)
-- ⬜ Moderator console (web, on the reference server)
+- ✅ Auction-listing importer (GovDeals/PublicSurplus item pages → citations)
+- ✅ FOIA request generator (`FleetImporters/FOIARequestGenerator`: text-only drafts, prefilled agency/unit, placeholder requester — see `docs/FOIA.md`)
+- ✅ Moderator console (server-rendered `GET /moderator` on the reference server; disabled unless `MODERATOR_TOKEN` is set)
 
 ## M4 — Network & UX
 - ◐ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save implemented; push payload handling pending)
 - ⬜ Heatmap + timeline views (agency-level, not individual-movement maps)
 - ⬜ "Agency report card": fleet size, sightings density, budget links
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
+- ✅ Public feed is fleet-confirmed only (plates not persisted for unconfirmed sightings)
+- ✅ iOS UI pass: plate-style badges, on-device privacy chip, working Open Settings, sync status pills
 - ⬜ CarPlay passive capture mode
 
 ## M5 — Beyond Apple
