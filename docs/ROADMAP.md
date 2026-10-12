@@ -26,10 +26,10 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 
 ## M2 — Identification depth
 - ⬜ CoreML plate detector + plate OCR (converted models in registry)
-- ⬜ Make/model/color classifier (CompCars-based)
+- ⬜ Make/model/color classifier — colour model not yet found with a recordable licence (`docs/DECISIONS.md`)
 - ⬜ Fleet markings parser: Vision text → FoundationModels `@Generable`
   extraction (agency name, unit #, "POLICE"/"FIRE" class text)
-- ⬜ Plate-design classifier (state/exempt/federal plate families)
+- ⬜ Plate-design classifier (state/exempt/federal plate families) — decision: build labeled dataset, licensing review first (`docs/DECISIONS.md`)
 - ⬜ Vehicle Re-ID upgrade: OSNet CoreML model replacing feature prints
 - ⬜ Damage/decal uniqueness cues folded into re-ID anchor
 
@@ -43,7 +43,7 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 
 ## M4 — Network & UX
 - ◐ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save implemented; push payload handling pending)
-- ⬜ Heatmap + timeline views (agency-level, not individual-movement maps)
+- ◐ Heatmap + timeline: k-anonymous aggregate API shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); map/timeline UI pending; agency scoping needs vehicle linking
 - ⬜ "Agency report card": fleet size, sightings density, budget links
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
 - ✅ Public feed is fleet-confirmed only (plates not persisted for unconfirmed sightings)

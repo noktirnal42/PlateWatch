@@ -96,6 +96,12 @@ strict CSP, and contain no third-party assets. Authentication is HTTP Basic
 (any username, password = `MODERATOR_TOKEN`); unset or short tokens return 404.
 Every decision is logged by sighting ID only.
 
+**Public aggregates.** `GET /v1/aggregates/heatmap?since=&until=&agencyID=`
+returns counts per geohash-6 cell and per UTC day for fleet-confirmed sightings.
+Any bucket with fewer than 5 sightings is withheld, and only the number of
+withheld buckets is reported. The window defaults to 30 days and is capped at
+366. No per-sighting data is returned.
+
 **Nightly export.** `NightlyExportJob` writes the public dataset at 03:00 UTC.
 It is not scheduled under `swift test`.
 
