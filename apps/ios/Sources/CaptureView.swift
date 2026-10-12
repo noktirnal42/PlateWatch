@@ -1,6 +1,9 @@
 import AVFoundation
 import PlateKit
+import PlateSync
+import SwiftData
 import SwiftUI
+import UIKit
 
 /// Live capture: camera preview with a detection overlay. Everything the
 /// pipeline sees stays on-device unless the RedactionGate approves it.
@@ -16,21 +19,19 @@ struct CaptureView: View {
                 .ignoresSafeArea()
             DetectionOverlay(frame: viewModel.latestFrame)
             VStack {
-                Spacer()
-                HStack {
-                    Label(viewModel.statusText, systemImage: "record.circle")
-                        .font(.footnote.monospaced())
-                        .padding(8)
-                        .background(.ultraThinMaterial, in: .capsule)
+                HStack(alignment: .top) {
+                    PrivacyChip()
                     Spacer()
                     if viewModel.fleetHitPending {
-                        Image(systemName: "car.fill")
-                            .symbolEffect(.pulse)
-                            .foregroundStyle(.yellow)
+                        FleetHitChip()
+                            .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
-                .padding()
+                Spacer()
+                StatusBar(text: viewModel.statusText)
             }
+            .padding()
+            .animation(.snappy, value: viewModel.fleetHitPending)
         }
         .task {
             viewModel.attach(context: modelContext, backend: backend)
@@ -38,11 +39,45 @@ struct CaptureView: View {
         }
         .onDisappear { viewModel.stop() }
         .alert("Camera access required", isPresented: $permissionDenied) {
-            Button("Open Settings") { /* UIApplication.openSettings */ }
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Not now", role: .cancel) {}
         } message: {
             Text("PlateWatch analyzes on-device; footage never uploads.")
         }
         .onChange(of: viewModel.permissionDenied) { _, value in permissionDenied = value }
+    }
+}
+
+/// Monospaced capture status in a quiet material bar.
+private struct StatusBar: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "record.circle")
+            .font(.footnote.monospaced())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: .capsule)
+            .accessibilityLabel("Capture status: \(text)")
+    }
+}
+
+/// Shown while a fleet-classified detection is being confirmed.
+private struct FleetHitChip: View {
+    var body: some View {
+        Label("Fleet vehicle", systemImage: "car.fill")
+            .font(.footnote.weight(.semibold))
+            .symbolEffect(.pulse)
+            .foregroundStyle(.black)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(PWStyle.fleet, in: .capsule)
+            .accessibilityLabel("Fleet vehicle detected")
     }
 }
 
@@ -64,8 +99,10 @@ private struct CameraPreview: UIViewRepresentable {
     }
 }
 
-/// Draws fleet-relevant boxes over the preview. Coordinates arrive in our
-/// NormalizedBox (top-left origin).
+/// Draws detections over the preview. Fleet vehicles get corner brackets
+/// (a "targeting" look that reads as a classification, not a generic box);
+/// everything else is a faint, dashed outline so it does not draw the eye.
+/// Coordinates arrive in our NormalizedBox (top-left origin).
 private struct DetectionOverlay: View {
     let frame: DetectionFrame?
 
@@ -73,26 +110,50 @@ private struct DetectionOverlay: View {
         GeometryReader { geo in
             ForEach(frame?.vehicles ?? []) { vehicle in
                 let box = vehicle.boundingBox
-                Rectangle()
-                    .stroke(borderColor(for: vehicle), lineWidth: 2)
-                    .frame(width: box.width * geo.size.width,
-                           height: box.height * geo.size.height)
-                    .position(x: (box.x + box.width / 2) * geo.size.width,
-                              y: (box.y + box.height / 2) * geo.size.height)
+                let rect = CGRect(x: box.x * geo.size.width,
+                                  y: box.y * geo.size.height,
+                                  width: box.width * geo.size.width,
+                                  height: box.height * geo.size.height)
+                if vehicle.vehicleClass.isFleet {
+                    CornerBrackets()
+                        .stroke(PWStyle.fleet, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                } else {
+                    Rectangle()
+                        .stroke(.white.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                }
                 if let plate = vehicle.plates.first?.best {
-                    Text(plate.text)
-                        .font(.caption.monospaced())
-                        .padding(4)
-                        .background(.ultraThinMaterial)
-                        .position(x: (box.x + box.width / 2) * geo.size.width,
-                                  y: max(20, (box.y) * geo.size.height - 14))
+                    PlateBadge(text: plate.text, compact: true)
+                        .position(x: rect.midX, y: max(16, rect.minY - 14))
                 }
             }
         }
         .allowsHitTesting(false)
+        .animation(.easeOut(duration: 0.15), value: frame?.vehicles.count ?? 0)
     }
+}
 
-    private func borderColor(for v: VehicleObservation) -> Color {
-        v.vehicleClass.isFleet ? .yellow : .gray.opacity(0.4)
+/// Four L-shaped corners inset into the rect.
+private struct CornerBrackets: Shape {
+    func path(in rect: CGRect) -> Path {
+        let len = min(rect.width, rect.height) * 0.22
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY + len))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX + len, y: rect.minY))
+        p.move(to: CGPoint(x: rect.maxX - len, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + len))
+        p.move(to: CGPoint(x: rect.maxX, y: rect.maxY - len))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - len, y: rect.maxY))
+        p.move(to: CGPoint(x: rect.minX + len, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - len))
+        return p
     }
 }

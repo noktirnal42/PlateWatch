@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import Security
 
 /// Backend selection that cannot crash: `CKContainer(identifier:)` *traps*
 /// when the running binary lacks the iCloud container entitlement (unsigned
@@ -12,6 +13,7 @@ public enum SyncBackends {
 
     /// True when the app's signature declares our CloudKit container.
     public static func cloudKitAvailable(containerID: String = containerID) -> Bool {
+#if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return false }
         guard let raw = SecTaskCopyValueForEntitlement(task,
                 "com.apple.developer.icloud-container-identifiers" as CFString, nil)
@@ -21,6 +23,12 @@ public enum SyncBackends {
             return list.contains(containerID) || list.contains(where: { $0.hasSuffix(containerID) })
         }
         return false
+#else
+        // On iOS, we cannot safely check entitlements at runtime without
+        // trapping. Default to false (REST backend) for dev builds.
+        // Production builds should use a build-time configuration flag.
+        return false
+#endif
     }
 
     /// The right backend for this binary, right now.

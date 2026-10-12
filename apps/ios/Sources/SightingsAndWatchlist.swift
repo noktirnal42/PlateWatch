@@ -15,26 +15,53 @@ struct SightingsListView: View {
         NavigationStack {
             List {
                 if outbox.isEmpty {
-                    ContentUnavailableView(
-                        "No queued sightings",
-                        systemImage: "tray",
-                        description: Text("Fleet detections appear here before sync. Nothing raw ever leaves the device."))
-                }
-                ForEach(outbox) { row in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(row.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.headline)
-                        Text("pending sync · retries \(row.retryCount)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    ContentUnavailableView {
+                        Label("Nothing queued", systemImage: "checkmark.seal")
+                    } description: {
+                        Text("Fleet detections appear here until they sync. Nothing raw ever leaves the device.")
                     }
-                }
-                .onDelete { idx in
-                    for i in idx { modelContext.delete(outbox[i]) }
+                    .listRowBackground(Color.clear)
+                } else {
+                    Section {
+                        ForEach(outbox) { row in
+                            SightingRow(row: row)
+                        }
+                        .onDelete { idx in
+                            for i in idx { modelContext.delete(outbox[i]) }
+                        }
+                    } footer: {
+                        Text("Swipe a row to discard it before it syncs.")
+                    }
                 }
             }
             .navigationTitle("Sightings")
         }
+    }
+}
+
+private struct SightingRow: View {
+    let row: PendingSubmission
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "car.side.fill")
+                .font(.title3)
+                .foregroundStyle(PWStyle.fleet)
+                .frame(width: 36, height: 36)
+                .background(PWStyle.fleet.opacity(0.15), in: .circle)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.createdAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.headline)
+                SyncStatusPill(retryCount: row.retryCount)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "lock.fill")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("Stored on this device")
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -47,26 +74,49 @@ struct WatchlistView: View {
     private var items: [WatchlistItem]
     @State private var newPlate = ""
 
+    private var normalized: String { Plate.normalize(newPlate) }
+    private var canAdd: Bool { normalized.count >= 3 }
+
     var body: some View {
         NavigationStack {
             List {
-                Section("Watch a plate") {
-                    HStack {
-                        TextField("Plate (e.g. 1ABC234)", text: $newPlate)
+                Section {
+                    HStack(spacing: 12) {
+                        TextField("Plate, e.g. 1ABC234", text: $newPlate)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
-                        Button("Add") {
-                            let normalized = Plate.normalize(newPlate)
-                            modelContext.insert(WatchlistItem(plateText: normalized))
-                            try? modelContext.save()
-                            newPlate = ""
-                        }
-                        .disabled(Plate.normalize(newPlate).count < 3)
+                            .font(.body.monospaced())
+                            .submitLabel(.done)
+                            .onSubmit(add)
+                        Button("Add", action: add)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canAdd)
                     }
+                } header: {
+                    Text("Watch a plate")
+                } footer: {
+                    Text("Matches are checked on this device. Watch entries are never published.")
                 }
+
                 Section("Active (\(items.count))") {
+                    if items.isEmpty {
+                        Text("No plates on watch yet.")
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(items) { item in
-                        Label(item.plateText ?? "re-ID anchor", systemImage: "car")
+                        HStack {
+                            if let plate = item.plateText {
+                                PlateBadge(text: plate)
+                            } else {
+                                Label("Vehicle re-ID anchor", systemImage: "scope")
+                            }
+                            Spacer()
+                            if item.notifyEnabled {
+                                Image(systemName: "bell.fill")
+                                    .foregroundStyle(PWStyle.fleet)
+                                    .accessibilityLabel("Notifications on")
+                            }
+                        }
                     }
                     .onDelete { idx in
                         for i in idx { modelContext.delete(items[i]) }
@@ -76,5 +126,12 @@ struct WatchlistView: View {
             }
             .navigationTitle("Watchlist")
         }
+    }
+
+    private func add() {
+        guard canAdd else { return }
+        modelContext.insert(WatchlistItem(plateText: normalized))
+        try? modelContext.save()
+        newPlate = ""
     }
 }
