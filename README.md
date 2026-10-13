@@ -104,6 +104,7 @@ open apps/ios/PlateWatch.xcodeproj
 - [docs/LEGAL-ETHICS.md](docs/LEGAL-ETHICS.md) — the guardrails that keep this lawful and safe
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and feature backlog
 - [docs/QA-REPORT.md](docs/QA-REPORT.md) — latest QA findings, ranked by severity, with resolution status
+- [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) — what is not done yet and how to do it (start here)
 - [docs/EVALUATION.md](docs/EVALUATION.md) — real-world accuracy on a licensed photo corpus
 - [cloudkit/README.md](cloudkit/README.md) — CloudKit schema and one-time setup
 - [docs/DECISIONS.md](docs/DECISIONS.md) — decision log for model and design choices

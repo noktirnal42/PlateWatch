@@ -7,6 +7,8 @@
 
 ---
 
+> **Start with [`docs/NEXT-STEPS.md`](docs/NEXT-STEPS.md)** — the prioritized, step-by-step list of everything still open.
+
 ## 000. Session Log — 2026-10-13 (later): fixes + real-photo evaluation
 
 See `docs/EVALUATION.md`, `docs/QA-REPORT.md` (resolution table), `eval/README.md`.
