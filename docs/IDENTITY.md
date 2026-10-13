@@ -70,3 +70,10 @@ Most misses are the honest kind: an `Akron Fire Dept.` with no state anywhere on
 - Unit numbers are weak evidence (bare-number lines).
 - Agency names follow templates ("<Place> Police Department"); the true legal name can differ — the key, not the
   display name, is the join.
+## Known gap: plate state from the plate design (found on the Minneapolis photo)
+The Minnesota squad plate reads only "POLICE"; its state banner ("Minnesota", cursive, blue on pale
+blue, ~12 px tall) and "10,000 lakes" are **not readable by Apple Vision** under any scale/contrast
+treatment tried (3–8× scale, levels stretch gain 2–4, banner and strip crops). So the state stays
+unresolved ("Minneapolis, state unknown — which one?"; MN is offered first). The fix is the
+plate-design classifier (MODEL-TRAINING §4c, Create ML Image Classification on plate crops, one
+class per state) — not more OCR. Case is eval id 902 (`eval/user/`, gitignored).

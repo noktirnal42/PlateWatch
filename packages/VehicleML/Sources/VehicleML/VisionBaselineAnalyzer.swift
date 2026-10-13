@@ -184,7 +184,7 @@ enum PlateRectangleReader {
             // Official-use plate: judge the crop's lines together ("Massachusetts /
             // POLICE D756 / OFFICIAL"), since the words and registration are separate lines.
             let joined = hits.compactMap { $0.texts.first }.joined(separator: " ")
-            if let official = Plate.officialRegistration(from: joined), seen.insert(official.registration).inserted {
+            if let official = Plate.officialRegistration(from: joined, allowWordOnly: true), seen.insert(official.registration).inserted {
                 found.append(PlateObservation(
                     boundingBox: NormalizedBox(visionRect: box),
                     candidates: [Plate(text: official.registration,

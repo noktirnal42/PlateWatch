@@ -220,6 +220,15 @@ final class RealWorldRegressionTests: XCTestCase {
         XCTAssertNil(Plate.officialRegistration(from: "POLICEMAN"), "ordinary words are never split")
         XCTAssertNil(Plate.officialRegistration(from: "POLICEMEN"))
     }
+    /// Minneapolis photo: a Minnesota squad plate reads only "POLICE" — no digits.
+    func testWordOnlyPlateNeedsOptInAndNeverCountsAsOfficial() {
+        XCTAssertNil(Plate.officialRegistration(from: "POLICE"), "door lettering must never become a plate")
+        let r = Plate.officialRegistration(from: "POLICE", allowWordOnly: true)
+        XCTAssertEqual(r?.registration, "POLICE")
+        let plate = Plate(text: "POLICE", plateDesign: r?.design, confidence: 0.9, officialWords: ["POLICE"])
+        XCTAssertFalse(plate.isOfficialPlate, "a word-only plate must not earn the official-plate score bonus")
+        XCTAssertNil(Plate.officialRegistration(from: "Minnesota", allowWordOnly: true))
+    }
     func testPlateTextIsNeverAUnitNumber() {
         let m = FleetMarkings(unitNumber: "POLICED756", serviceClassText: "POLICE", hasFleetKeyword: true)
         let id = IdentityResolver().resolve(sceneText: [text("POLICED756")], plates: [], vehicleClass: .patrol, markings: m)

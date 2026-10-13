@@ -143,7 +143,8 @@ public struct Plate: Sendable, Hashable, Codable {
     /// does not apply — but at least one digit and one letter/digit run is required.
     /// A leading state name ("Massachusetts POLICE D756") is returned as
     /// `jurisdiction`, never as part of the registration.
-    public static func officialRegistration(from raw: String) -> (registration: String, design: String, jurisdiction: String?)? {
+    public static func officialRegistration(from raw: String,
+                                            allowWordOnly: Bool = false) -> (registration: String, design: String, jurisdiction: String?)? {
         var upper = " " + separatingGluedOfficialWords(raw).uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
             .reduce(into: "") { $0.append($1) } + " "
         var matched: [String] = []
@@ -165,6 +166,12 @@ public struct Plate: Sendable, Hashable, Codable {
                 return true
             }
             .joined()
+        // Some states issue plates that read only the word ("POLICE" on Minnesota squad
+        // cars). That is the registration, but only trustworthy inside a detected plate
+        // rectangle — never for door lettering — so callers must opt in.
+        if leftover.isEmpty, allowWordOnly {
+            return (matched.joined(), "word-only-vanity", jurisdiction)
+        }
         guard (3...8).contains(leftover.count), leftover.contains(where: \.isNumber) else { return nil }
         var run = 0
         for ch in leftover { run = ch.isLetter ? run + 1 : 0; if run >= 5 { return nil } }
