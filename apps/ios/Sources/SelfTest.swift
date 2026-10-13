@@ -25,7 +25,7 @@ enum SelfTest {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         print("SELFTEST begin: \(files.count) images, device=\(ProcessInfo.processInfo.hostName)")
         let gate = RedactionGate(config: .standard)
-        let executor = AnalysisExecutor(pipeline: PlateAnalysisPipeline()) { AnalysisContext(models: [:]) }
+        let executor = AnalysisExecutor(pipeline: PlateAnalysisPipeline()) { AnalysisContext(models: [:], thorough: true) }
         for url in files {
             guard let buffer = FileFrameSource.pixelBuffer(from: url) else {
                 print("SELFTEST \(url.lastPathComponent): DECODE-FAIL"); continue
@@ -49,6 +49,8 @@ enum SelfTest {
                          url.lastPathComponent, "\(verdict)", best, frame.vehicles.count,
                          plates.joined(separator: ","), markings.serviceClassText ?? "-",
                          markings.unitNumber ?? "-", Date().timeIntervalSince(start)))
+            let lines = Array(Set(frame.vehicles.flatMap { $0.sceneText.map(\.text) })).sorted().prefix(12)
+            print("  ocr: \(lines.joined(separator: " | "))")
         }
         print("SELFTEST end")
     }
