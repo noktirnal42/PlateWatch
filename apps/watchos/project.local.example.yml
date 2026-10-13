@@ -1,0 +1,7 @@
+# Copy to project.local.yml (gitignored) and fill in your own values.
+# xcodegen merges it into project.yml when present; it is optional.
+options:
+  organizationName: "Your Name"
+settings:
+  base:
+    DEVELOPMENT_TEAM: "YOURTEAMID"
