@@ -38,8 +38,15 @@ model is committed or published. **Do not commit weights or training images.**
 | Dataset | What | Size | Licence | Use for | Verified notes |
 |---|---|---|---|---|---|
 | **Open Images V7** — class *Vehicle registration plate* (`/m/01jfm_`) | Plate boxes on Flickr photos | **⚠ unverified** count (draft said ~15k) | Annotations **CC BY 4.0**; images **CC BY 2.0 per-image** | Plate detector; also classes *Ambulance*, *Taxi*, *Van*, *Bus*, *Truck*, *Car* | Class + IDs confirmed in `oidv7-class-descriptions-boxable.csv`. Google states it does **not** guarantee each image's licence — check per image. Global, **⚠ "US-heavy" unverified**. |
-| **keremberke/license-plate-object-detection** (Hugging Face) | Single class `license_plate` | **8,823** images (6,176 / 1,765 / 882) | **CC BY 4.0** | Plate detector | COCO format. Re-export of the Roboflow Universe set *"Vehicle Registration Plates Dataset"* (Augmented Startups); **region and original image provenance not stated**. |
-| justjuu/license-plate-detection (Hugging Face) | — | **the same 8,823 images** | CC BY 4.0 | — | **Not a second dataset:** the card calls it "a cleaned and simplified version of a Roboflow-exported COCO dataset" with the same 8,823 rows / split sizes. Use one of the two, not both. |
+| **Open Images V7 — Vehicle registration plate** (the right source) | Plate boxes on Flickr photos | validation+test: **2,775 images / 3,806 boxes** (counted 2026-10-13; train split is larger, not yet counted) | Annotations CC BY 4.0; **every one of those 2,775 photos is individually CC BY 2.0** (author + Flickr page recorded in the images CSV) | Plate detector | Mostly Western Flickr photos; build with `scripts/make_plate_dataset.py` — ready-made for Create ML, with `ATTRIBUTION.md` |
+
+### Looks usable but is not — the "keremberke" / "justjuu" plate sets
+Both Hugging Face repos are **one** dataset (8,823 images, "CC BY 4.0", Roboflow export). A filename audit
+(2026-10-13) shows its provenance is **not** what the card implies: only **271 images (3 %)** have Open-Images-style
+IDs (those exist in Open Images → they are CC BY 2.0 Flickr photos, not CC BY 4.0); the other **97 %** are Vietnamese
+sources (`xemay…` = motorbikes, `quandoi…` = military, `ngoaigiao…` = diplomatic) and a few generic
+`CarLongPlate…` families with no recorded origin. Wrong domain for US plates (motorbike and military plate shapes), unknown
+image rights behind the "CC BY 4.0" tag, and military/diplomatic plates are sensitive. **Do not use for training.**
 
 ### Do not use (recorded so nobody re-evaluates)
 

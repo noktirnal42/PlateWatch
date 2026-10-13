@@ -41,7 +41,7 @@ fleet evidence and its place is unresolved. Corpus fleet metrics are unchanged (
 |---|---|
 | Open Images V7 has *Vehicle registration plate*; images CC BY 2.0, annotations CC BY 4.0 | ✅ class `/m/01jfm_` confirmed in the class list. Licence nuance added: per-image, and Google disclaims it |
 | …"~15k plate images", "US-heavy" | ⚠ unverified — marked |
-| keremberke (8.8k) **and** justjuu (~10k) as two datasets | ✏️ **one dataset**: justjuu is a cleaned copy of the same 8,823-image Roboflow export; region/provenance unstated |
+| keremberke (8.8k) **and** justjuu (~10k) as two datasets, "multi-country but plates are plates" | ✏️ **one dataset**, and a filename audit shows **97 % Vietnamese motorbike/military/diplomatic images** + 3 % Open Images (CC BY 2.0, not 4.0): wrong domain, unknown image rights → replaced by Open Images' own plate class (2,775 CC BY 2.0 images in validation+test) |
 | mabo7237/license-plates-700k "MIT", recommended | ✏️ moved to **excluded**: empty card, viewer error, "Duplicated from guica/…", no provenance |
 | UniDataPro US set CC BY-NC-ND, paid | ✅ (free repo is a 5-row preview); NC-ND also on `UniqueData/license_plates` |
 | Create ML annotation file `labels.json`, coordinates "centre, normalised 0–1 × size" | ✏️ file is **`annotations.json`**; `x,y` = box **centre in pixels**; ⚠ Apple sources disagree on the key names (`image/annotations` vs `imagefilename/annotation`) — a verify-by-import step was added |
