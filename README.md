@@ -13,6 +13,24 @@ and on-device machine learning.
 
 ---
 
+## Project status — pre-alpha
+
+PlateWatch is **not yet usable end to end.** The foundations are solid and
+tested; the capture experience is what we are working on now.
+
+| Area | State |
+|---|---|
+| Core packages (PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters) | Built and tested — 129 tests pass |
+| Reference server (ingest, delta sync, exports, k-anonymous heatmap, agency report, moderator console) | Builds, 41 tests pass; not yet deployed publicly |
+| iOS app | Builds and launches on simulator and device; live plate capture does **not** yet work reliably, UI is unbranded |
+| watchOS app / macOS Hub | Present; not verified in the latest QA pass |
+| CloudKit public database | **Not live yet** — container/schema/production deploy outstanding |
+| CoreML models | Converted locally; **not yet published** as a release, so the app runs on Apple Vision only |
+
+The ranked list of known problems is in [docs/QA-REPORT.md](docs/QA-REPORT.md);
+the plan to fix them is **M-Alpha** in [docs/ROADMAP.md](docs/ROADMAP.md).
+Contributions on any of those items are very welcome.
+
 ## What it does
 
 | Stage | Tech | Runs where |
@@ -69,7 +87,7 @@ scripts/.venv/bin/python scripts/convert_models.py --all
 (cd apps/ios && xcodegen) && (cd apps/macos-hub && xcodegen) && (cd apps/watchos && xcodegen)
 open apps/ios/PlateWatch.xcodeproj
 
-# 4. Enable the CloudKit capability (container iCloud.org.platewatch),
+# 4. Enable the CloudKit capability (container iCloud.org.platewatch.platewatch),
 #    build, run.
 ```
 
@@ -82,6 +100,10 @@ open apps/ios/PlateWatch.xcodeproj
 - [docs/BACKEND.md](docs/BACKEND.md) — CloudKit-first backend, free-tier self-host options
 - [docs/LEGAL-ETHICS.md](docs/LEGAL-ETHICS.md) — the guardrails that keep this lawful and safe
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and feature backlog
+- [docs/QA-REPORT.md](docs/QA-REPORT.md) — latest QA findings, ranked by severity
+- [docs/DECISIONS.md](docs/DECISIONS.md) — decision log for model and design choices
+- [docs/FOIA.md](docs/FOIA.md) — requesting fleet records from agencies
+- [docs/PLATE-DESIGN-DATASET.md](docs/PLATE-DESIGN-DATASET.md) — plate-design classifier dataset plan
 
 ## License
 

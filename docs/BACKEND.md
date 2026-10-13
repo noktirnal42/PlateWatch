@@ -1,5 +1,12 @@
 # BACKEND.md — CloudKit-first, free-forever hosting strategy
 
+> **Status (2026-10-13): CloudKit is the chosen backend but is not live yet.**
+> Container `iCloud.org.platewatch.platewatch` is declared in the app
+> entitlements; the record-type schema has not been exported to the repo or
+> deployed Development → Production, and public-database security roles are not
+> configured. Until then the app falls back to the REST mirror. Tracked as
+> QA P0-5 in [QA-REPORT.md](QA-REPORT.md).
+
 ## Decision: CloudKit public database is the primary backend
 
 The user's requirement: free Apple technology now, free option later for

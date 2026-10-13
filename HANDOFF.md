@@ -1,9 +1,31 @@
 # PlateWatch — Handoff Document
 
 **Project:** PlateWatch — Open-source ALPR for government vehicle accountability
-**Date:** 2026-10-11
+**Date:** 2026-10-13 (QA pass; see §00)
 **Branch:** `fix/sighting-unit-number` (10 commits ahead of origin)
-**Status:** M2 substantially complete; M3–M5 pending; QA bug-sweep 2026-10-11 complete
+**Status:** Foundations done and tested (129 tests); iOS capture loop and CloudKit **not yet working** — see `docs/QA-REPORT.md`
+
+---
+
+## 00. Session Log — 2026-10-13 Visual QA (simulator + physical iPhone)
+
+Full findings: [`docs/QA-REPORT.md`](docs/QA-REPORT.md). Headlines:
+
+- **Server did not compile** (`AgencyReportController`), and its HTML escape
+  helper was a no-op (stored XSS). Both fixed; server now 41 tests pass.
+- **Test baseline is 129**, not 77/50: PlateKit 22, CaptureKit 12, VehicleML 7,
+  PlateSync 9, FleetImporters 38, server 41.
+- **Why the app "doesn't scan plates":** camera frames are never rotated/oriented
+  for Vision (P0-1); without CoreML models no vehicle can be fleet-approved
+  (P0-2); detector labels are COCO and don't map to fleet classes (P0-4); model
+  release URLs 404 (P0-3).
+- **CloudKit is not up:** no schema in repo, container/production deploy not
+  done (P0-5). Correction to older notes: `cloudKitAvailable` on iOS now reads
+  the `PlateWatchUseCloudKit` Info.plist flag (currently `true`); it no longer
+  "always returns false".
+- **Branding:** no app icon, asset catalog, accent colour or launch screen
+  (P1-3/P1-4/P1-5).
+- Not verified: watchOS app, macOS Hub, live camera on device.
 
 ---
 
