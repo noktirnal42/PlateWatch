@@ -24,10 +24,11 @@ public enum SyncBackends {
         }
         return false
 #else
-        // On iOS, we cannot safely check entitlements at runtime without
-        // trapping. Default to false (REST backend) for dev builds.
-        // Production builds should use a build-time configuration flag.
-        return false
+        // iOS/watchOS: runtime entitlement probes are unreliable (and
+        // `CKContainer(identifier:)` traps when unentitled), so entitled
+        // builds opt in via Info.plist. Unsigned/simulator/CLI builds and
+        // targets without the capability simply omit the key and get REST.
+        return Bundle.main.object(forInfoDictionaryKey: "PlateWatchUseCloudKit") as? Bool == true
 #endif
     }
 

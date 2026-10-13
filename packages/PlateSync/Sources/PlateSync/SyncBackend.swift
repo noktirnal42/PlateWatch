@@ -55,4 +55,56 @@ public enum SyncError: Error {
     case quotaExceeded          // back off; free tier protection
     case serverRejected(reason: String)
     case offline
+    case unsupported            // backend cannot serve this call
+}
+
+/// k-anonymous aggregate of fleet-confirmed sightings, mirroring the
+/// reference server's `GET /v1/aggregates/heatmap`. Buckets under k are
+/// withheld server-side — the client never sees sub-k counts.
+public struct HeatmapAggregateDTO: Sendable, Codable, Equatable {
+    public struct Cell: Sendable, Codable, Equatable {
+        public var geohash6: String
+        public var count: Int
+        public init(geohash6: String, count: Int) {
+            self.geohash6 = geohash6
+            self.count = count
+        }
+    }
+
+    public struct Day: Sendable, Codable, Equatable {
+        public var date: String   // yyyy-MM-dd UTC
+        public var count: Int
+        public init(date: String, count: Int) {
+            self.date = date
+            self.count = count
+        }
+    }
+
+    public var k: Int
+    public var since: Date
+    public var until: Date
+    public var cells: [Cell]
+    public var timeline: [Day]
+    public var withheldCells: Int
+    public var withheldDays: Int
+
+    public init(k: Int, since: Date, until: Date,
+                cells: [Cell], timeline: [Day],
+                withheldCells: Int, withheldDays: Int) {
+        self.k = k
+        self.since = since
+        self.until = until
+        self.cells = cells
+        self.timeline = timeline
+        self.withheldCells = withheldCells
+        self.withheldDays = withheldDays
+    }
+}
+
+extension SyncBackend {
+    /// k-anonymous heatmap/timeline aggregate. Default: unsupported
+    /// (CloudKit serves records, not aggregates — REST deployments do).
+    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+        throw SyncError.unsupported
+    }
 }

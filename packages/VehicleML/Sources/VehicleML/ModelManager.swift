@@ -44,12 +44,14 @@ public actor ModelManager {
 
     /// Ensure the latest model for `task` is downloaded + compiled, and return
     /// it. Throws `modelMissing` when the registry has no entry (callers
-    /// should treat that as "run baseline mode").
-    public func model(forTask task: String, registry: ModelRegistry) async throws -> MLModel {
+    /// should treat that as "run baseline mode"). Returns a Sendable wrapper —
+    /// `MLModel` is documented thread-safe but is itself non-Sendable, and
+    /// raw returns across actor isolation don't compile under Swift 6.
+    public func model(forTask task: String, registry: ModelRegistry) async throws -> CompiledModel {
         guard let entry = registry.latest(forTask: task) else {
             throw AnalysisError.modelMissing(task: task)
         }
-        if let cached = loaded[entry.name] { return cached }
+        if let cached = loaded[entry.name] { return CompiledModel(cached) }
 
         let compiledURL = compiledModelURL(for: entry)
         if !FileManager.default.fileExists(atPath: compiledURL.path) {
@@ -59,7 +61,7 @@ public actor ModelManager {
         let model = try MLModel(contentsOf: compiledURL)
         loaded[entry.name] = model
         states[entry.name] = .installed(version: entry.version)
-        return model
+        return CompiledModel(model)
     }
 
     private func downloadAndCompile(entry: ModelRegistryEntry, to compiledURL: URL) async throws {
@@ -102,4 +104,11 @@ public actor ModelManager {
         case downloadFailed(URL)
         case integrityCheckFailed(String)
     }
+}
+
+/// Sendable handle to a compiled CoreML model. `MLModel` is thread-safe for
+/// concurrent prediction (documented by Apple) but is not itself Sendable.
+public struct CompiledModel: @unchecked Sendable {
+    public let mlModel: MLModel
+    public init(_ mlModel: MLModel) { self.mlModel = mlModel }
 }

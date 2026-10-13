@@ -5,6 +5,7 @@ import SwiftUI
 
 @main
 struct PlateWatchApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
     let modelContainer: ModelContainer
@@ -12,7 +13,7 @@ struct PlateWatchApp: App {
 
     init() {
         let schema = Schema([PendingSubmission.self, WatchlistItem.self])
-        let config = ModelConfiguration("PlateWatch", schema: schema)
+        let config = ModelConfiguration("PlateWatch", schema: schema, cloudKitDatabase: .none)
         do {
             modelContainer = try ModelContainer(for: schema, configurations: config)
         } catch {
@@ -31,6 +32,8 @@ struct PlateWatchApp: App {
                     .tabItem { Label("Sightings", systemImage: "list.bullet.rectangle") }
                 WatchlistView()
                     .tabItem { Label("Watchlist", systemImage: "eye") }
+                HeatmapView()
+                    .tabItem { Label("Explore", systemImage: "map") }
             }
             .task {
                 try? await backend.ensureWatchlistSubscription()

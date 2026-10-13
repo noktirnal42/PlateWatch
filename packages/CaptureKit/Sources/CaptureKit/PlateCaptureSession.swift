@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreMedia
 import Foundation
 
@@ -37,11 +37,17 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
 
     /// Configure the session. Call before `start()`. Throws on missing
     /// hardware/permissions-with-denial (permission *prompt* is the app's job).
+    /// Idempotent: safe to call again after a tab switch — existing inputs/
+    /// outputs are replaced rather than stacked (stacking made every second
+    /// configure() fail with `cannotAddInput`).
     public func configure() throws {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
         session.sessionPreset = configuration.preset
+
+        for existing in session.inputs { session.removeInput(existing) }
+        for existing in session.outputs { session.removeOutput(existing) }
 
         let device = try Self.selectDevice(preferTelephoto: configuration.preferTelephoto)
         let input = try AVCaptureDeviceInput(device: device)
@@ -70,12 +76,19 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
         self.eventClipConsumer = consumer
     }
 
+    private let lifecycleQueue = DispatchQueue(label: "org.platewatch.capture.lifecycle", qos: .userInitiated)
+
     public func start() {
-        if !session.isRunning { session.startRunning() }
+        // startRunning() blocks for tens/hundreds of ms — never the main thread.
+        lifecycleQueue.async { [session] in
+            if !session.isRunning { session.startRunning() }
+        }
     }
 
     public func stop() {
-        if session.isRunning { session.stopRunning() }
+        lifecycleQueue.async { [session] in
+            if session.isRunning { session.stopRunning() }
+        }
     }
 
     public enum CaptureError: Error {

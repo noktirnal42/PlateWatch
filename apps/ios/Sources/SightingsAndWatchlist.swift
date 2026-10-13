@@ -133,5 +133,12 @@ struct WatchlistView: View {
         modelContext.insert(WatchlistItem(plateText: normalized))
         try? modelContext.save()
         newPlate = ""
+        // Mirror to standard defaults — the watch extension reads its
+        // lightweight copy from there for its push→haptic path.
+        var mirrored = UserDefaults.standard.stringArray(forKey: "watchlistPlates") ?? []
+        if !mirrored.contains(normalized) {
+            mirrored.append(normalized)
+            UserDefaults.standard.set(mirrored, forKey: "watchlistPlates")
+        }
     }
 }

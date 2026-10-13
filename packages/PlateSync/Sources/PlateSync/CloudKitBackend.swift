@@ -96,7 +96,7 @@ public struct CloudKitBackend: SyncBackend {
     static func decodeCursor(_ token: String) -> CKQueryOperation.Cursor? {
         guard let data = Data(base64Encoded: token) else { return nil }
         return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKQueryOperation.Cursor.self,
-                                                       from: data) as? CKQueryOperation.Cursor
+                                                       from: data)
     }
 
     public func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta {

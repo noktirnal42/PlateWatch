@@ -82,11 +82,16 @@ public struct FleetMarkingsDTO: Sendable, Codable {
     public var agencyText: String?
     public var unitNumber: String?
     public var serviceClassText: String?
+    /// Free-text field note (watch dictation). Optional — servers that
+    /// predate this field simply ignore it on decode.
+    public var note: String?
 
-    public init(agencyText: String? = nil, unitNumber: String? = nil, serviceClassText: String? = nil) {
+    public init(agencyText: String? = nil, unitNumber: String? = nil,
+                serviceClassText: String? = nil, note: String? = nil) {
         self.agencyText = agencyText
         self.unitNumber = unitNumber
         self.serviceClassText = serviceClassText
+        self.note = note
     }
 
     public init(_ markings: FleetMarkings) {

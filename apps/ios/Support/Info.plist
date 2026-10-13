@@ -26,6 +26,25 @@
 	<string>PlateWatch identifies taxpayer-funded vehicles on public roads using on-device ML. Video is analyzed on-device; raw footage is never uploaded.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Sightings are bucketed to ~1 km; precise location is only attached to fleet-confirmed vehicles.</string>
+	<key>PlateWatchUseCloudKit</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>PlateWatchCarPlay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

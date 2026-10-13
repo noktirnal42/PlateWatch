@@ -38,6 +38,19 @@ public struct RESTBackend: SyncBackend {
         return try await request.sendEmpty(using: session)
     }
 
+    /// k-anonymous heatmap/timeline from the reference server.
+    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+        var comps = URLComponents(url: baseURL.appending(path: "v1/aggregates/heatmap"),
+                                  resolvingAgainstBaseURL: false)!
+        var items: [URLQueryItem] = []
+        let iso = ISO8601DateFormatter()
+        if let since { items.append(URLQueryItem(name: "since", value: iso.string(from: since))) }
+        if let until { items.append(URLQueryItem(name: "until", value: iso.string(from: until))) }
+        if !items.isEmpty { comps.queryItems = items }
+        let request = try JSONRequest.get(comps.url!)
+        return try await request.sendEmpty(using: session)
+    }
+
     public func ensureWatchlistSubscription() async throws {
         // REST reference server has no push; client apps poll via deltas.
     }

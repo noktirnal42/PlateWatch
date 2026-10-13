@@ -9,6 +9,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "LH8KLB9N4F"
 
 targets:
   PlateWatch:
@@ -27,6 +28,13 @@ targets:
         CFBundleDisplayName: PlateWatch
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [remote-notification]
+        PlateWatchUseCloudKit: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: PlateWatchCarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     entitlements:
       path: Support/PlateWatch.entitlements
       properties:

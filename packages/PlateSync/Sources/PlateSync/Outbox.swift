@@ -8,7 +8,7 @@ import SwiftData
 /// zone must never lose evidence.
 @Model
 public final class PendingSubmission {
-    @Attribute(.unique) public var idempotencyKey: String
+    public var idempotencyKey: String
     public var createdAt: Date
     public var payloadJSON: Data   // SightingSubmissionDTO
     public var retryCount: Int

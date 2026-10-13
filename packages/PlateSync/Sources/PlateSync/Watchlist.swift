@@ -7,7 +7,7 @@ import SwiftData
 /// against fleet-confirmed sightings from the shared database.
 @Model
 public final class WatchlistItem {
-    @Attribute(.unique) public var id: UUID
+    public var id: UUID
     public var plateText: String?
     public var featurePrintAnchor: String?
     public var label: String?                  // user's own note ("city yard truck")

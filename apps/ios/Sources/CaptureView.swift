@@ -1,4 +1,5 @@
 import AVFoundation
+import PhotosUI
 import PlateKit
 import PlateSync
 import SwiftData
@@ -7,11 +8,14 @@ import UIKit
 
 /// Live capture: camera preview with a detection overlay. Everything the
 /// pipeline sees stays on-device unless the RedactionGate approves it.
+/// The shutter runs one accurate pass on the freshest frame; the photo
+/// picker imports library images (the deterministic way to test detection).
 struct CaptureView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.syncBackend) private var backend
     @StateObject private var viewModel = CaptureViewModel()
     @State private var permissionDenied = false
+    @State private var photoItem: PhotosPickerItem?
 
     var body: some View {
         ZStack {
@@ -28,6 +32,8 @@ struct CaptureView: View {
                     }
                 }
                 Spacer()
+                CaptureControls(viewModel: viewModel, photoItem: $photoItem)
+                    .padding(.bottom, 4)
                 StatusBar(text: viewModel.statusText)
             }
             .padding()
@@ -49,6 +55,123 @@ struct CaptureView: View {
             Text("PlateWatch analyzes on-device; footage never uploads.")
         }
         .onChange(of: viewModel.permissionDenied) { _, value in permissionDenied = value }
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    await viewModel.processPhoto(data)
+                } else {
+                    viewModel.lastResult = .failed("photo", "Could not load that image.")
+                }
+                photoItem = nil
+            }
+        }
+        .sheet(item: $viewModel.lastResult) { result in
+            CaptureResultSheet(result: result)
+                .presentationDetents([.medium, .large])
+        }
+    }
+}
+
+/// Shutter + photo import + processing indicator, floating above the status.
+private struct CaptureControls: View {
+    @ObservedObject var viewModel: CaptureViewModel
+    @Binding var photoItem: PhotosPickerItem?
+
+    var body: some View {
+        HStack(spacing: 28) {
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.ultraThinMaterial, in: .circle)
+            }
+            .accessibilityLabel("Import a photo to analyze")
+
+            Button {
+                Task { await viewModel.captureStill() }
+            } label: {
+                ZStack {
+                    Circle()
+                        .stroke(.white, lineWidth: 4)
+                        .frame(width: 72, height: 72)
+                    Circle()
+                        .fill(viewModel.processingStill ? AnyShapeStyle(.gray) : AnyShapeStyle(PWStyle.fleet))
+                        .frame(width: 58, height: 58)
+                    if viewModel.processingStill {
+                        ProgressView().tint(.black)
+                    }
+                }
+            }
+            .disabled(viewModel.processingStill)
+            .accessibilityLabel("Capture still frame")
+            .accessibilityHint("Runs one accurate analysis pass on the current frame")
+
+            Image(systemName: "record.circle")
+                .font(.title2)
+                .foregroundStyle(viewModel.fleetHitPending ? PWStyle.fleet : .white.opacity(0.35))
+                .frame(width: 52, height: 52)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Post-capture report: what the pipeline actually saw. This is the QA
+/// surface — a police-car photo either shows plates here or it didn't read.
+private struct CaptureResultSheet: View {
+    let result: CaptureResult
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let error = result.error {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(PWStyle.failing)
+                    }
+                } else {
+                    Section("Read plates") {
+                        if result.plates.isEmpty {
+                            Text("None — no text matched plate geometry or patterns.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(result.plates, id: \.self) { plate in
+                                PlateBadge(text: String(plate.prefix { $0 != " " }))
+                                Text(plate)
+                                    .font(.footnote.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Section("Classification") {
+                        LabeledContent("Vehicles in frame") { Text("\(result.vehicleCount)") }
+                        LabeledContent("Fleet-approved") { Text("\(result.fleetCount)") }
+                        LabeledContent("Top fleet confidence") {
+                            Text("\(Int(result.topFleetConfidence * 100))%")
+                        }
+                        if result.watchlistHits > 0 {
+                            LabeledContent("Watchlist hits") {
+                                Text("\(result.watchlistHits)").foregroundStyle(PWStyle.fleet)
+                            }
+                        }
+                    }
+                    Section {
+                        Text("Gate: only fleet-approved detections persist. \(result.source == "photo" ? "Imported photo" : "Live still") analyzed entirely on-device.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Analysis (\(result.source))")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 
