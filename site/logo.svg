@@ -13,6 +13,6 @@
   <circle cx="350" cy="195" r="5" fill="#0E1116" opacity=".55"/>
   <g fill="none" stroke="#0E1116" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
     <path d="M186 308V232h28a21 21 0 0 1 0 42h-28"/>
-    <path d="M254 232l16 76 22-56 22 56 16-76" transform="translate(-6 0)"/>
+    <path d="M266 232l16 76 22-56 22 56 16-76"/>
   </g>
 </svg>

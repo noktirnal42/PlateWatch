@@ -15,12 +15,12 @@ struct SightingsListView: View {
         NavigationStack {
             List {
                 if outbox.isEmpty {
-                    ContentUnavailableView {
-                        Label("Nothing queued", systemImage: "checkmark.seal")
-                    } description: {
-                        Text("Fleet detections appear here until they sync. Nothing raw ever leaves the device.")
-                    }
-                    .listRowBackground(Color.clear)
+                    PWEmptyState(
+                        title: "No sightings yet",
+                        message: "When PlateWatch recognizes a government vehicle it appears here until it syncs. Point the camera at a patrol car, or import a photo from Capture.",
+                        systemImage: "car.side.fill")
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 } else {
                     Section {
                         ForEach(outbox) { row in
@@ -30,7 +30,7 @@ struct SightingsListView: View {
                             for i in idx { modelContext.delete(outbox[i]) }
                         }
                     } footer: {
-                        Text("Swipe a row to discard it before it syncs.")
+                        Text("Swipe a row to discard it before it syncs. “Needs attention” means the shared database could not be reached after several tries — records stay safely on this device and retry automatically.")
                     }
                 }
             }
@@ -42,6 +42,25 @@ struct SightingsListView: View {
 private struct SightingRow: View {
     let row: PendingSubmission
 
+    /// What the detection actually was, decoded from the queued payload.
+    private var submission: SightingSubmissionDTO? {
+        try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON)
+    }
+
+    private var title: String {
+        let m = submission?.markings
+        let parts = [m?.serviceClassText?.capitalized,
+                     m?.unitNumber.map { "Unit \($0)" }].compactMap { $0 }
+        return parts.isEmpty ? "Government vehicle" : parts.joined(separator: " · ")
+    }
+
+    private var subtitle: String? {
+        guard let agency = submission?.markings?.agencyText,
+              agency.caseInsensitiveCompare(submission?.markings?.serviceClassText ?? "") != .orderedSame
+        else { return nil }
+        return agency.capitalized
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "car.side.fill")
@@ -50,8 +69,15 @@ private struct SightingRow: View {
                 .frame(width: 36, height: 36)
                 .background(PWStyle.fleet.opacity(0.15), in: .circle)
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.createdAt, format: .dateTime.month(.abbreviated).day().hour().minute())
-                    .font(.headline)
+                Text(title).font(.headline)
+                if let subtitle {
+                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 8) {
+                    if let plate = submission?.plate?.text { PlateBadge(text: plate, compact: true) }
+                    Text(row.createdAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 SyncStatusPill(retryCount: row.retryCount)
             }
             Spacer(minLength: 0)
@@ -95,7 +121,7 @@ struct WatchlistView: View {
                 } header: {
                     Text("Watch a plate")
                 } footer: {
-                    Text("Matches are checked on this device. Watch entries are never published.")
+                    Text("Matches are checked on this device and entries are never published. Allow notifications to be alerted when a watched plate is recorded.")
                 }
 
                 Section("Active (\(items.count))") {
@@ -133,6 +159,7 @@ struct WatchlistView: View {
         modelContext.insert(WatchlistItem(plateText: normalized))
         try? modelContext.save()
         newPlate = ""
+        NotificationPermission.requestIfNeeded() // alerts need it; ask now, in context
         // Mirror to standard defaults — the watch extension reads its
         // lightweight copy from there for its push→haptic path.
         var mirrored = UserDefaults.standard.stringArray(forKey: "watchlistPlates") ?? []

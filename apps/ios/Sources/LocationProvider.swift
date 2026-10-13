@@ -44,4 +44,18 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
         let latest = locations.last
         Task { @MainActor in self.lastLocation = latest }
     }
+
+    /// REQUIRED: CoreLocation raises an assertion (crashing the app) when
+    /// `requestLocation()` is used and the delegate lacks this method. A
+    /// failed fix just means the sighting is recorded without a bucket.
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+
+    /// Warm a one-shot fix as soon as the user grants access, so the first
+    /// fleet sighting already has a bucket.
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
+        default: break
+        }
+    }
 }

@@ -20,10 +20,18 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - Sources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     info:
       path: Support/Info.plist
       properties:
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchLogo
+          UIImageRespectsSafeAreaInsets: false
+        UIRequiresFullScreen: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSCameraUsageDescription: "PlateWatch identifies taxpayer-funded vehicles on public roads using on-device ML. Video is analyzed on-device; raw footage is never uploaded."
         NSLocationWhenInUseUsageDescription: "Sightings are bucketed to ~1 km; precise location is only attached to fleet-confirmed vehicles."

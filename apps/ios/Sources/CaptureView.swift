@@ -16,12 +16,19 @@ struct CaptureView: View {
     @StateObject private var viewModel = CaptureViewModel()
     @State private var permissionDenied = false
     @State private var photoItem: PhotosPickerItem?
+    @AppStorage("hasOnboarded") private var hasOnboarded = false
 
     var body: some View {
         ZStack {
+            Color("LaunchBackground").ignoresSafeArea()
             CameraPreview(session: viewModel.captureSession)
                 .ignoresSafeArea()
             DetectionOverlay(frame: viewModel.latestFrame)
+                .ignoresSafeArea()
+            if viewModel.cameraState != .running && viewModel.cameraState != .starting {
+                CameraUnavailableCard(state: viewModel.cameraState)
+                    .padding(.horizontal, 24)
+            }
             VStack {
                 HStack(alignment: .top) {
                     PrivacyChip()
@@ -39,7 +46,9 @@ struct CaptureView: View {
             .padding()
             .animation(.snappy, value: viewModel.fleetHitPending)
         }
-        .task {
+        // Wait for onboarding: the camera prompt must not appear over it.
+        .task(id: hasOnboarded) {
+            guard hasOnboarded else { return }
             viewModel.attach(context: modelContext, backend: backend)
             await viewModel.start()
         }
@@ -67,7 +76,7 @@ struct CaptureView: View {
             }
         }
         .sheet(item: $viewModel.lastResult) { result in
-            CaptureResultSheet(result: result)
+            CaptureResultSheet(result: result, onConfirm: { viewModel.confirm($0) })
                 .presentationDetents([.medium, .large])
         }
     }
@@ -121,6 +130,7 @@ private struct CaptureControls: View {
 /// surface — a police-car photo either shows plates here or it didn't read.
 private struct CaptureResultSheet: View {
     let result: CaptureResult
+    let onConfirm: (UUID) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -145,11 +155,51 @@ private struct CaptureResultSheet: View {
                             }
                         }
                     }
+                    if !result.candidates.isEmpty {
+                        Section {
+                            ForEach(result.candidates) { candidate in
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Label(candidate.summary, systemImage: "questionmark.circle.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                    if candidate.confirmed {
+                                        Label("Sent for moderator review", systemImage: "checkmark.circle.fill")
+                                            .foregroundStyle(PWStyle.synced)
+                                    } else {
+                                        Button {
+                                            onConfirm(candidate.id)
+                                        } label: {
+                                            Text("This is a government vehicle — record it")
+                                                .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(PWStyle.fleet)
+                                        .foregroundStyle(.black)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        } header: {
+                            Text("Possible fleet vehicle")
+                        } footer: {
+                            Text("PlateWatch saw fleet evidence but not enough to record on its own. If you can see it is a public-service vehicle, confirm it. Confirmed sightings go to moderator review first — nothing is published on your word alone.")
+                        }
+                    }
+                    Section("Fleet markings found") {
+                        if result.markings.isEmpty {
+                            Text("No agency, service or unit text was read.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(result.markings, id: \.self) { Text($0) }
+                        }
+                    }
                     Section("Classification") {
                         LabeledContent("Vehicles in frame") { Text("\(result.vehicleCount)") }
-                        LabeledContent("Fleet-approved") { Text("\(result.fleetCount)") }
-                        LabeledContent("Top fleet confidence") {
-                            Text("\(Int(result.topFleetConfidence * 100))%")
+                        LabeledContent("Fleet confidence") {
+                            Text("\(Int(result.topFleetConfidence * 100))% of \(Int(result.approvalThreshold * 100))% needed")
+                        }
+                        LabeledContent("Recorded") {
+                            Text(result.fleetCount > 0 ? "Yes · queued to sync" : "No")
+                                .foregroundStyle(result.fleetCount > 0 ? PWStyle.synced : .secondary)
                         }
                         if result.watchlistHits > 0 {
                             LabeledContent("Watchlist hits") {
@@ -158,7 +208,9 @@ private struct CaptureResultSheet: View {
                         }
                     }
                     Section {
-                        Text("Gate: only fleet-approved detections persist. \(result.source == "photo" ? "Imported photo" : "Live still") analyzed entirely on-device.")
+                        Text(result.fleetCount > 0
+                             ? "This detection cleared the fleet gate, so it was queued for sync. Analysis ran entirely on this device."
+                             : "Only detections that clear the fleet gate are kept. A bare “POLICE” decal is not enough — the gate needs agency text and a unit number, or a fleet classifier, to be confident it is a public vehicle.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -180,8 +232,8 @@ private struct StatusBar: View {
     let text: String
 
     var body: some View {
-        Label(text, systemImage: "record.circle")
-            .font(.footnote.monospaced())
+        Label(text, systemImage: "viewfinder")
+            .font(.footnote.weight(.medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -229,14 +281,21 @@ private struct CameraPreview: UIViewRepresentable {
 private struct DetectionOverlay: View {
     let frame: DetectionFrame?
 
+    /// Maps a normalized box (top-left origin, relative to the analyzed
+    /// image) into view space, accounting for the preview's aspect-fill crop.
+    private func rect(for box: NormalizedBox, image: CGSize, in view: CGSize) -> CGRect {
+        guard image.width > 0, image.height > 0 else { return .zero }
+        let scale = max(view.width / image.width, view.height / image.height)
+        let shown = CGSize(width: image.width * scale, height: image.height * scale)
+        let origin = CGPoint(x: (view.width - shown.width) / 2, y: (view.height - shown.height) / 2)
+        return CGRect(x: origin.x + box.x * shown.width, y: origin.y + box.y * shown.height,
+                      width: box.width * shown.width, height: box.height * shown.height)
+    }
+
     var body: some View {
         GeometryReader { geo in
             ForEach(frame?.vehicles ?? []) { vehicle in
-                let box = vehicle.boundingBox
-                let rect = CGRect(x: box.x * geo.size.width,
-                                  y: box.y * geo.size.height,
-                                  width: box.width * geo.size.width,
-                                  height: box.height * geo.size.height)
+                let rect = rect(for: vehicle.boundingBox, image: frame?.imageSize ?? .zero, in: geo.size)
                 if vehicle.vehicleClass.isFleet {
                     CornerBrackets()
                         .stroke(PWStyle.fleet, style: StrokeStyle(lineWidth: 3, lineCap: .round))
@@ -257,6 +316,36 @@ private struct DetectionOverlay: View {
         }
         .allowsHitTesting(false)
         .animation(.easeOut(duration: 0.15), value: frame?.vehicles.count ?? 0)
+    }
+}
+
+/// Shown instead of a black screen when there is no live camera (simulator,
+/// Mac mirroring, permission off). The photo import button stays usable.
+private struct CameraUnavailableCard: View {
+    let state: CaptureViewModel.CameraState
+
+    var body: some View {
+        VStack(spacing: 14) {
+            PWEmptyState(
+                title: state == .denied ? "Camera is off" : "No live camera",
+                message: state == .denied
+                    ? "Allow camera access in Settings to scan, or import a photo to analyze it on this device."
+                    : "This device can’t provide a camera feed right now. Import a photo of a vehicle to try the analyzer.",
+                systemImage: state == .denied ? "camera.fill" : "photo.on.rectangle")
+            if state == .denied {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(PWStyle.fleet)
+                .foregroundStyle(.black)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
 

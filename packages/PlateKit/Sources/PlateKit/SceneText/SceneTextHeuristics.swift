@@ -25,10 +25,11 @@ public enum SceneTextHeuristics {
     /// Service-class words (what kind of fleet it is). Earlier = higher
     /// priority when several appear.
     private static let serviceKeywords: [String] = [
-        "STATE TROOPER", "HIGHWAY PATROL", "POLICE", "SHERIFF", "MARSHAL",
+        "STATE TROOPER", "HIGHWAY PATROL", "POLICE", "SHERIFF", "TROOPER", "MARSHAL",
         "FIRE", "RESCUE", "PARAMEDIC", "AMBULANCE", "EMS",
         "PUBLIC WORKS", "TRANSIT", "METRO", "SANITATION", "PARK RANGER",
-        "UNIFIED SCHOOL DISTRICT", "SCHOOL DISTRICT"
+        "POSTAL SERVICE", "USPS",
+        "UNIFIED SCHOOL DISTRICT", "SCHOOL DISTRICT", "SCHOOL BUS"
     ]
 
     /// Ownership words (who runs it). Alone still flags a fleet vehicle.
@@ -47,6 +48,45 @@ public enum SceneTextHeuristics {
         try! NSRegularExpression(pattern: "^([0-9]{3,5})$"),
     ]
 
+    /// Edit distance ≤ 1 between two ASCII words (substitution, insert, delete).
+    private static func withinOneEdit(_ a: [Character], _ b: [Character]) -> Bool {
+        if abs(a.count - b.count) > 1 { return false }
+        var i = 0, j = 0, edits = 0
+        while i < a.count && j < b.count {
+            if a[i] == b[j] { i += 1; j += 1; continue }
+            edits += 1
+            if edits > 1 { return false }
+            if a.count > b.count { i += 1 } else if a.count < b.count { j += 1 } else { i += 1; j += 1 }
+        }
+        return edits + (a.count - i) + (b.count - j) <= 1
+    }
+
+    /// OCR on stylized lettering often misreads one glyph ("POLIGE",
+    /// "SHERIFE"). Single-word keywords of 5+ letters tolerate one edit; short
+    /// ones (FIRE, EMS) stay exact so "FIRM"/"EMS"-like words do not match.
+    private static func containsFuzzyWord(_ upper: String, _ keyword: String) -> Bool {
+        guard keyword.count >= 5, !keyword.contains(" ") else { return false }
+        let target = Array(keyword)
+        return upper.split(whereSeparator: { !$0.isLetter }).contains {
+            $0.count >= 5 && withinOneEdit(Array($0), target)
+        }
+    }
+
+    /// Whole-word match: "EMS" must not fire inside "SYSTEMS"/"ITEMS", nor
+    /// "FIRE" inside "FIREFOX" — a false fleet flag breaks the fleet-only rule.
+    private static func containsWord(_ upper: String, _ keyword: String) -> Bool {
+        var searchRange = upper.startIndex..<upper.endIndex
+        while let found = upper.range(of: keyword, range: searchRange) {
+            let before = found.lowerBound == upper.startIndex
+                || !upper[upper.index(before: found.lowerBound)].isLetter
+            let after = found.upperBound == upper.endIndex
+                || !upper[found.upperBound].isLetter
+            if before && after { return true }
+            searchRange = found.upperBound..<upper.endIndex
+        }
+        return false
+    }
+
     public static func parse(_ observations: [SceneTextObservation]) -> FleetMarkings {
         var result = FleetMarkings()
         var longestAgencyLine: String?
@@ -58,7 +98,7 @@ public enum SceneTextHeuristics {
 
             // Service class: first service keyword found anywhere wins,
             // but a later, higher-priority service keyword replaces it.
-            if let match = serviceKeywords.first(where: { upper.contains($0) }) {
+            if let match = serviceKeywords.first(where: { containsWord(upper, $0) || containsFuzzyWord(upper, $0) }) {
                 if let current = result.serviceClassText,
                    let ci = serviceKeywords.firstIndex(of: current),
                    let ni = serviceKeywords.firstIndex(of: match), ni < ci {
@@ -67,14 +107,14 @@ public enum SceneTextHeuristics {
                     result.serviceClassText = match
                 }
             }
-            let isAgencyLine = agencyKeywords.contains(where: { upper.contains($0) })
+            let isAgencyLine = agencyKeywords.contains(where: { containsWord(upper, $0) })
             if result.serviceClassText != nil || isAgencyLine {
                 result.hasFleetKeyword = true
             }
 
             // Agency guess: the longest ownership/service-bearing line
             // ("CITY OF AUSTIN POLICE" outranks "POLICE").
-            if isAgencyLine || result.serviceClassText.map({ upper.contains($0) }) == true,
+            if isAgencyLine || result.serviceClassText.map({ containsWord(upper, $0) || containsFuzzyWord(upper, $0) }) == true,
                line.count > (longestAgencyLine?.count ?? 0) {
                 longestAgencyLine = line
             }

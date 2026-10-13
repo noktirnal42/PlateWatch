@@ -196,3 +196,55 @@ final class WatchlistTests: XCTestCase {
         XCTAssertTrue(entry.matches(plate: nil, featureAnchor: "0a1b2c"))
     }
 }
+
+final class FleetTextPrecisionTests: XCTestCase {
+    private func obs(_ text: String) -> SceneTextObservation {
+        SceneTextObservation(text: text,
+                             boundingBox: .init(x: 0, y: 0, width: 0.1, height: 0.1),
+                             confidence: 0.9)
+    }
+
+    func testServiceWordsMatchWholeWordsOnly() {
+        XCTAssertNil(SceneTextHeuristics.parse([obs("SYSTEMS")]).serviceClassText)
+        XCTAssertNil(SceneTextHeuristics.parse([obs("FIREFOX")]).serviceClassText)
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("EMS")]).serviceClassText, "EMS")
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("COUNTY SHERIFF'S OFFICE")]).serviceClassText, "SHERIFF")
+    }
+
+    func testStrongDoorTextAloneClearsThePersistThresholdWithoutAClassifier() {
+        let gate = RedactionGate(config: .standard)
+        let markings = SceneTextHeuristics.parse([obs("CITY OF AUSTIN"), obs("POLICE"), obs("UNIT 4421")])
+        let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: markings,
+                                     knownUnitMatch: false, exemptPlateDesign: false)
+        XCTAssertEqual(gate.verdict(fleetConfidence: c), .persistAndSync)
+    }
+
+    func testBareDecalOrAgencyLineAloneDoesNotPersist() {
+        let gate = RedactionGate(config: .standard)
+        for lines in [["POLICE"], ["CITY OF AUSTIN"], ["POLICE", "UNIT 12"]] {
+            let markings = SceneTextHeuristics.parse(lines.map(obs))
+            let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: markings,
+                                         knownUnitMatch: false, exemptPlateDesign: false)
+            XCTAssertNotEqual(gate.verdict(fleetConfidence: c), .persistAndSync, "\(lines)")
+        }
+    }
+}
+
+final class FleetTextRobustnessTests: XCTestCase {
+    private func obs(_ text: String) -> SceneTextObservation {
+        SceneTextObservation(text: text, boundingBox: .init(x: 0, y: 0, width: 0.1, height: 0.1), confidence: 0.9)
+    }
+    func testOneGlyphOCRErrorsStillMatchLongKeywords() {
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("POLIGE")]).serviceClassText, "POLICE")
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("SHERIFE")]).serviceClassText, "SHERIFF")
+    }
+    func testShortKeywordsAndUnrelatedWordsStayExact() {
+        XCTAssertNil(SceneTextHeuristics.parse([obs("FIRM")]).serviceClassText)
+        XCTAssertNil(SceneTextHeuristics.parse([obs("POLISH SAUSAGE")]).serviceClassText)
+        XCTAssertNil(SceneTextHeuristics.parse([obs("PELICAN")]).serviceClassText)
+    }
+    func testPostalAndSchoolBusKeywords() {
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("UNITED STATES POSTAL SERVICE")]).serviceClassText, "POSTAL SERVICE")
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("SCHOOL BUS")]).serviceClassText, "SCHOOL BUS")
+    }
+}

@@ -9,10 +9,14 @@ public struct AnalysisContext: @unchecked Sendable {
     /// Resolved, compiled models available this run (empty = baseline mode).
     public var models: [String: MLModel]
     public var timestamp: Date
+    /// Stills (photo import, shutter) can afford `.accurate` text recognition;
+    /// live frames stay on `.fast` to keep the camera responsive and cool.
+    public var thorough: Bool
 
-    public init(models: [String: MLModel] = [:], timestamp: Date = Date()) {
+    public init(models: [String: MLModel] = [:], timestamp: Date = Date(), thorough: Bool = false) {
         self.models = models
         self.timestamp = timestamp
+        self.thorough = thorough
     }
 }
 

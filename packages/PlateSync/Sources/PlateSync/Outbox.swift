@@ -81,7 +81,7 @@ public actor OutboxDrainer {
 }
 
 extension JSONDecoder {
-    static var withISODates: JSONDecoder {
+    public static var withISODates: JSONDecoder {
         let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d
     }
 }

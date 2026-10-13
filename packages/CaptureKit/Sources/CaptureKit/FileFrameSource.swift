@@ -26,38 +26,35 @@ public struct FileFrameSource: Sendable {
             }
     }
 
-    /// Decode an image file into a BGRA pixel buffer for Vision/CoreML.
+    /// Longest edge, in pixels, handed to the analyzers. Plates stay legible
+    /// at this size while a 48 MP photo no longer costs ~200 MB of BGRA.
+    public static let maxAnalysisEdge = 3072
+
+    /// Decode an image file into an upright BGRA pixel buffer for Vision/CoreML.
     public static func pixelBuffer(from url: URL) -> CVPixelBuffer? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-
-        var buffer: CVPixelBuffer?
-        let result = CVPixelBufferCreate(
-            kCFAllocatorDefault, cg.width, cg.height, kCVPixelFormatType_32BGRA,
-            [kCVPixelBufferCGImageCompatibilityKey: true,
-             kCVPixelBufferCGBitmapContextCompatibilityKey: true] as CFDictionary,
-            &buffer)
-        guard result == kCVReturnSuccess, let pixelBuffer = buffer else { return nil }
-
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
-
-        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer),
-              let ctx = CGContext(
-                data: baseAddress, width: cg.width, height: cg.height,
-                bitsPerComponent: 8,
-                bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-              ) else { return nil }
-        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
-        return pixelBuffer
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return pixelBuffer(from: source)
     }
 
-    /// Decode raw image data into a BGRA pixel buffer.
+    /// Decode raw image data into an upright BGRA pixel buffer.
     public static func pixelBuffer(from data: Data) -> CVPixelBuffer? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return pixelBuffer(from: source)
+    }
+
+    /// Phone photos are stored in sensor orientation with an EXIF rotation
+    /// tag. `CGImageSourceCreateImageAtIndex` ignores it, which fed every
+    /// portrait photo to Vision sideways. The thumbnail API applies the
+    /// transform and bounds the size in one pass.
+    private static func pixelBuffer(from source: CGImageSource) -> CVPixelBuffer? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxAnalysisEdge,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
 
         var buffer: CVPixelBuffer?
         let result = CVPixelBufferCreate(
@@ -77,6 +74,7 @@ public struct FileFrameSource: Sendable {
                 bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
                 space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                    | CGBitmapInfo.byteOrder32Little.rawValue
               ) else { return nil }
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
         return pixelBuffer

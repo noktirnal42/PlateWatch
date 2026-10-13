@@ -9,6 +9,17 @@ import SwiftData
 import SwiftUI
 import VehicleML
 
+/// A detection with real fleet evidence that did not clear the automatic
+/// gate. The user can confirm it; it then enters the server's moderation
+/// queue (never public on the user's say-so alone).
+struct ReviewCandidate: Identifiable {
+    let id = UUID()
+    var submission: SightingSubmissionDTO
+    var summary: String
+    var confidence: Double
+    var confirmed = false
+}
+
 /// What a manual still / imported photo produced. Drives the results sheet.
 struct CaptureResult: Identifiable {
     let id = UUID()
@@ -18,6 +29,9 @@ struct CaptureResult: Identifiable {
     var vehicleCount: Int
     var watchlistHits: Int
     var topFleetConfidence: Double
+    var approvalThreshold: Double = 0.55
+    var markings: [String] = []   // human-readable: "Service: POLICE", "Unit: 4421"…
+    var candidates: [ReviewCandidate] = []  // plausible fleet vehicles below the auto-record bar
     var error: String?
 
     static func failed(_ source: String, _ message: String) -> CaptureResult {
@@ -31,7 +45,14 @@ struct CaptureResult: Identifiable {
 @MainActor
 final class CaptureViewModel: ObservableObject {
     @Published private(set) var latestFrame: DetectionFrame?
-    @Published private(set) var statusText = "idle"
+    /// What the camera is doing, in words a person can act on.
+    enum CameraState: Equatable {
+        case starting, running, denied
+        case unavailable(String)
+    }
+
+    @Published private(set) var cameraState = CameraState.starting
+    @Published private(set) var statusText = "Starting camera…"
     @Published var fleetHitPending = false
     @Published var permissionDenied = false
     @Published private(set) var latestEventClip: EventClip?
@@ -113,24 +134,28 @@ final class CaptureViewModel: ObservableObject {
         case .authorized: break
         case .notDetermined:
             permissionDenied = !(await AVCaptureDevice.requestAccess(for: .video))
-            guard !permissionDenied else { return }
+            guard !permissionDenied else { cameraState = .denied; statusText = "Camera access is off"; return }
         default:
             permissionDenied = true
+            cameraState = .denied
+            statusText = "Camera access is off"
             return
         }
         do {
             try session.configure()
             session.start()
-            statusText = "scanning"
+            cameraState = .running
+            statusText = "Scanning for fleet vehicles"
         } catch {
-            // Surface the real cause — "camera error" alone is unactionable.
-            statusText = "camera error: \(error.localizedDescription)"
+            let message = error.localizedDescription
+            cameraState = .unavailable(message)
+            statusText = "No live camera — import a photo to analyze"
         }
     }
 
     func stop() {
         session.stop()
-        statusText = "idle"
+        if cameraState == .running { statusText = "Paused" }
     }
 
     // MARK: - Manual capture paths
@@ -139,7 +164,14 @@ final class CaptureViewModel: ObservableObject {
     /// Uses `.processAll` so a busy loop can't drop the request.
     func captureStill() async {
         guard let packet = lastPacket else {
-            lastResult = .failed("still", "No frame buffered yet — wait for the preview to start.")
+            switch cameraState {
+            case .running, .starting:
+                lastResult = .failed("still", "The camera is still warming up. Try again in a moment.")
+            case .denied:
+                lastResult = .failed("still", "Camera access is off. Turn it on in Settings, or import a photo instead.")
+            case .unavailable:
+                lastResult = .failed("still", "There is no live camera on this device. Use the photo button to import a picture to analyze.")
+            }
             return
         }
         await runAccurate(pixelBuffer: packet.pixelBuffer, source: "still")
@@ -158,22 +190,22 @@ final class CaptureViewModel: ObservableObject {
     private func runAccurate(pixelBuffer: CVPixelBuffer, source: String) async {
         processingStill = true
         defer { processingStill = false }
-        statusText = "processing \(source)…"
+        statusText = source == "photo" ? "Analyzing photo…" : "Analyzing frame…"
         guard let frame = try? await executor.submit(
             FramePacketLike(pixelBuffer: pixelBuffer), mode: .processAll) else {
-            statusText = "analysis failed"
+            statusText = "Could not analyze that image"
             lastResult = .failed(source, "The analyzer could not process this frame.")
             return
         }
-        latestFrame = frame
+        if source == "still" { latestFrame = frame } // photo coordinates don't match the live preview
         let result = await evaluateAndPersist(frame: frame, source: source)
         lastResult = result
         if result.fleetCount > 0 {
             statusText = result.watchlistHits > 0
-                ? "watchlist hit · \(result.watchlistHits)"
-                : "fleet vehicle — queued"
+                ? "Watchlist hit · \(result.watchlistHits)"
+                : "Fleet vehicle recorded"
         } else {
-            statusText = result.plates.isEmpty ? "\(source) · no plates read" : "\(source) · queued"
+            statusText = result.plates.isEmpty ? "No fleet vehicle found" : "Plate read — not fleet-confirmed"
         }
         PassiveCaptureStatus.shared.set(statusText: statusText,
                                         fleetHit: result.fleetCount > 0,
@@ -182,18 +214,28 @@ final class CaptureViewModel: ObservableObject {
 
     /// Gate + persist + watchlist for any analyzed frame (live or manual).
     private func evaluateAndPersist(frame: DetectionFrame, source: String) async -> CaptureResult {
-        var approved: [(VehicleObservation, Double)] = []
+        var approved: [(VehicleObservation, Double, FleetMarkings)] = []
+        var review: [(VehicleObservation, Double, FleetMarkings)] = []
         var bestConfidence = 0.0
+        var bestMarkings = FleetMarkings()
         for vehicle in frame.vehicles {
             let markings = await parseMarkings(vehicle.sceneText)
             let confidence = gate.fleetConfidence(
                 vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
-                hasFleetMarkings: markings.hasFleetKeyword,
+                markings: markings,
                 knownUnitMatch: false,
                 exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
-            bestConfidence = max(bestConfidence, confidence)
-            if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
-                approved.append((vehicle, confidence))
+            if confidence >= bestConfidence { bestConfidence = confidence; bestMarkings = markings }
+            switch gate.verdict(fleetConfidence: confidence) {
+            case .persistAndSync:
+                approved.append((vehicle, confidence, markings))
+            case .keepLocalOnly:
+                // Real evidence (fleet text, or a fleet-class cue) but not
+                // enough to record unattended: offer it for confirmation.
+                if markings.hasFleetKeyword || (vehicle.vehicleClass.isFleet && vehicle.classConfidence > 0) {
+                    review.append((vehicle, confidence, markings))
+                }
+            case .discard: break
             }
         }
         fleetHitPending = !approved.isEmpty
@@ -201,21 +243,9 @@ final class CaptureViewModel: ObservableObject {
         // Persist through the outbox; the drainer owns retries.
         var watchlistHits = 0
         if let modelContext {
-            let bucket = LocationProvider.shared.currentBucket()
-            for (vehicle, confidence) in approved {
-                let dto = SightingSubmissionDTO(
-                    capturedAt: frame.timestamp,
-                    geohash6: bucket?.geohash6 ?? "",
-                    exactLatitude: nil,  // exact geo attaches post-confirmation
-                    exactLongitude: nil,
-                    deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
-                    fleetConfidence: confidence,
-                    plate: vehicle.plates.first?.best.map(PlateDTO.init),
-                    vehicle: VehicleObservationDTO(vehicle),
-                    markings: FleetMarkingsDTO(SceneTextHeuristics.parse(vehicle.sceneText)))
-                guard let payload = try? JSONEncoder.withISODates.encode(dto) else { continue }
-                let key = OutboxDrainer.idempotencyKey(for: dto)
-                modelContext.insert(PendingSubmission(idempotencyKey: key, payloadJSON: payload))
+            for (vehicle, confidence, markings) in approved {
+                enqueue(makeSubmission(frame: frame, vehicle: vehicle, confidence: confidence, markings: markings),
+                        in: modelContext)
             }
             try? modelContext.save()
 
@@ -229,13 +259,68 @@ final class CaptureViewModel: ObservableObject {
             .compactMap { $0.plates.first?.best }
             .sorted { $0.confidence > $1.confidence }
             .map { "\($0.text) (\(Int($0.confidence * 100))%)" }
+        let candidates = approved.isEmpty ? review.map { vehicle, confidence, markings in
+            ReviewCandidate(
+                submission: makeSubmission(frame: frame, vehicle: vehicle, confidence: confidence, markings: markings),
+                summary: Self.describe(markings).joined(separator: " · ").nonEmpty
+                    ?? "\(vehicle.vehicleClass.rawValue.capitalized)-shaped vehicle",
+                confidence: confidence)
+        } : []
         return CaptureResult(source: source,
                              plates: plates,
                              fleetCount: approved.count,
                              vehicleCount: frame.vehicles.count,
                              watchlistHits: watchlistHits,
                              topFleetConfidence: bestConfidence,
+                             approvalThreshold: gate.config.persistThreshold,
+                             markings: Self.describe(bestMarkings),
+                             candidates: candidates,
                              error: nil)
+    }
+
+    private func makeSubmission(frame: DetectionFrame, vehicle: VehicleObservation,
+                                confidence: Double, markings: FleetMarkings) -> SightingSubmissionDTO {
+        let bucket = LocationProvider.shared.currentBucket()
+        return SightingSubmissionDTO(
+            capturedAt: frame.timestamp,
+            geohash6: bucket?.geohash6 ?? "",
+            exactLatitude: nil,  // exact geo attaches post-confirmation
+            exactLongitude: nil,
+            deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
+            fleetConfidence: confidence,
+            plate: vehicle.plates.first?.best.map(PlateDTO.init),
+            vehicle: VehicleObservationDTO(vehicle),
+            markings: FleetMarkingsDTO(markings))
+    }
+
+    private func enqueue(_ dto: SightingSubmissionDTO, in context: ModelContext) {
+        guard let payload = try? JSONEncoder.withISODates.encode(dto) else { return }
+        context.insert(PendingSubmission(idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
+                                         payloadJSON: payload))
+    }
+
+    /// The user vouches that a below-threshold detection really is a
+    /// government vehicle. It is queued at the persist floor, which the
+    /// server files as `pending` moderation (no public plate, no exact geo).
+    func confirm(_ candidateID: UUID) {
+        guard var result = lastResult,
+              let index = result.candidates.firstIndex(where: { $0.id == candidateID }),
+              !result.candidates[index].confirmed, let modelContext else { return }
+        var dto = result.candidates[index].submission
+        dto.fleetConfidence = max(dto.fleetConfidence, gate.config.persistThreshold)
+        enqueue(dto, in: modelContext)
+        try? modelContext.save()
+        result.candidates[index].confirmed = true
+        lastResult = result
+        statusText = "Recorded for moderator review"
+    }
+
+    private static func describe(_ m: FleetMarkings) -> [String] {
+        var out: [String] = []
+        if let service = m.serviceClassText { out.append("Service: \(service)") }
+        if let agency = m.agencyText, agency.uppercased() != m.serviceClassText { out.append("Agency: \(agency)") }
+        if let unit = m.unitNumber { out.append("Unit: \(unit)") }
+        return out
     }
 
     private func handle(_ packet: FramePacket) async {
@@ -250,14 +335,14 @@ final class CaptureViewModel: ObservableObject {
         }
         if result.fleetCount > 0 {
             statusText = result.watchlistHits > 0
-                ? "watchlist hit · \(result.watchlistHits)"
-                : "fleet vehicle — queued"
+                ? "Watchlist hit · \(result.watchlistHits)"
+                : "Fleet vehicle recorded"
             // Rolling-buffer event clip around the trigger frame.
             if let clip = session.extractEventClip(triggerFrameIndex: Int(packet.sequenceNumber)) {
                 latestEventClip = clip
             }
         } else {
-            statusText = "scanning"
+            statusText = "Scanning for fleet vehicles"
         }
         PassiveCaptureStatus.shared.set(statusText: statusText,
                                         fleetHit: result.fleetCount > 0,
@@ -290,4 +375,8 @@ final class AnalysisContextBox: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return _current }
         set { lock.lock(); defer { lock.unlock() }; _current = newValue }
     }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
