@@ -89,6 +89,11 @@ struct SightingsController: RouteCollection {
         // (unit, confidence, crop hash) but never the plate text.
         record.plateText = outcome.state == .fleetConfirmed ? dto.plate?.text : nil
         record.unitNumber = dto.markings?.unitNumber
+        // Identity metadata is about the organisation / jurisdiction, never a person or a plate.
+        record.agencyKey = dto.identity?.agency?.agencyKey
+        record.agencyName = dto.identity?.agency?.name
+        record.agencyNeedsReview = dto.identity?.agency?.needsReview
+        record.plateState = dto.identity?.plate?.state
         record.cropSHA256 = dto.cropHashSHA256
         record.headingDeg = dto.headingDegrees
         if outcome.exactGeoAllowed {
@@ -138,7 +143,10 @@ struct SightingsController: RouteCollection {
             return PublicSightingDTO(
                 id: id, capturedAt: row.capturedAt, geohash6: row.geohash6,
                 plateText: row.plateText, unitNumber: row.unitNumber,
-                fleetConfidence: row.fleetConfidence)
+                fleetConfidence: row.fleetConfidence,
+                // A flagged (ambiguous/partial) identity is not published as fact.
+                agencyKey: row.agencyNeedsReview == false ? row.agencyKey : nil,
+                agencyName: row.agencyNeedsReview == false ? row.agencyName : nil)
         }
         let next = items.last.flatMap { dto in
             SightingCursor(timestamp: dto.capturedAt, lastID: dto.id).token

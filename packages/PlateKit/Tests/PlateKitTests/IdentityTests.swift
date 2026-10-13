@@ -176,3 +176,62 @@ final class IdentityResolverTests: XCTestCase {
     }
 }
 
+
+final class IdentityRedactionTests: XCTestCase {
+    func testRedactionRemovesTheRegistrationEverywhereButKeepsTheAgency() throws {
+        let resolver = IdentityResolver()
+        let plate = PlateObservation(boundingBox: .init(x: 0, y: 0, width: 0.1, height: 0.1),
+                                     candidates: [Plate(text: "D756", issuingRegion: "US-MA", plateDesign: "government-official",
+                                                        confidence: 0.9, officialWords: ["POLICE"])])
+        let text = SceneTextObservation(text: "WALTHAM", boundingBox: .init(x: 0, y: 0, width: 0.2, height: 0.05), confidence: 0.9)
+        let id = resolver.resolve(sceneText: [text], plates: [plate], vehicleClass: .patrol, markings: FleetMarkings())
+        let safe = id.redactingRegistration()
+        XCTAssertEqual(safe.plate?.registration, "")
+        XCTAssertEqual(safe.plate?.state, "MA")
+        XCTAssertFalse(safe.evidence.contains { $0.field == "registration" })
+        XCTAssertFalse(String(data: try JSONEncoder().encode(safe), encoding: .utf8)!.contains("D756"),
+                       "the registration must not appear anywhere in the encoded identity")
+        XCTAssertEqual(safe.agency?.name, "Waltham Police Department")
+    }
+}
+
+final class UserChoiceTests: XCTestCase {
+    func testReviewerCanSettleAnAmbiguousState() {
+        let text = SceneTextObservation(text: "ATLANTA POLICE", boundingBox: .init(x: 0, y: 0, width: 0.3, height: 0.05), confidence: 0.9)
+        let m = SceneTextHeuristics.parse([text])
+        let id = IdentityResolver().resolve(sceneText: [text], plates: [], vehicleClass: .patrol, markings: m, userState: "GA")
+        XCTAssertEqual(id.agency?.name, "Atlanta Police Department")
+        XCTAssertEqual(id.agency?.state, "GA")
+        XCTAssertFalse(id.agency?.needsReview ?? true)
+        XCTAssertTrue(id.evidence.contains { $0.source == .user })
+    }
+}
+
+final class RealWorldRegressionTests: XCTestCase {
+    private func text(_ s: String) -> SceneTextObservation {
+        SceneTextObservation(text: s, boundingBox: .init(x: 0.1, y: 0.4, width: 0.2, height: 0.05), confidence: 0.9)
+    }
+    /// Seen in the app on the Waltham photo: Vision returned the plate line with no gap.
+    func testGluedPlateLineIsStillAnOfficialPlate() {
+        let r = Plate.officialRegistration(from: "Massachusetts POLICED756")
+        XCTAssertEqual(r?.registration, "D756")
+        XCTAssertEqual(r?.jurisdiction, "MASSACHUSETTS")
+        XCTAssertEqual(Plate.officialWords(in: "POLICED756"), ["POLICE"])
+        XCTAssertNil(Plate.officialRegistration(from: "POLICEMAN"), "ordinary words are never split")
+        XCTAssertNil(Plate.officialRegistration(from: "POLICEMEN"))
+    }
+    func testPlateTextIsNeverAUnitNumber() {
+        let m = FleetMarkings(unitNumber: "POLICED756", serviceClassText: "POLICE", hasFleetKeyword: true)
+        let id = IdentityResolver().resolve(sceneText: [text("POLICED756")], plates: [], vehicleClass: .patrol, markings: m)
+        XCTAssertFalse(id.unitNumbers.contains("POLICED756"))
+    }
+    func testAFragmentSupportedTwiceBeatsOneSupportedOnce() throws {
+        // "ALTHAM" only fits Waltham; "THAM" also fits Wrentham/Chatham/Southampton.
+        let t = [text("ALTHAM"), text("THAM"), text("Massachusetts")]
+        let id = IdentityResolver().resolve(sceneText: t, plates: [], vehicleClass: .patrol,
+                                            markings: FleetMarkings(serviceClassText: "POLICE", hasFleetKeyword: true))
+        let a = try XCTUnwrap(id.agency)
+        XCTAssertEqual(a.place, "Waltham", "agency: \(a.name) alt \(a.alternatives)")
+        XCTAssertEqual(a.state, "MA")
+    }
+}

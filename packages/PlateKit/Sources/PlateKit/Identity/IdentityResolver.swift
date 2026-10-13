@@ -35,7 +35,8 @@ public struct IdentityResolver: Sendable {
     public func resolve(sceneText: [SceneTextObservation], plates: [PlateObservation],
                         vehicleClass: VehicleClass, markings: FleetMarkings,
                         location: LocationHint? = nil,
-                        enhancedText: [SceneTextObservation] = []) -> VehicleIdentity {
+                        enhancedText: [SceneTextObservation] = [],
+                        userState: String? = nil) -> VehicleIdentity {
         var evidence: [IdentityEvidence] = []
         var consistency: [String] = []
 
@@ -74,16 +75,21 @@ public struct IdentityResolver: Sendable {
         for s in textStates where s != plateState {   // the plate header already supplied that one
             evidence.append(.init(field: "state", value: s, source: .doorText, detail: USStates.name(forCode: s), confidence: 0.8))
         }
-        let searchStates = ([plateState].compactMap { $0 } + textStates).reduce(into: [String]()) {
+        if let userState {
+            evidence.append(.init(field: "state", value: userState, source: .user,
+                                  detail: "chosen by the reviewer", confidence: 0.95))
+        }
+        let searchStates = ([userState, plateState].compactMap { $0 } + textStates).reduce(into: [String]()) {
             if !$0.contains($1) { $0.append($1) }
         }
 
         // ---- Agency ----
+        let anchorState = userState ?? plateState   // a verified state: plate header or the reviewer
         var agency = Self.stateLevelAgency(service: service, markings: markings,
-                                           state: textStates.first ?? plateState, lines: lines)
+                                           state: userState ?? textStates.first ?? plateState, lines: lines)
         if agency == nil {
             agency = municipalAgency(lines: lines, service: service, resolvedClass: resolvedClass,
-                                     searchStates: searchStates, plateState: plateState,
+                                     searchStates: searchStates, plateState: anchorState,
                                      location: location, evidence: &evidence)
         }
         if agency == nil, let service, let state = plateState ?? textStates.first {
@@ -108,8 +114,17 @@ public struct IdentityResolver: Sendable {
         }
 
         // ---- Unit numbers, vehicle ----
+        // A unit number is short, has a digit, and is not plate text or a service word.
+        let registration = plateIdentity?.registration ?? ""
+        func plausibleUnit(_ u: String) -> Bool {
+            let k = TextMatching.key(u)
+            return u.count <= 6 && u.contains(where: \.isNumber)
+                && !Plate.officialPlateWords.contains(where: { k.contains($0) || u.uppercased().contains($0) })
+                && !u.uppercased().contains(where: { _ in false })
+                && (registration.isEmpty || !u.uppercased().contains(registration) )
+        }
         var units: [String] = []
-        if let u = markings.unitNumber, u.contains(where: \.isNumber) { units.append(u) }
+        if let u = markings.unitNumber, plausibleUnit(u) { units.append(u) }
         for line in sceneText {
             let t = line.text.trimmingCharacters(in: .whitespaces)
             if t.count >= 2, t.count <= 5, t.allSatisfy(\.isNumber), t != "911", !units.contains(t) { units.append(t) }
@@ -176,22 +191,32 @@ public struct IdentityResolver: Sendable {
         guard !scored.isEmpty else { return nil }
         scored.sort { $0.score > $1.score }
 
-        // Disambiguate by location when several places tie at the top strength.
-        var top = scored.filter { $0.match.strength == scored[0].match.strength
-                                  && $0.match.place.state == scored[0].match.place.state
-                                  || abs($0.score - scored[0].score) < 0.06 }
+        // A place supported by several fragments ("ALTHAM" and "THAM") beats one only a single fragment
+        // fits ("THAM" also fits Wrentham). Aggregate per place: best score per distinct text, summed.
+        var byPlace: [String: (scored: Scored, total: Double, texts: Set<String>)] = [:]
+        for s in scored {
+            let k = "\(s.match.place.state)|\(s.match.place.name)|\(s.match.place.kind.rawValue)"
+            if var cur = byPlace[k] {
+                if cur.texts.insert(s.match.matchedText).inserted { cur.total += s.score }
+                if s.score > cur.scored.score { cur.scored = s }
+                byPlace[k] = cur
+            } else { byPlace[k] = (s, s.score, [s.match.matchedText]) }
+        }
+        let ranked = byPlace.values.sorted { $0.total > $1.total }
+        let leaderTotal = ranked[0].total
+        // The leader stands alone when it is clearly ahead of the runner-up; otherwise the near-ties are ambiguous.
+        var top: [Scored] = ranked.filter { leaderTotal - $0.total < 0.3 }.map { $0.scored }
         var resolvedByLocation = false
         if top.count > 1, let loc = location {
-            let ranked = top.sorted {
+            let ordered = top.sorted {
                 Self.distanceKm(loc.latitude, loc.longitude, $0.match.place.latitude, $0.match.place.longitude)
                 < Self.distanceKm(loc.latitude, loc.longitude, $1.match.place.latitude, $1.match.place.longitude)
             }
-            let d0 = Self.distanceKm(loc.latitude, loc.longitude, ranked[0].match.place.latitude, ranked[0].match.place.longitude)
-            let d1 = Self.distanceKm(loc.latitude, loc.longitude, ranked[1].match.place.latitude, ranked[1].match.place.longitude)
+            let d0 = Self.distanceKm(loc.latitude, loc.longitude, ordered[0].match.place.latitude, ordered[0].match.place.longitude)
+            let d1 = Self.distanceKm(loc.latitude, loc.longitude, ordered[1].match.place.latitude, ordered[1].match.place.longitude)
             // Decisive when the sighting is inside one candidate (a town is ~10 km across) and the
-            // runner-up is both far (> 20 km) and well over 3× as far. Two neighbouring towns
-            // (both close) stay ambiguous.
-            if d0 < 10 && d1 > 20 && d1 > 3 * d0 { top = [ranked[0]]; resolvedByLocation = true }
+            // runner-up is both far (> 20 km) and well over 3× as far.
+            if d0 < 10 && d1 > 20 && d1 > 3 * d0 { top = [ordered[0]]; resolvedByLocation = true }
         }
         // Unique places among the top group, most prominent (largest land area) first.
         var seen = Set<String>(); var unique: [Scored] = []

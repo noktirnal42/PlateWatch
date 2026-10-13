@@ -348,3 +348,33 @@ final class FuzzyPhraseTests: XCTestCase {
         XCTAssertNil(SceneTextHeuristics.parse([obs("HIGHLY PATRONS")]).serviceClassText)
     }
 }
+
+final class GroundedMarkingsTests: XCTestCase {
+    private func obs(_ t: String) -> SceneTextObservation {
+        SceneTextObservation(text: t, boundingBox: .init(x: 0, y: 0, width: 0.2, height: 0.05), confidence: 0.9)
+    }
+    /// Seen in the app: the on-device LLM turned "HYBRID AND…" badge text into a fleet service.
+    func testHallucinatedServiceIsDroppedAndCannotRaiseTheGate() {
+        let lines = [obs("HYBRID AND"), obs("Ford")]
+        let claim = FleetMarkings(agencyText: "Hybridand", unitNumber: nil, serviceClassText: "Hybridand", hasFleetKeyword: true)
+        let g = SceneTextHeuristics.grounded(claim, in: lines, fallback: SceneTextHeuristics.parse(lines))
+        XCTAssertNil(g.serviceClassText)
+        XCTAssertFalse(g.hasFleetKeyword, "an invented keyword must not become a fleet signal")
+        let gate = RedactionGate(config: .standard)
+        let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: g, knownUnitMatch: false, exemptPlateDesign: false)
+        XCTAssertEqual(c, 0, accuracy: 0.001)
+    }
+    func testSupportedClaimsSurviveAndAreNormalised() {
+        let lines = [obs("AUSTIN POLICE DEPT"), obs("UNIT 4421")]
+        let claim = FleetMarkings(agencyText: "Austin Police Department", unitNumber: "4421", serviceClassText: "Police", hasFleetKeyword: true)
+        let g = SceneTextHeuristics.grounded(claim, in: lines, fallback: SceneTextHeuristics.parse(lines))
+        XCTAssertEqual(g.serviceClassText, "POLICE")
+        XCTAssertEqual(g.unitNumber, "4421")
+        XCTAssertTrue(g.hasFleetKeyword)
+    }
+    func testAnInventedUnitNumberIsRejected() {
+        let lines = [obs("CITY POLICE")]
+        let claim = FleetMarkings(unitNumber: "9999", serviceClassText: "POLICE", hasFleetKeyword: true)
+        XCTAssertNil(SceneTextHeuristics.grounded(claim, in: lines, fallback: SceneTextHeuristics.parse(lines)).unitNumber)
+    }
+}

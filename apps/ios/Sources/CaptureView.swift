@@ -76,7 +76,8 @@ struct CaptureView: View {
             }
         }
         .sheet(item: $viewModel.lastResult) { result in
-            CaptureResultSheet(result: result, onConfirm: { viewModel.confirm($0) })
+            CaptureResultSheet(result: result, onConfirm: { viewModel.confirm($0) },
+                               onChooseState: { viewModel.chooseState($0, $1) })
                 .presentationDetents([.medium, .large])
         }
     }
@@ -131,6 +132,7 @@ private struct CaptureControls: View {
 private struct CaptureResultSheet: View {
     let result: CaptureResult
     let onConfirm: (UUID) -> Void
+    var onChooseState: ((UUID, String) -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -161,6 +163,10 @@ private struct CaptureResultSheet: View {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Label(candidate.summary, systemImage: "questionmark.circle.fill")
                                         .font(.subheadline.weight(.semibold))
+                                    if let identity = candidate.identity, !identity.isEmpty {
+                                        IdentityCard(identity: identity,
+                                                     onChooseState: candidate.confirmed ? nil : { onChooseState?(candidate.id, $0) })
+                                    }
                                     if candidate.confirmed {
                                         Label("Sent for moderator review", systemImage: "checkmark.circle.fill")
                                             .foregroundStyle(PWStyle.synced)
@@ -183,6 +189,9 @@ private struct CaptureResultSheet: View {
                         } footer: {
                             Text("PlateWatch saw fleet evidence but not enough to record on its own. If you can see it is a public-service vehicle, confirm it. Confirmed sightings go to moderator review first — nothing is published on your word alone.")
                         }
+                    }
+                    if result.candidates.isEmpty, let identity = result.identity, !identity.isEmpty {
+                        Section("Identification") { IdentityCard(identity: identity) }
                     }
                     Section("Fleet markings found") {
                         if result.markings.isEmpty {

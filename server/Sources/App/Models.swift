@@ -73,6 +73,12 @@ final class Sighting: Model, @unchecked Sendable {
     @Field(key: "device_id_hash") var deviceIDHash: String
     @Field(key: "fleet_confidence") var fleetConfidence: Double
     @Field(key: "moderation_state") var moderationState: String
+    /// Cross-reference identity (docs/DATA-MODEL.md): which agency the vehicle belongs to, where its
+    /// plate was issued. `agency_needs_review` rows are never surfaced publicly as fact.
+    @OptionalField(key: "agency_key") var agencyKey: String?
+    @OptionalField(key: "agency_name") var agencyName: String?
+    @OptionalField(key: "agency_needs_review") var agencyNeedsReview: Bool?
+    @OptionalField(key: "plate_state") var plateState: String?
     /// Idempotency dedupe — replays return the original receipt.
     @Field(key: "idempotency_key") var idempotencyKey: String
     /// When the server accepted the row — the receipt's serverReceivedAt.

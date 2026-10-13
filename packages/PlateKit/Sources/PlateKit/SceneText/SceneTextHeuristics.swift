@@ -138,6 +138,39 @@ public enum SceneTextHeuristics {
         return false
     }
 
+    /// Markings from a generative parser (Apple's on-device LLM) are *claims*, not readings: it can
+    /// invent a "service" such as "Hybridand" from garbled badge text. Keep a claimed field only when
+    /// the OCR text actually supports it; otherwise fall back to the deterministic parse.
+    ///   - service: must be (or fuzzy-match) a known service keyword;
+    ///   - agency:  every substantial word must appear in the OCR text;
+    ///   - unit:    must appear in the OCR text, contain a digit, and be short.
+    /// The result can never contain a fleet signal that neither the vocabulary nor the text backs.
+    public static func grounded(_ claim: FleetMarkings, in observations: [SceneTextObservation],
+                                fallback: FleetMarkings) -> FleetMarkings {
+        let haystack = " " + observations.map { TextMatching.key($0.text) }.joined(separator: " ") + " "
+        func vocabularyService(_ raw: String?) -> String? {
+            guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            let probe = SceneTextObservation(text: raw, boundingBox: .init(x: 0, y: 0, width: 0, height: 0), confidence: 1)
+            return parse([probe]).serviceClassText
+        }
+        let service = vocabularyService(claim.serviceClassText) ?? fallback.serviceClassText
+
+        var agency = fallback.agencyText
+        if let a = claim.agencyText {
+            let words = TextMatching.key(a).split(separator: " ").map(String.init).filter { $0.count >= 4 }
+            if !words.isEmpty, words.allSatisfy({ haystack.contains($0) }) { agency = a }
+        }
+        var unit = fallback.unitNumber
+        if let u = claim.unitNumber {
+            let compact = u.uppercased().filter { $0.isLetter || $0.isNumber }
+            if u.count <= 6, compact.contains(where: \.isNumber), haystack.contains(TextMatching.key(u))
+                || observations.contains(where: { $0.text.uppercased().contains(u.uppercased()) }) { unit = u }
+        }
+        return FleetMarkings(agencyText: agency, unitNumber: unit, serviceClassText: service,
+                             hasFleetKeyword: service != nil || fallback.hasFleetKeyword,
+                             agencyIsOwnerQualified: agency == fallback.agencyText && fallback.agencyIsOwnerQualified)
+    }
+
     public static func parse(_ observations: [SceneTextObservation]) -> FleetMarkings {
         var result = FleetMarkings()
         var longestAgencyLine: String?

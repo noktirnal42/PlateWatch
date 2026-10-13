@@ -133,3 +133,22 @@ struct AddAgencyBudgetURL: AsyncMigration {
             .update()
     }
 }
+
+struct AddSightingIdentity: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .field("agency_key", .string)
+            .field("agency_name", .string)
+            .field("agency_needs_review", .bool)
+            .field("plate_state", .string)
+            .update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .deleteField("agency_key")
+            .deleteField("agency_name")
+            .deleteField("agency_needs_review")
+            .deleteField("plate_state")
+            .update()
+    }
+}

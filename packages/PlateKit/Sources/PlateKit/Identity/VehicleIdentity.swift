@@ -11,6 +11,7 @@ public struct IdentityEvidence: Sendable, Codable, Hashable {
         case classifier      // image classifier cue (police_car, firetruck…)
         case gazetteer       // canonical place name from the Census gazetteer
         case inference       // combined from other evidence
+        case user            // chosen by the person reviewing (e.g. "which Atlanta?")
     }
     public var field: String          // "place", "service", "state", "registration", "unit", "make"…
     public var value: String
@@ -118,5 +119,21 @@ public struct VehicleIdentity: Sendable, Codable, Hashable {
 
     public var isEmpty: Bool {
         plate == nil && agency == nil && unitNumbers.isEmpty && vehicle.isEmpty
+    }
+}
+
+public extension VehicleIdentity {
+    /// The same identity with the plate registration removed everywhere it appears (the plate
+    /// itself and the evidence trail). Used when a sighting is not yet allowed to carry a plate
+    /// (LEGAL-ETHICS Rule 1: plates persist only once fleet-confirmed). The jurisdiction ("MA") and
+    /// the agency are organisation-level facts and are kept.
+    func redactingRegistration() -> VehicleIdentity {
+        var copy = self
+        if let plate = copy.plate {
+            copy.plate = PlateIdentity(registration: "", state: plate.state, stateName: plate.stateName,
+                                       design: plate.design, confidence: plate.confidence)
+        }
+        copy.evidence = copy.evidence.filter { $0.field != "registration" }
+        return copy
     }
 }

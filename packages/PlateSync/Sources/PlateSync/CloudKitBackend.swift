@@ -81,6 +81,12 @@ public struct CloudKitBackend: SyncBackend {
         }
         record["unitNumber"] = sighting.markings?.unitNumber
         record["vehicleClass"] = sighting.vehicle.vehicleClass
+        // Identity metadata describes the organisation and the plate's jurisdiction — never a person.
+        // (The registration itself stays governed by `mayUploadPlate` above.)
+        record["agencyKey"] = sighting.identity?.agency?.agencyKey
+        record["agencyName"] = sighting.identity?.agency?.name
+        record["agencyNeedsReview"] = sighting.identity?.agency.map { $0.needsReview ? 1 : 0 } as NSNumber?
+        record["plateState"] = sighting.identity?.plate?.state
         record["moderationState"] = Sighting.ModerationState.pending.rawValue
         // Exact geo is deliberately withheld until fleet-confirmed server-side.
 
@@ -118,7 +124,8 @@ public struct CloudKitBackend: SyncBackend {
     }
 
     public func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta {
-        let desiredKeys = ["capturedAt", "geohash6", "plateText", "unitNumber", "fleetConfidence"]
+        let desiredKeys = ["capturedAt", "geohash6", "plateText", "unitNumber", "fleetConfidence",
+                           "agencyKey", "agencyName"]
         let resultsLimit = 200
         let results: [(CKRecord.ID, Result<CKRecord, Error>)]
         let nextCursor: CKQueryOperation.Cursor?
@@ -153,7 +160,9 @@ public struct CloudKitBackend: SyncBackend {
                 geohash6: record["geohash6"] as? String ?? "",
                 plateText: record["plateText"] as? String,
                 unitNumber: record["unitNumber"] as? String,
-                fleetConfidence: (record["fleetConfidence"] as? Double) ?? 0))
+                fleetConfidence: (record["fleetConfidence"] as? Double) ?? 0,
+                agencyKey: record["agencyKey"] as? String,
+                agencyName: record["agencyName"] as? String))
         }
         return SightingDelta(sightings: items,
                              newCursor: nextCursor.map { SyncCursor(token: Self.encodeCursor($0)) })

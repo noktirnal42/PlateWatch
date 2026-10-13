@@ -43,9 +43,24 @@ public struct Plate: Sendable, Hashable, Codable {
         raw.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
     }
 
+    /// Vision often returns a plate line without the gap between the official word and the number:
+    /// "POLICED756" for "POLICE D756". Re-insert it, but only for a token that *begins* with an
+    /// official word and whose remainder contains a digit, so ordinary words are never split.
+    static func separatingGluedOfficialWords(_ raw: String) -> String {
+        raw.split(separator: " ", omittingEmptySubsequences: false).map { token -> String in
+            let t = token.uppercased().filter { $0.isLetter || $0.isNumber }
+            guard t.contains(where: \.isNumber) else { return String(token) }
+            for word in officialPlateWords where !word.contains(" ") && t.hasPrefix(word) && t.count > word.count {
+                let rest = String(t.dropFirst(word.count))
+                if rest.contains(where: \.isNumber), rest.count <= 8 { return "\(word) \(rest)" }
+            }
+            return String(token)
+        }.joined(separator: " ")
+    }
+
     /// Official-use words present in a plate line ("POLICE D756 OFFICIAL" → ["POLICE", "OFFICIAL"]).
     public static func officialWords(in raw: String) -> [String] {
-        let padded = " " + raw.uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
+        let padded = " " + separatingGluedOfficialWords(raw).uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
             .reduce(into: "") { $0.append($1) } + " "
         return officialPlateWords.filter { padded.contains(" \($0) ") }
     }
@@ -129,7 +144,7 @@ public struct Plate: Sendable, Hashable, Codable {
     /// A leading state name ("Massachusetts POLICE D756") is returned as
     /// `jurisdiction`, never as part of the registration.
     public static func officialRegistration(from raw: String) -> (registration: String, design: String, jurisdiction: String?)? {
-        var upper = " " + raw.uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
+        var upper = " " + separatingGluedOfficialWords(raw).uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
             .reduce(into: "") { $0.append($1) } + " "
         var matched: [String] = []
         for word in officialPlateWords where upper.contains(" \(word) ") {

@@ -17,6 +17,10 @@ RECORD TYPE SightingSubmission (
     plateRegion      STRING,
     unitNumber       STRING,
     vehicleClass     STRING,
+    agencyKey        STRING,
+    agencyName       STRING,
+    agencyNeedsReview INT64,
+    plateState       STRING,
     moderationState  STRING QUERYABLE,
     GRANT READ, WRITE TO "_creator",
     GRANT CREATE TO "_icloud"
@@ -33,6 +37,8 @@ RECORD TYPE Sighting (
     unitNumber       STRING,
     fleetConfidence  DOUBLE,
     vehicleClass     STRING,
+    agencyKey        STRING QUERYABLE,
+    agencyName       STRING,
     moderationState  STRING QUERYABLE,
     GRANT READ TO "_world"
 );

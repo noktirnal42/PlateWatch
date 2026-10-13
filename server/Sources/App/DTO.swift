@@ -53,6 +53,30 @@ struct SightingSubmissionDTO: Content {
     var plate: PlateDTO?
     var vehicle: VehicleObservationDTO
     var markings: FleetMarkingsDTO?
+    /// Mirrors PlateKit's `VehicleIdentity` — only the fields the server indexes; the rest of the
+    /// client's JSON is ignored on decode.
+    var identity: IdentityDTO?
+}
+
+struct IdentityDTO: Content {
+    var agency: AgencyIdentityDTO?
+    var plate: PlateIdentityDTO?
+}
+
+struct AgencyIdentityDTO: Content {
+    var name: String
+    var service: String?
+    var place: String?
+    var state: String?
+    var agencyKey: String
+    var confidence: Double
+    var needsReview: Bool
+}
+
+struct PlateIdentityDTO: Content {
+    /// USPS state code the plate was issued in ("MA"). The registration itself is never read here:
+    /// plate text follows the existing fleet-confirmed-only rule via `plate`.
+    var state: String?
 }
 
 struct SubmissionReceiptDTO: Content {
@@ -68,6 +92,8 @@ struct PublicSightingDTO: Content {
     var plateText: String?
     var unitNumber: String?
     var fleetConfidence: Double
+    var agencyKey: String?
+    var agencyName: String?
 }
 
 struct SightingPageDTO: Content {
