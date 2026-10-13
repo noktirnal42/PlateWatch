@@ -229,6 +229,16 @@ final class RealWorldRegressionTests: XCTestCase {
         XCTAssertFalse(plate.isOfficialPlate, "a word-only plate must not earn the official-plate score bonus")
         XCTAssertNil(Plate.officialRegistration(from: "Minnesota", allowWordOnly: true))
     }
+    /// Minneapolis photo: the hood reflects the car, so a smaller mirrored "555" appears beside the real "222".
+    func testReflectedUnitNumberIsDropped() {
+        func line(_ t: String, h: Double) -> SceneTextObservation {
+            SceneTextObservation(text: t, boundingBox: .init(x: 0.3, y: 0.5, width: 0.05, height: h), confidence: 0.9)
+        }
+        let id = IdentityResolver().resolve(
+            sceneText: [line("MINNEAPOLIS", h: 0.02), line("POLICE", h: 0.02), line("222", h: 0.022), line("555", h: 0.012)],
+            plates: [], vehicleClass: .patrol, markings: FleetMarkings(), location: nil, enhancedText: [], userState: nil)
+        XCTAssertEqual(id.unitNumbers, ["222"])
+    }
     func testPlateTextIsNeverAUnitNumber() {
         let m = FleetMarkings(unitNumber: "POLICED756", serviceClassText: "POLICE", hasFleetKeyword: true)
         let id = IdentityResolver().resolve(sceneText: [text("POLICED756")], plates: [], vehicleClass: .patrol, markings: m)

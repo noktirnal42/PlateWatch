@@ -105,6 +105,7 @@ for entry in entries {
                  approved == entry.expectedFleet ? "✓" : "✗", entry.id, entry.class,
                  entry.expectedFleet ? "fleet" : "other", approved ? "fleet" : "other",
                  best, plates.count, describe(bestMarkings).joined(separator: " ")))
+    if let u = identity?.unitNumbers, !u.isEmpty { print("      units → \(u.joined(separator: ", "))") }
     if !plates.isEmpty { print("      plates → \(plates.joined(separator: ", "))") }
     if let a = identity?.agency {
         print("      identity → \(a.name)  [\(a.agencyKey)]  conf \(String(format: "%.2f", a.confidence))"

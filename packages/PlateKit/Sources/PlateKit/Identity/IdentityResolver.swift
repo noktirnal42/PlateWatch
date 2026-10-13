@@ -125,10 +125,15 @@ public struct IdentityResolver: Sendable {
         }
         var units: [String] = []
         if let u = markings.unitNumber, plausibleUnit(u) { units.append(u) }
-        for line in sceneText {
+        // Bare-number lines. A reflection of the car (hood, window) repeats the unit number
+        // smaller and mirrored; the real lettering is the tallest, so drop clearly smaller ones.
+        let numeric = sceneText.compactMap { line -> (text: String, height: Double)? in
             let t = line.text.trimmingCharacters(in: .whitespaces)
-            if t.count >= 2, t.count <= 5, t.allSatisfy(\.isNumber), t != "911", !units.contains(t) { units.append(t) }
+            guard t.count >= 2, t.count <= 5, t.allSatisfy(\.isNumber), t != "911" else { return nil }
+            return (t, line.boundingBox.height)
         }
+        let tallest = numeric.map(\.height).max() ?? 0
+        for n in numeric where n.height >= tallest * 0.65 && !units.contains(n.text) { units.append(n.text) }
         units = Array(units.prefix(3))
         for u in units { evidence.append(.init(field: "unit", value: u, source: .doorText, confidence: 0.6)) }
 
