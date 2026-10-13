@@ -298,3 +298,27 @@ final class PlausiblePlateTests: XCTestCase {
         }
     }
 }
+
+final class OfficialPlateTests: XCTestCase {
+    func testMassachusettsPolicePlateLineParsesToItsRegistration() {
+        // Exactly what Vision returned for the Waltham Police photo.
+        let r = Plate.officialRegistration(from: "POLICE D756")
+        XCTAssertEqual(r?.registration, "D756")
+        XCTAssertEqual(r?.design, "government-official")
+        XCTAssertEqual(Plate.officialRegistration(from: "POLICE D756 OFFICIAL")?.registration, "D756")
+    }
+    func testOrdinaryTextIsNotAnOfficialPlate() {
+        for t in ["WALTHAM", "D756", "POLICE", "OFFICIAL", "ABC1234", "POLICE DEPARTMENT", "POLICE INTERCEPTOR"] {
+            XCTAssertNil(Plate.officialRegistration(from: t), t)
+        }
+    }
+    func testOfficialPlateIsDecisiveForTheGate() {
+        let gate = RedactionGate(config: .standard)
+        let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: FleetMarkings(),
+                                     knownUnitMatch: false, exemptPlateDesign: true, officialPlate: true)
+        XCTAssertEqual(gate.verdict(fleetConfidence: c), .persistAndSync)
+        let plate = Plate(text: "D756", plateDesign: "government-official", confidence: 0.9)
+        XCTAssertTrue(plate.isOfficialPlate)
+        XCTAssertTrue(plate.exemptDesignHint)
+    }
+}

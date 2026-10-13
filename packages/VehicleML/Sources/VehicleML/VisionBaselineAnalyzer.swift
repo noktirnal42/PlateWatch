@@ -148,6 +148,15 @@ enum PlateRectangleReader {
                                                                    minimumTextHeight: 0.18) else { continue }
             // Join everything read inside the plate (state name, number, slogan);
             // the plausible-reading filter picks the registration.
+            // Official-use plate: judge the crop's lines together ("Massachusetts /
+            // POLICE D756 / OFFICIAL"), since the words and registration are separate lines.
+            let joined = hits.compactMap { $0.texts.first }.joined(separator: " ")
+            if let official = Plate.officialRegistration(from: joined), seen.insert(official.registration).inserted {
+                found.append(PlateObservation(
+                    boundingBox: NormalizedBox(visionRect: box),
+                    candidates: [Plate(text: official.registration, plateDesign: official.design, confidence: 0.9)]))
+                continue
+            }
             for hit in hits {
                 let text = hit.texts.first ?? ""
                 let normalized = Plate.normalize(text)
@@ -205,10 +214,20 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         struct PlateHypothesis: Sendable { var box: CGRect }
         var sceneText: [SceneTextObservation] = []
         var hypotheses: [PlateHypothesis] = []
+        var officialPlates: [PlateObservation] = []
         for hit in fastHits {
             let text = hit.texts.first ?? ""
             let aspect = Double(hit.box.width / max(hit.box.height, 0.0001))
             let normalized = Plate.normalize(text)
+            // "POLICE D756" / "…OFFICIAL": an official-use plate. It becomes a plate
+            // (registration "D756", design government-official), never agency text.
+            if let official = Plate.officialRegistration(from: text) {
+                officialPlates.append(PlateObservation(
+                    boundingBox: NormalizedBox(visionRect: hit.box),
+                    candidates: [Plate(text: official.registration, plateDesign: official.design,
+                                       confidence: 0.9)]))
+                continue
+            }
             let observation = SceneTextObservation(
                 text: text,
                 boundingBox: NormalizedBox(visionRect: hit.box),
@@ -243,6 +262,10 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
             where !known.contains(Plate.normalize(extra.best?.text ?? "")) {
                 plates.append(extra)
             }
+        }
+        for official in officialPlates
+        where !plates.contains(where: { Plate.normalize($0.best?.text ?? "") == official.best?.text }) {
+            plates.append(official)
         }
         plates.sort { ($0.best?.confidence ?? 0) > ($1.best?.confidence ?? 0) }
 

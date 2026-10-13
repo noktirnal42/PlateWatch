@@ -58,11 +58,49 @@ public struct Plate: Sendable, Hashable, Codable {
         return true
     }
 
+    /// Words printed on government plates: Massachusetts "POLICE D756 OFFICIAL",
+    /// "US GOVT", "STATE OWNED"… Their presence is itself strong evidence of a
+    /// government vehicle — private owners cannot register such a plate.
+    static let officialPlateWords: [String] = [
+        "POLICE", "OFFICIAL", "GOVERNMENT", "GOVT", "EXEMPT", "STATE OWNED", "MUNICIPAL", "SHERIFF",
+    ]
+
+    /// If `raw` is an official/government plate line, returns the registration
+    /// with the official words removed ("POLICE D756" → "D756"). Registrations on
+    /// these plates are short (3–8 characters), so the usual 5-character floor
+    /// does not apply — but at least one digit and one letter/digit run is required.
+    public static func officialRegistration(from raw: String) -> (registration: String, design: String)? {
+        var upper = " " + raw.uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
+            .reduce(into: "") { $0.append($1) } + " "
+        var matched: [String] = []
+        for word in officialPlateWords where upper.contains(" \(word) ") {
+            matched.append(word)
+            upper = upper.replacingOccurrences(of: " \(word) ", with: " ")
+        }
+        guard !matched.isEmpty else { return nil }
+        // Registration = what is left, minus a leading state name token.
+        let leftover = upper.split(separator: " ").map(String.init)
+            .filter { !stateNames.contains($0) }
+            .joined()
+        guard (3...8).contains(leftover.count), leftover.contains(where: \.isNumber) else { return nil }
+        var run = 0
+        for ch in leftover { run = ch.isLetter ? run + 1 : 0; if run >= 5 { return nil } }
+        return (leftover, "government-official")
+    }
+
+    private static let stateNames: Set<String> = [
+        "MASSACHUSETTS", "CALIFORNIA", "TEXAS", "FLORIDA", "NEWYORK", "OHIO", "GEORGIA", "MICHIGAN",
+    ]
+
     /// Government-exempt style hints from the normalized text/design.
     /// This never asserts a fleet identity on its own — it is one signal for
     /// `FleetClassifier`.
     public var exemptDesignHint: Bool {
         guard let design = plateDesign?.lowercased() else { return false }
         return design.contains("exempt") || design.contains("gov") || design.contains("municipal")
+            || design.contains("official")
     }
+
+    /// True when the plate itself carries an official-use word (POLICE, OFFICIAL…).
+    public var isOfficialPlate: Bool { plateDesign?.lowercased().contains("official") == true }
 }

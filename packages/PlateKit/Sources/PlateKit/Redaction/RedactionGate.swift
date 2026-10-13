@@ -58,8 +58,11 @@ public struct RedactionGate: Sendable {
     public func fleetConfidence(vehicleClassifierFleet: Double,
                                 markings: FleetMarkings,
                                 knownUnitMatch: Bool,
-                                exemptPlateDesign: Bool) -> Double {
+                                exemptPlateDesign: Bool,
+                                officialPlate: Bool = false) -> Double {
         var score = 0.45 * min(1, max(0, vehicleClassifierFleet))
+        // A plate that itself reads "POLICE … OFFICIAL" is decisive on its own.
+        if officialPlate { score += 0.55 }
         if markings.hasFleetKeyword {
             score += markings.serviceClassText != nil ? 0.32 : 0.15
             // The agency line only counts when it says more than the service

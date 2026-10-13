@@ -40,7 +40,8 @@ enum SelfTest {
                 let c = gate.fleetConfidence(
                     vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
                     markings: m, knownUnitMatch: false,
-                    exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
+                    exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true },
+                officialPlate: vehicle.plates.contains { $0.best?.isOfficialPlate == true })
                 if c >= best { best = c; markings = m; verdict = gate.verdict(fleetConfidence: c) }
             }
             let plates = frame.vehicles.flatMap(\.plates).compactMap(\.best).map(\.text)

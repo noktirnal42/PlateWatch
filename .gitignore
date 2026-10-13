@@ -45,3 +45,6 @@ server/.env
 # Evaluation corpus images (licensed per eval/manifest.json; may show civilian plates)
 eval/corpus/
 eval/results/
+
+# Your own test photos (unknown licence) - never committed
+eval/user/

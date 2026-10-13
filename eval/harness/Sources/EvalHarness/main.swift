@@ -61,7 +61,8 @@ for entry in entries {
         let c = gate.fleetConfidence(
             vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
             markings: markings, knownUnitMatch: false,
-            exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
+            exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true },
+                officialPlate: vehicle.plates.contains { $0.best?.isOfficialPlate == true })
         if c >= best { best = c; bestMarkings = markings }
         switch gate.verdict(fleetConfidence: c) {
         case .persistAndSync: approved = true

@@ -226,7 +226,8 @@ final class CaptureViewModel: ObservableObject {
                 vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
                 markings: markings,
                 knownUnitMatch: false,
-                exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
+                exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true },
+                officialPlate: vehicle.plates.contains { $0.best?.isOfficialPlate == true })
             if confidence >= bestConfidence { bestConfidence = confidence; bestMarkings = markings }
             switch gate.verdict(fleetConfidence: confidence) {
             case .persistAndSync:
