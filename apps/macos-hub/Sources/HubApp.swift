@@ -6,6 +6,9 @@ import SwiftUI
 struct PlateWatchHubApp: App {
     let modelContainer: ModelContainer
     let backend: any SyncBackend
+    /// Owned here so ingest (folder watch + snapshot server) starts at launch, not when the
+    /// menu-bar popover is first opened.
+    @StateObject private var hub: HubController
 
     init() {
         let schema = Schema([PendingSubmission.self])
@@ -15,11 +18,15 @@ struct PlateWatchHubApp: App {
             ?? (try! ModelContainer(for: schema, configurations:
                 ModelConfiguration("PlateWatchHub-fallback", schema: schema, isStoredInMemoryOnly: true)))
         backend = SyncBackends.makeDefault()
+        let controller = HubController(context: modelContainer.mainContext)
+        _hub = StateObject(wrappedValue: controller)
+        let port = UInt16(clamping: UserDefaults.standard.integer(forKey: "hubSnapshotPort"))
+        Task { await controller.startSnapshotServer(port: port == 0 ? 8088 : port) }
     }
 
     var body: some Scene {
         MenuBarExtra("PlateWatch Hub", systemImage: "antenna.radiowaves.left.and.right") {
-            HubStatusView()
+            HubStatusView(hub: hub)
         }
         .menuBarExtraStyle(.window)
         .modelContainer(modelContainer)
@@ -32,8 +39,9 @@ struct PlateWatchHubApp: App {
 /// archive + outbox.
 struct HubStatusView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var hub = HubController()
+    @ObservedObject var hub: HubController
     @AppStorage("hubGeohash6") private var hubGeohash6 = ""
+    @AppStorage("hubSnapshotPort") private var snapshotPortSetting = 8088
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -44,6 +52,15 @@ struct HubStatusView: View {
             row("Frames analyzed", "\(hub.framesAnalyzed)")
             row("Fleet hits today", "\(hub.fleetHitsToday)")
             row("Outbox", "\(hub.pendingCount) pending")
+            row("Snapshot server", hub.snapshotServerStatus)
+            HStack {
+                Text("Preferred port").foregroundStyle(.secondary)
+                Spacer()
+                TextField("8088", value: $snapshotPortSetting, format: .number.grouping(.never))
+                    .frame(width: 80)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { Task { await hub.restartSnapshotServer(port: UInt16(clamping: snapshotPortSetting)) } }
+            }
             HStack {
                 Text("Home geohash").foregroundStyle(.secondary)
                 Spacer()
