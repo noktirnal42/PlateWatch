@@ -41,3 +41,7 @@ server/.env
 *.mobileprovision
 **/Secrets*.plist
 **/GoogleService-Info.plist
+
+# Evaluation corpus images (licensed per eval/manifest.json; may show civilian plates)
+eval/corpus/
+eval/results/

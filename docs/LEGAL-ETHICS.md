@@ -76,3 +76,12 @@ The commercial ALPR industry (and its public-sector customers) operate
 mass-surveillance infrastructure with almost none of these constraints. The
 project's credibility — and its legal safety — depend on being visibly more
 disciplined than the systems it audits.
+
+## Addendum 2026-10-13 — review confirmations and evaluation data
+
+- A user confirming a below-threshold detection submits at the persist floor only; the server
+  stores it as `pending` moderation, without a public plate or exact geo.
+- On CloudKit, uploads are creator-readable only; plate text is attached only if the
+  fleet-confirmed rule would publish it anyway.
+- Evaluation photos are third-party, licensed (see `eval/manifest.json`), kept out of the repo, and
+  never converted into synthetic "sightings".

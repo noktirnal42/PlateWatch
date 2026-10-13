@@ -38,6 +38,26 @@ public struct Plate: Sendable, Hashable, Codable {
         raw.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
     }
 
+    /// Could this normalized text plausibly be a US license plate reading?
+    /// Rejects what Vision text recognition finds on vehicles that is *not* a
+    /// plate: words and slogans ("NEWYORK", "COMPANY7", "DRIVEU"), pure digit
+    /// strings (fleet / asset IDs on USPS vans, unit numbers) and strings too
+    /// short or long. A real plate is 5–8 characters, mixes letters **and**
+    /// digits, and has no run of 5+ letters. Vanity all-letter plates are a
+    /// known miss until the CoreML plate detector ships.
+    public static func isPlausibleReading(_ normalized: String) -> Bool {
+        guard (5...8).contains(normalized.count) else { return false }
+        let hasDigit = normalized.contains(where: \.isNumber)
+        let hasLetter = normalized.contains(where: \.isLetter)
+        guard hasDigit, hasLetter else { return false }
+        var run = 0
+        for ch in normalized {
+            run = ch.isLetter ? run + 1 : 0
+            if run >= 5 { return false }
+        }
+        return true
+    }
+
     /// Government-exempt style hints from the normalized text/design.
     /// This never asserts a fleet identity on its own — it is one signal for
     /// `FleetClassifier`.

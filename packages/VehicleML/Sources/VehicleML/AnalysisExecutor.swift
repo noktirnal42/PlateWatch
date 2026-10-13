@@ -26,7 +26,9 @@ public actor AnalysisExecutor {
         if busy, mode == .live { return nil } // drop-oldest policy
         busy = true
         defer { busy = false }
-        return try await pipeline.analyze(frame, context: contextProvider())
+        var context = contextProvider()
+        if mode == .processAll { context.thorough = true }
+        return try await pipeline.analyze(frame, context: context)
     }
 }
 

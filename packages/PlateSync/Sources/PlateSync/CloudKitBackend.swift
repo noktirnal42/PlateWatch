@@ -2,19 +2,24 @@ import CloudKit
 import Foundation
 import PlateKit
 
-/// The default backend: CloudKit **public database**, free tier. One
-/// container holds the shared civic dataset; zones separate public records
-/// from moderation state. Requires the CloudKit capability + container.
+/// The default backend: CloudKit **public database**, free tier.
+///
+/// The public database has only the default zone, and anything readable is
+/// readable by everyone — so moderation state cannot live "next to" public
+/// data. Two record families, separated by security role (see
+/// `cloudkit/schema.ckdb`):
+///   - `SightingSubmission`: what devices upload. Creator-only read; the world
+///     cannot see it. A moderator (dashboard or server-to-server key) reviews
+///     these and publishes accepted ones as…
+///   - `Sighting` / `Vehicle` / `Agency`: world-readable, written only by the
+///     moderator tooling, never by an app client.
+/// Requires the CloudKit capability + container.
 public struct CloudKitBackend: SyncBackend {
 
     public let container: CKContainer
-    /// Public records live here; moderation zone stays moderator-only via
-    /// CKRecordZone restrictions enforced by role records.
-    public let publicZoneID: CKRecordZone.ID
 
     public init(containerIdentifier: String = "iCloud.org.platewatch.platewatch") {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.publicZoneID = CKRecordZone.ID(zoneName: "fleet-main")
     }
 
     private var publicDB: CKDatabase { container.publicCloudDatabase }
@@ -40,27 +45,40 @@ public struct CloudKitBackend: SyncBackend {
     // MARK: - Schema mapping (mirrors docs/DATA-MODEL.md)
 
     enum RecordType {
-        static let sighting = "CD_Sighting"
-        static let vehicle = "CD_Vehicle"
-        static let agency = "CD_Agency"
+        /// Device uploads. Creator-readable only.
+        static let submission = "SightingSubmission"
+        /// Moderated, world-readable.
+        static let sighting = "Sighting"
+        static let vehicle = "Vehicle"
+        static let agency = "Agency"
+    }
+
+    /// Plate text is attached to an upload only when the same rule the REST
+    /// server applies would make it public (fleet-confirmed: ≥ 0.8 with
+    /// markings). Below that, the plate stays on the device.
+    static func mayUploadPlate(_ sighting: SightingSubmissionDTO) -> Bool {
+        let hasMarkings = sighting.markings?.agencyText != nil || sighting.markings?.unitNumber != nil
+        return sighting.fleetConfidence >= 0.8 && hasMarkings
     }
 
     // MARK: - SyncBackend
 
     public func submit(_ sighting: SightingSubmissionDTO,
                        idempotencyKey: String) async throws -> SubmissionReceipt {
-        let recordID = CKRecord.ID(recordName: "sighting-\(idempotencyKey)",
-                                   zoneID: publicZoneID)
+        // Default zone: the public database supports no custom zones.
+        let recordID = CKRecord.ID(recordName: "sighting-\(idempotencyKey)")
         // Same stable derivation pullSightings uses, so the receipt ID
         // matches the record even on idempotent replays.
         let stableID = Self.uuid(fromRecordName: idempotencyKey)
-        let record = CKRecord(recordType: RecordType.sighting, recordID: recordID)
+        let record = CKRecord(recordType: RecordType.submission, recordID: recordID)
         record["capturedAt"] = sighting.capturedAt as NSDate
         record["geohash6"] = sighting.geohash6
         record["deviceIDHash"] = sighting.deviceIDHash
         record["fleetConfidence"] = sighting.fleetConfidence
-        record["plateText"] = sighting.plate?.text
-        record["plateRegion"] = sighting.plate?.issuingRegion
+        if Self.mayUploadPlate(sighting) {
+            record["plateText"] = sighting.plate?.text
+            record["plateRegion"] = sighting.plate?.issuingRegion
+        }
         record["unitNumber"] = sighting.markings?.unitNumber
         record["vehicleClass"] = sighting.vehicle.vehicleClass
         record["moderationState"] = Sighting.ModerationState.pending.rawValue
@@ -112,7 +130,10 @@ public struct CloudKitBackend: SyncBackend {
         } else {
             // Fresh pull: newest first, so deltas read as "newest since the
             // last page" and the nightly export does the heavy lifting.
-            let query = CKQuery(recordType: RecordType.sighting, predicate: NSPredicate(value: true))
+            // Only moderated records are ever read back — defence in depth on
+            // top of the schema (clients cannot read SightingSubmission anyway).
+            let query = CKQuery(recordType: RecordType.sighting,
+                                predicate: NSPredicate(format: "moderationState == %@", "fleetConfirmed"))
             query.sortDescriptors = [NSSortDescriptor(key: "capturedAt", ascending: false)]
             (results, nextCursor) = try await publicDB.records(
                 matching: query, inZoneWith: nil,

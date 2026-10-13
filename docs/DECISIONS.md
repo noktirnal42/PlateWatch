@@ -68,3 +68,33 @@ or defer colour and use the vision baseline. CompCars, named in the old
 roadmap, is to our understanding licensed for non-commercial research only.
 Verify its terms before any use as training data for a project that may be
 commercial.
+
+## 2026-10-13 — Fleet evidence without our own models; human confirmation
+
+**Decision.** Until fleet-specific CoreML models ship, use (1) door-text evidence with a graded
+score, (2) Apple's built-in Vision classifier labels `police_car` / `firetruck` / `ambulance` /
+`bus` as a *cue* (≤ 0.45 of the score, so never sufficient alone), and (3) a user-confirm step for
+the 0.15–0.55 band that submits at the persist floor so the server files it as `pending`.
+
+**Why.** On 62 real US photos this gave 100 % precision with 0 civilian false positives, 57 %
+automatic recall and 76 % with confirmation (docs/EVALUATION.md). Lowering the automatic
+threshold would have admitted decals and bystanders; human confirmation recovers recall without
+touching precision.
+
+**Guardrails kept.** A cue-only vehicle carries no plates; a plate joins a cue only when it is the
+frame's single candidate. Plates must contain a digit. Nothing is public on a user's word alone.
+
+## 2026-10-13 — CloudKit: separate submissions from published records
+
+**Decision.** Device uploads go to `SightingSubmission` (creator-only read); published records are
+world-readable and created only by moderator tooling. Plate text is uploaded only when the REST
+server's own "fleet-confirmed" rule would publish it (≥ 0.8 with markings).
+
+**Why.** The public DB has only a default zone and no per-record privacy, so putting pending
+detections (and plates) next to public data would have broken LEGAL-ETHICS Rule 1.
+
+## 2026-10-13 — Evaluation corpus is licensed + manifest-only
+
+Images come from Wikimedia Commons under CC0/PD/CC-BY/CC-BY-SA, are kept out of git (some show
+civilian plates), and only `eval/manifest.json` (source, license, author, labels) is committed.
+We do **not** write fabricated sightings from these photos into any shared database.

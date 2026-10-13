@@ -50,6 +50,33 @@ public struct RedactionGate: Sendable {
         return min(1, score)
     }
 
+    /// Graded variant for when no vehicle classifier is installed (baseline
+    /// Vision only). Door text is the only evidence, so it must be *strong*
+    /// to clear the persist threshold: a service word (POLICE/FIRE…), an
+    /// ownership line (CITY OF…) and a unit number together reach 0.57.
+    /// A bare "POLICE" decal or "CITY OF X" alone stays below it.
+    public func fleetConfidence(vehicleClassifierFleet: Double,
+                                markings: FleetMarkings,
+                                knownUnitMatch: Bool,
+                                exemptPlateDesign: Bool) -> Double {
+        var score = 0.45 * min(1, max(0, vehicleClassifierFleet))
+        if markings.hasFleetKeyword {
+            score += markings.serviceClassText != nil ? 0.32 : 0.15
+            // The agency line only counts when it says more than the service
+            // word itself ("AUSTIN POLICE DEPT", not a bare "POLICE" decal).
+            if let service = markings.serviceClassText, let agency = markings.agencyText,
+               agency.uppercased().trimmingCharacters(in: .whitespaces) != service {
+                score += 0.15
+                // …and it names an owner ("CITY OF…", "…DEPARTMENT", "STATE…").
+                if markings.agencyIsOwnerQualified { score += 0.10 }
+            }
+            if markings.unitNumber != nil { score += 0.10 }
+        }
+        if knownUnitMatch { score += 0.20 }
+        if exemptPlateDesign { score += 0.15 }
+        return min(1, score)
+    }
+
     public func verdict(fleetConfidence: Double) -> Verdict {
         if fleetConfidence >= config.persistThreshold { return .persistAndSync }
         if fleetConfidence >= config.keepOnDeviceThreshold { return .keepLocalOnly }

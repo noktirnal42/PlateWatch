@@ -1,0 +1,63 @@
+DEFINE SCHEMA
+
+-- PlateWatch CloudKit schema (container iCloud.org.platewatch.platewatch).
+-- Apply to the *development* environment, test, then deploy to production:
+--   see cloudkit/README.md. Field names match packages/PlateSync CloudKitBackend.
+
+-- Device uploads. The world cannot read these; only the uploading device
+-- (_creator) and moderators (dashboard / server-to-server key) can.
+RECORD TYPE SightingSubmission (
+    "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
+    "___recordID"    REFERENCE QUERYABLE,
+    capturedAt       TIMESTAMP QUERYABLE SORTABLE,
+    geohash6         STRING,
+    deviceIDHash     STRING,
+    fleetConfidence  DOUBLE,
+    plateText        STRING,
+    plateRegion      STRING,
+    unitNumber       STRING,
+    vehicleClass     STRING,
+    moderationState  STRING QUERYABLE,
+    GRANT READ, WRITE TO "_creator",
+    GRANT CREATE TO "_icloud"
+);
+
+-- Published, moderated sightings. World-readable; created only by moderator
+-- tooling (no CREATE grant for app clients).
+RECORD TYPE Sighting (
+    "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
+    "___recordID"    REFERENCE QUERYABLE,
+    capturedAt       TIMESTAMP QUERYABLE SORTABLE,
+    geohash6         STRING,
+    plateText        STRING,
+    unitNumber       STRING,
+    fleetConfidence  DOUBLE,
+    vehicleClass     STRING,
+    moderationState  STRING QUERYABLE,
+    GRANT READ TO "_world"
+);
+
+RECORD TYPE Vehicle (
+    "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
+    "___recordID"    REFERENCE QUERYABLE,
+    plateText        STRING QUERYABLE,
+    unitNumber       STRING QUERYABLE,
+    agencyName       STRING,
+    vehicleClass     STRING,
+    make             STRING,
+    model            STRING,
+    status           STRING,
+    sightingsCount   INT64,
+    GRANT READ TO "_world"
+);
+
+RECORD TYPE Agency (
+    "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
+    "___recordID"    REFERENCE QUERYABLE,
+    name             STRING QUERYABLE,
+    shortName        STRING,
+    level            STRING,
+    publicContactURL STRING,
+    budgetURL        STRING,
+    GRANT READ TO "_world"
+);

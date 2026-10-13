@@ -44,9 +44,15 @@ public struct ModelRegistry: Sendable, Codable, Equatable {
         self.entries = entries
     }
 
-    /// Latest version of a task's model.
+    /// True once an entry carries a real SHA-256 (placeholders mean "listed but
+    /// not converted/published yet" and must never be fetched).
+    static func isInstallable(_ entry: ModelRegistryEntry) -> Bool {
+        entry.sha256.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil
+    }
+
+    /// Latest *installable* version of a task's model.
     public func latest(forTask task: String) -> ModelRegistryEntry? {
-        entries.filter { $0.task == task }
+        entries.filter { $0.task == task && Self.isInstallable($0) }
             .max(by: { $0.version.compare($1.version, options: .numeric) == .orderedAscending })
     }
 

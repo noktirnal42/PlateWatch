@@ -49,3 +49,55 @@ final class OutboxTests: XCTestCase {
         _ = backend
     }
 }
+
+final class HeatmapAggregatorTests: XCTestCase {
+    private func sighting(_ cell: String, daysAgo: Double, now: Date) -> PublicSightingDTO {
+        PublicSightingDTO(id: UUID(), capturedAt: now.addingTimeInterval(-daysAgo * 86_400),
+                          geohash6: cell, fleetConfidence: 0.9)
+    }
+
+    func testCellsAndDaysUnderKAreWithheld() {
+        let now = Date()
+        var rows: [PublicSightingDTO] = []
+        for _ in 0..<5 { rows.append(sighting("9q8yyk", daysAgo: 1, now: now)) }  // meets k
+        for _ in 0..<4 { rows.append(sighting("9q8yym", daysAgo: 2, now: now)) }  // under k
+        let agg = HeatmapAggregator.aggregate(rows, k: 5, since: now.addingTimeInterval(-10 * 86_400), until: now)
+        XCTAssertEqual(agg.cells.map(\.geohash6), ["9q8yyk"])
+        XCTAssertEqual(agg.cells.first?.count, 5)
+        XCTAssertEqual(agg.withheldCells, 1)
+        XCTAssertEqual(agg.timeline.count, 1)
+        XCTAssertEqual(agg.withheldDays, 1)
+    }
+
+    func testOutsideWindowIsExcluded() {
+        let now = Date()
+        let rows = (0..<6).map { _ in sighting("9q8yyk", daysAgo: 40, now: now) }
+        let agg = HeatmapAggregator.aggregate(rows, k: 5, since: now.addingTimeInterval(-30 * 86_400), until: now)
+        XCTAssertTrue(agg.cells.isEmpty)
+        XCTAssertEqual(agg.withheldCells, 0)
+    }
+}
+
+final class CloudKitPrivacyTests: XCTestCase {
+    private func dto(confidence: Double, markings: FleetMarkingsDTO?) -> SightingSubmissionDTO {
+        SightingSubmissionDTO(
+            capturedAt: Date(), geohash6: "9v6kn7", deviceIDHash: "aa", fleetConfidence: confidence,
+            plate: PlateDTO(text: "1ABC234"),
+            vehicle: VehicleObservationDTO(vehicleClass: "patrol", classConfidence: 0.8),
+            markings: markings)
+    }
+
+    /// Uploads are creator-readable only, but the plate still stays on the
+    /// device unless the same rule that publishes it on the REST server holds.
+    func testPlateOnlyLeavesTheDeviceWhenFleetConfirmed() {
+        let marked = FleetMarkingsDTO(agencyText: "CITY OF AUSTIN", unitNumber: "4421", serviceClassText: "POLICE")
+        XCTAssertTrue(CloudKitBackend.mayUploadPlate(dto(confidence: 0.85, markings: marked)))
+        XCTAssertFalse(CloudKitBackend.mayUploadPlate(dto(confidence: 0.6, markings: marked)))
+        XCTAssertFalse(CloudKitBackend.mayUploadPlate(dto(confidence: 0.95, markings: nil)))
+    }
+
+    func testRecordTypesAreTheDocumentedOnes() {
+        XCTAssertEqual(CloudKitBackend.RecordType.submission, "SightingSubmission")
+        XCTAssertEqual(CloudKitBackend.RecordType.sighting, "Sighting")
+    }
+}

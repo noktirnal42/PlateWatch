@@ -14,22 +14,56 @@ code or logs · ❓ suspected, needs a device pass to confirm.
 > and the live camera path are ❓ until someone drives them by hand. The
 > simulator walk-through (all four tabs) is ✅.
 
+## Resolution status (updated later on 2026-10-13)
+
+Most P0/P1 findings were fixed the same day; accuracy is measured in
+[EVALUATION.md](EVALUATION.md).
+
+| Finding | Status |
+|---|---|
+| P0-1 frame orientation / overlay mapping | **Fixed** — `RotationCoordinator`, EXIF-correct photo decode, aspect-fill overlay mapping; regression tests |
+| P0-2 nothing can be approved without models | **Fixed** — door-text vehicles, graded markings score, Apple classifier cue; 57 % automatic recall at 100 % precision on real photos |
+| P0-3 model downloads 404 | **Mitigated** — placeholder entries are never fetched; models are optional. Publishing a verified release and archive extraction (`.mlpackage` is a directory) is still open |
+| P0-4 detector labels do not map to fleet classes | **Mitigated** — Apple's built-in `police_car`/`firetruck`/`ambulance` cue. A fleet CoreML classifier is still planned (M2) |
+| P0-5 CloudKit not live | **Partly fixed** — backend restructured (default zone, creator-only submissions, world-readable published types) and `cloudkit/schema.ckdb` written. **Still needs your Apple Developer step** to import + deploy the schema (see `cloudkit/README.md`) and a moderator tool to publish |
+| P1-1 raw camera error text | **Fixed** |
+| P1-2 notification prompt at launch | **Fixed** — asked on first watchlist add |
+| P1-3 blank launch screen | **Fixed** — launch screen with brand colour + mark |
+| P1-4 no app icon / accent | **Fixed** — asset catalog, generated icon (a painted version is pending image-generator access) |
+| P1-5 stock tabs | **Improved** — onboarding, About, branded empty states, informative rows; a full visual redesign is still open |
+| P1-6 Explore jargon / no map | **Fixed** — MapKit map of k-anonymous areas; aggregates now work on CloudKit too (client-side) |
+| P1-7 orientation-lock warning | **Fixed** (`UIRequiresFullScreen`) |
+| P1-8 CarPlay scene w/o entitlement | Open — needs Apple's CarPlay entitlement |
+| P1-9 exposure tuning no-op | **Fixed** — auto-exposure with capped shutter, real device readout |
+| P1-10 heavy `.accurate` passes on live frames | **Fixed** — live frames use `.fast`; `.accurate` only for stills |
+| Server compile error + no-op HTML escape | **Fixed** |
+
+### New bugs found and fixed while testing with real photos
+- **Crash:** `LocationProvider` used `requestLocation()` without `didFailWithError` —
+  CoreLocation asserts, so **any recorded fleet detection crashed the app**.
+- Door text ("POLICE", "UNIT 4421") fit the plate-shape test and was consumed as a *plate*,
+  hiding it from the markings parser.
+- A plate near the image edge produced an out-of-range Vision region and failed the whole frame.
+- `heatmap` was only a protocol-extension method, so `REST`'s real implementation was never called.
+- `EMS` matched inside "SYSTEMS"; fleet keywords now match whole words (fuzzy for ≥ 5 letters).
+- Brand words ("FALCK") were read as plates at 100 % confidence.
+- CloudKit: custom zone on the public DB (unsupported) and unmoderated records/plates in the world-readable type.
+
 ## Test baseline (after the fixes in this pass)
 
 | Suite | Result |
 |---|---|
-| PlateKit | 22 pass |
-| CaptureKit | 12 pass |
-| VehicleML | 7 pass |
-| PlateSync | 9 pass |
+| PlateKit | 34 pass |
+| CaptureKit | 16 pass |
+| VehicleML | 13 pass |
+| PlateSync | 13 pass |
 | FleetImporters | 38 pass |
 | FoundationModelsParser | 0 tests (target has none) |
 | server | 41 pass |
 | iOS app (simulator + device, Debug) | builds |
 | watchOS app, macOS Hub | **not built in this pass** |
 
-The old HANDOFF figure of "77 tests" predates FleetImporters and the server
-growing; **129 tests** is the current number.
+Counts above are as of the end of the day; **155 tests** pass (the morning baseline was 129).
 
 ---
 

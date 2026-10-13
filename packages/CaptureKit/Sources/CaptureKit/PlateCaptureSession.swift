@@ -16,9 +16,13 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
     private var consumer: (@Sendable (FramePacket) -> Void)?
     private var eventClipConsumer: (@Sendable (EventClip) -> Void)?
     private let rollingBuffer: FrameRollingBuffer
-    private var adaptiveExposureController: AdaptiveExposureController?
     private var lastExposureDuration: CMTime?
     private var lastISO: Float?
+    private var activeDevice: AVCaptureDevice?
+    #if os(iOS)
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservation: NSKeyValueObservation?
+    #endif
 
     public init(configuration: CaptureConfiguration = .handheld) {
         self.configuration = configuration
@@ -26,11 +30,6 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
         let totalSeconds = configuration.eventClipPreRollSeconds + configuration.eventClipPostRollSeconds
         let maxFrames = Int(totalSeconds * fps * 1.5) // 1.5x headroom
         self.rollingBuffer = FrameRollingBuffer(maxFrames: maxFrames)
-        if configuration.enableAdaptiveExposure {
-            self.adaptiveExposureController = AdaptiveExposureController(
-                minShutter: configuration.minimumShutterSeconds,
-                maxISO: configuration.maximumISO)
-        }
     }
 
     public var previewSession: AVCaptureSession { session }
@@ -61,10 +60,34 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
         guard session.canAddOutput(videoOutput) else { throw CaptureError.cannotAddOutput }
         session.addOutput(videoOutput)
         videoOutput.setSampleBufferDelegate(self, queue: outputQueue)
+        activeDevice = device
+        installRotation(for: device)
 
         try Self.tuneForPlates(device: device,
                                minShutter: configuration.minimumShutterSeconds,
                                maxISO: configuration.maximumISO)
+    }
+
+    /// Deliver upright frames. A phone camera sensor is landscape; without a
+    /// rotation on the output connection, Vision sees sideways text and the
+    /// detection overlay no longer lines up with the preview. The rotation
+    /// coordinator tracks gravity, so portrait/landscape both work.
+    private func installRotation(for device: AVCaptureDevice) {
+        #if os(iOS)
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+        rotationCoordinator = coordinator
+        applyRotation(coordinator.videoRotationAngleForHorizonLevelCapture)
+        rotationObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelCapture, options: [.new]) { [weak self] _, change in
+            if let angle = change.newValue { self?.applyRotation(angle) }
+        }
+        #endif
+    }
+
+    private func applyRotation(_ angle: CGFloat) {
+        guard let connection = videoOutput.connection(with: .video),
+              connection.isVideoRotationAngleSupported(angle) else { return }
+        connection.videoRotationAngle = angle
     }
 
     public func onFrame(_ consumer: @escaping @Sendable (FramePacket) -> Void) {
@@ -91,10 +114,17 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
         }
     }
 
-    public enum CaptureError: Error {
+    public enum CaptureError: Error, LocalizedError {
         case noSuitableCamera
         case cannotAddInput
         case cannotAddOutput
+
+        public var errorDescription: String? {
+            switch self {
+            case .noSuitableCamera: return "No camera is available on this device."
+            case .cannotAddInput, .cannotAddOutput: return "The camera could not be started."
+            }
+        }
     }
 
     // MARK: - Device selection & tuning
@@ -122,40 +152,29 @@ public final class PlateCaptureSession: NSObject, @unchecked Sendable {
         throw CaptureError.noSuitableCamera
     }
 
-    /// Shutter discipline: fast shutter beats high frame rate for ALPR.
-    /// We set manual exposure (shutter floor + ISO ceiling) when supported.
+    /// Shutter discipline: a fast shutter beats high frame rate for ALPR, but
+    /// pinning a manual shutter + ISO crushes dim scenes to black. Instead we
+    /// keep continuous auto-exposure and cap the *longest* shutter the
+    /// auto-exposure may choose, so it raises ISO to compensate and only
+    /// falls back to a slower shutter at the device's own limits.
     static func tuneForPlates(device: AVCaptureDevice, minShutter: Double, maxISO: Float) throws {
-        #if !os(macOS) // Manual exposure APIs are iOS-only on capture devices.
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
 
-            if device.isExposureModeSupported(.custom) {
-                let requested = CMTime(seconds: minShutter, preferredTimescale: 1_000_000)
-                let minD = device.activeFormat.minExposureDuration
-                let maxD = device.activeFormat.maxExposureDuration
-                let shutter: CMTime
-                if CMTimeCompare(requested, minD) < 0 { shutter = minD }
-                else if CMTimeCompare(requested, maxD) > 0 { shutter = maxD }
-                else { shutter = requested }
-                let iso = min(maxISO, device.activeFormat.maxISO)
-                device.setExposureModeCustom(duration: shutter, iso: iso) { _ in }
-            }
-            if device.isFocusModeSupported(.continuousAutoFocus) {
-                device.focusMode = .continuousAutoFocus
-            }
-            device.automaticallyAdjustsVideoHDREnabled = false // HDR smears plates
+        #if !os(macOS)
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.exposureMode = .continuousAutoExposure
         }
-        #else
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-            // macOS: just configure focus/HDR
-            if device.isFocusModeSupported(.continuousAutoFocus) {
-                device.focusMode = .continuousAutoFocus
-            }
-        }
+        let requested = CMTime(seconds: minShutter, preferredTimescale: 1_000_000)
+        let floor = device.activeFormat.minExposureDuration
+        let cap = CMTimeCompare(requested, floor) < 0 ? floor : requested
+        device.activeMaxExposureDuration = cap
+        device.automaticallyAdjustsVideoHDREnabled = false // HDR smears plates
+        if device.activeFormat.isVideoHDRSupported { device.isVideoHDREnabled = false }
         #endif
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
     }
 
     /// Extracts an event clip around the trigger frame's absolute index.
@@ -191,8 +210,7 @@ extension PlateCaptureSession: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard frameCounter % every == 0,
               let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // Extract exposure metadata for adaptive tuning
-        let (exposureDuration, iso) = extractExposureMetadata(from: sampleBuffer)
+        let (exposureDuration, iso) = currentExposure()
 
         let packet = FramePacket(
             pixelBuffer: pixelBuffer,
@@ -205,40 +223,17 @@ extension PlateCaptureSession: AVCaptureVideoDataOutputSampleBufferDelegate {
         rollingBuffer.append(packet)
         consumer?(packet)
 
-        // Update adaptive exposure controller with actual exposure
-        if let exp = exposureDuration, let isoVal = iso,
-           let controller = adaptiveExposureController {
-            let suggested = controller.update(measuredShutter: exp.seconds, measuredISO: isoVal)
-            if let (shutter, newISO) = suggested {
-                applyExposureAdjustment(shutter: shutter, iso: newISO)
-            }
-        }
     }
 
-    private func applyExposureAdjustment(shutter: CMTime, iso: Float) {
-        #if !os(macOS)
-        guard let device = session.inputs.compactMap({ $0 as? AVCaptureDeviceInput }).first?.device else { return }
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-            if device.isExposureModeSupported(.custom) {
-                device.setExposureModeCustom(duration: shutter, iso: iso) { _ in }
-            }
-        } catch {
-            // Ignore transient lock failures
-        }
+    /// Live exposure straight from the device (the sample-buffer attachment
+    /// keys the old code read are not a public API and came back nil).
+    private func currentExposure() -> (CMTime?, Float?) {
+        #if os(iOS)
+        guard let device = activeDevice else { return (nil, nil) }
+        return (device.exposureDuration, device.iso)
+        #else
+        return (nil, nil)
         #endif
-    }
-
-    /// Extracts exposure metadata from sample buffer attachments.
-    private func extractExposureMetadata(from sampleBuffer: CMSampleBuffer) -> (CMTime?, Float?) {
-        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
-              let dict = attachments.first else { return (nil, nil) }
-
-        // Use string-based keys since the CFString constants aren't exposed in Swift
-        let exposureDuration = dict["ExposureDuration" as CFString] as? CMTime
-        let iso = dict["ExposureISO" as CFString] as? Float
-        return (exposureDuration, iso)
     }
 }
 

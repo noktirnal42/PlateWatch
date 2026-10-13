@@ -15,10 +15,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = notificationDelegate
-        Task {
-            _ = try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound])
-        }
+        // Notification permission is requested in context — when the user adds
+        // their first watchlist plate — not as a cold prompt at launch.
         return true
     }
 
@@ -63,4 +61,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 private func matchesWatchlist(_ sighting: PublicSightingDTO, plates: Set<String>) -> Bool {
     guard let plate = sighting.plateText else { return false }
     return plates.contains(Plate.normalize(plate))
+}
+
+/// Asks for notification permission once, at the moment it is useful.
+enum NotificationPermission {
+    static func requestIfNeeded() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            guard settings.authorizationStatus == .notDetermined else { return }
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        }
+    }
 }

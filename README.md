@@ -15,21 +15,24 @@ and on-device machine learning.
 
 ## Project status — pre-alpha
 
-PlateWatch is **not yet usable end to end.** The foundations are solid and
-tested; the capture experience is what we are working on now.
+The core loop now works on real photos: **point it at (or import a photo of) a public-service
+vehicle and it recognises it, reads door text and plates, and records it** — with a human
+confirm step for borderline cases. Measured on 62 real US photos
+([docs/EVALUATION.md](docs/EVALUATION.md)): **100 % precision, 0 civilian false positives,
+57 % fully-automatic recall (76 % with confirmation)** on Apple Vision alone, identical on a
+physical iPhone. Recall is the weak side and is the main thing still to improve.
 
 | Area | State |
 |---|---|
-| Core packages (PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters) | Built and tested — 129 tests pass |
-| Reference server (ingest, delta sync, exports, k-anonymous heatmap, agency report, moderator console) | Builds, 41 tests pass; not yet deployed publicly |
-| iOS app | Builds and launches on simulator and device; live plate capture does **not** yet work reliably, UI is unbranded |
-| watchOS app / macOS Hub | Present; not verified in the latest QA pass |
-| CloudKit public database | **Not live yet** — container/schema/production deploy outstanding |
-| CoreML models | Converted locally; **not yet published** as a release, so the app runs on Apple Vision only |
+| Core packages (PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters) | Built and tested — 155 tests pass |
+| iOS app | Builds, installs and runs on simulator and iPhone; photo-import → recognise → record works; live camera path unit-tested but not yet field-verified |
+| Reference server (ingest, moderation, exports, k-anonymous heatmap, agency report) | Builds, 41 tests pass; not deployed publicly |
+| CloudKit public database | Backend + schema written ([cloudkit/](cloudkit/)); **awaiting import/deploy with the developer account** |
+| CoreML models | Optional; not yet published. Apple's built-in vehicle classifier is used instead for now |
+| watchOS app / macOS Hub / CarPlay | Present; not verified in the latest pass (CarPlay needs Apple's entitlement) |
 
-The ranked list of known problems is in [docs/QA-REPORT.md](docs/QA-REPORT.md);
-the plan to fix them is **M-Alpha** in [docs/ROADMAP.md](docs/ROADMAP.md).
-Contributions on any of those items are very welcome.
+Known problems and what was fixed: [docs/QA-REPORT.md](docs/QA-REPORT.md). Plan:
+**M-Alpha** in [docs/ROADMAP.md](docs/ROADMAP.md). Contributions welcome.
 
 ## What it does
 
@@ -100,7 +103,9 @@ open apps/ios/PlateWatch.xcodeproj
 - [docs/BACKEND.md](docs/BACKEND.md) — CloudKit-first backend, free-tier self-host options
 - [docs/LEGAL-ETHICS.md](docs/LEGAL-ETHICS.md) — the guardrails that keep this lawful and safe
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and feature backlog
-- [docs/QA-REPORT.md](docs/QA-REPORT.md) — latest QA findings, ranked by severity
+- [docs/QA-REPORT.md](docs/QA-REPORT.md) — latest QA findings, ranked by severity, with resolution status
+- [docs/EVALUATION.md](docs/EVALUATION.md) — real-world accuracy on a licensed photo corpus
+- [cloudkit/README.md](cloudkit/README.md) — CloudKit schema and one-time setup
 - [docs/DECISIONS.md](docs/DECISIONS.md) — decision log for model and design choices
 - [docs/FOIA.md](docs/FOIA.md) — requesting fleet records from agencies
 - [docs/PLATE-DESIGN-DATASET.md](docs/PLATE-DESIGN-DATASET.md) — plate-design classifier dataset plan

@@ -3,7 +3,22 @@
 **Project:** PlateWatch — Open-source ALPR for government vehicle accountability
 **Date:** 2026-10-13 (QA pass; see §00)
 **Branch:** `fix/sighting-unit-number` (10 commits ahead of origin)
-**Status:** Foundations done and tested (129 tests); iOS capture loop and CloudKit **not yet working** — see `docs/QA-REPORT.md`
+**Status:** Core loop works on real photos (155 tests; 100 % precision / 57 % auto recall on a 62-image real corpus); CloudKit awaiting the developer-account step — see `docs/QA-REPORT.md`, `docs/EVALUATION.md`
+
+---
+
+## 000. Session Log — 2026-10-13 (later): fixes + real-photo evaluation
+
+See `docs/EVALUATION.md`, `docs/QA-REPORT.md` (resolution table), `eval/README.md`.
+- Fixed orientation/EXIF, exposure, plate/markings parsing, a CoreLocation crash that killed the
+  app on any fleet detection, heatmap dispatch, CloudKit zone + privacy model.
+- Added Apple-Vision classifier cue, review-and-confirm flow, onboarding/About/branding, Explore map.
+- Added `eval/` (licensed Commons corpus fetcher + harness) and a DEBUG `-PWSelfTest` on-device runner
+  (copy images to `Documents/selftest/` via `devicectl device copy to`, launch with `-- -PWSelfTest --console`).
+- **Next:** import + deploy `cloudkit/schema.ckdb` (needs your Apple account), build the moderator publish tool,
+  publish a verified model release (+ AppleArchive extraction in `ModelManager`), field-test the live camera,
+  train a fleet-specific classifier to lift recall, painted app icon (needs image-generator authorisation).
+- iPhone Mirroring cannot expose the camera; use a handheld run for live capture.
 
 ---
 

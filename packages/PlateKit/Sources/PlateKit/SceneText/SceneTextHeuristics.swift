@@ -7,9 +7,14 @@ public struct FleetMarkings: Sendable, Equatable {
     public var unitNumber: String?
     public var serviceClassText: String?   // "POLICE", "FIRE", "PUBLIC WORKS"…
     public var hasFleetKeyword: Bool
+    /// The agency line names an owner ("CITY OF X", "X COUNTY", "… DEPARTMENT",
+    /// "STATE …", "U.S. …"), not just a service word. A strong signal.
+    public var agencyIsOwnerQualified: Bool = false
 
     public init(agencyText: String? = nil, unitNumber: String? = nil,
-                serviceClassText: String? = nil, hasFleetKeyword: Bool = false) {
+                serviceClassText: String? = nil, hasFleetKeyword: Bool = false,
+                agencyIsOwnerQualified: Bool = false) {
+        self.agencyIsOwnerQualified = agencyIsOwnerQualified
         self.agencyText = agencyText
         self.unitNumber = unitNumber
         self.serviceClassText = serviceClassText
@@ -25,10 +30,11 @@ public enum SceneTextHeuristics {
     /// Service-class words (what kind of fleet it is). Earlier = higher
     /// priority when several appear.
     private static let serviceKeywords: [String] = [
-        "STATE TROOPER", "HIGHWAY PATROL", "POLICE", "SHERIFF", "MARSHAL",
+        "STATE TROOPER", "HIGHWAY PATROL", "POLICE", "SHERIFF", "TROOPER", "MARSHAL",
         "FIRE", "RESCUE", "PARAMEDIC", "AMBULANCE", "EMS",
         "PUBLIC WORKS", "TRANSIT", "METRO", "SANITATION", "PARK RANGER",
-        "UNIFIED SCHOOL DISTRICT", "SCHOOL DISTRICT"
+        "POSTAL SERVICE", "USPS",
+        "UNIFIED SCHOOL DISTRICT", "SCHOOL DISTRICT", "SCHOOL BUS"
     ]
 
     /// Ownership words (who runs it). Alone still flags a fleet vehicle.
@@ -47,6 +53,71 @@ public enum SceneTextHeuristics {
         try! NSRegularExpression(pattern: "^([0-9]{3,5})$"),
     ]
 
+    /// Edit distance ≤ 1 between two ASCII words (substitution, insert, delete).
+    private static func withinOneEdit(_ a: [Character], _ b: [Character]) -> Bool {
+        if abs(a.count - b.count) > 1 { return false }
+        var i = 0, j = 0, edits = 0
+        while i < a.count && j < b.count {
+            if a[i] == b[j] { i += 1; j += 1; continue }
+            edits += 1
+            if edits > 1 { return false }
+            if a.count > b.count { i += 1 } else if a.count < b.count { j += 1 } else { i += 1; j += 1 }
+        }
+        return edits + (a.count - i) + (b.count - j) <= 1
+    }
+
+    /// OCR on stylized lettering often misreads one glyph ("POLIGE",
+    /// "SHERIFE"). Single-word keywords of 5+ letters tolerate one edit; short
+    /// ones (FIRE, EMS) stay exact so "FIRM"/"EMS"-like words do not match.
+    private static func containsFuzzyWord(_ upper: String, _ keyword: String) -> Bool {
+        guard keyword.count >= 5, !keyword.contains(" ") else { return false }
+        let target = Array(keyword)
+        return upper.split(whereSeparator: { !$0.isLetter }).contains {
+            $0.count >= 5 && withinOneEdit(Array($0), target)
+        }
+    }
+
+    /// Words that say *who owns it* (as opposed to what kind of service it is).
+    private static let ownerMarkers: [String] = [
+        "CITY OF", "COUNTY", "STATE OF", "DEPARTMENT", "DEPT",
+        "U.S.", "UNITED STATES", "METROPOLITAN", "MUNICIPAL", "TOWNSHIP", "VILLAGE OF",
+        // A state name next to a service word ("WYOMING HIGHWAY PATROL").
+        "ALABAMA", "ALASKA", "ARIZONA", "ARKANSAS", "CALIFORNIA", "COLORADO", "CONNECTICUT",
+        "DELAWARE", "FLORIDA", "GEORGIA", "HAWAII", "IDAHO", "ILLINOIS", "INDIANA", "IOWA",
+        "KANSAS", "KENTUCKY", "LOUISIANA", "MAINE", "MARYLAND", "MASSACHUSETTS", "MICHIGAN",
+        "MINNESOTA", "MISSISSIPPI", "MISSOURI", "MONTANA", "NEBRASKA", "NEVADA", "NEW HAMPSHIRE",
+        "NEW JERSEY", "NEW MEXICO", "NEW YORK", "NORTH CAROLINA", "NORTH DAKOTA", "OHIO",
+        "OKLAHOMA", "OREGON", "PENNSYLVANIA", "RHODE ISLAND", "SOUTH CAROLINA", "SOUTH DAKOTA",
+        "TENNESSEE", "TEXAS", "UTAH", "VERMONT", "VIRGINIA", "WASHINGTON", "WEST VIRGINIA",
+        "WISCONSIN", "WYOMING",
+    ]
+
+    /// Two text boxes that sit next to each other or stacked (a wrapped line).
+    private static func areAdjacent(_ a: NormalizedBox, _ b: NormalizedBox) -> Bool {
+        let maxHeight = max(a.height, b.height)
+        let verticalGap = max(a.y, b.y) - min(a.y + a.height, b.y + b.height)
+        let horizontalGap = max(a.x, b.x) - min(a.x + a.width, b.x + b.width)
+        let overlapsHorizontally = horizontalGap < maxHeight * 0.5
+        let overlapsVertically = verticalGap < maxHeight * 0.5
+        return (overlapsHorizontally && verticalGap < maxHeight * 2.0)
+            || (overlapsVertically && horizontalGap < maxHeight * 2.5)
+    }
+
+    /// Whole-word match: "EMS" must not fire inside "SYSTEMS"/"ITEMS", nor
+    /// "FIRE" inside "FIREFOX" — a false fleet flag breaks the fleet-only rule.
+    private static func containsWord(_ upper: String, _ keyword: String) -> Bool {
+        var searchRange = upper.startIndex..<upper.endIndex
+        while let found = upper.range(of: keyword, range: searchRange) {
+            let before = found.lowerBound == upper.startIndex
+                || !upper[upper.index(before: found.lowerBound)].isLetter
+            let after = found.upperBound == upper.endIndex
+                || !upper[found.upperBound].isLetter
+            if before && after { return true }
+            searchRange = found.upperBound..<upper.endIndex
+        }
+        return false
+    }
+
     public static func parse(_ observations: [SceneTextObservation]) -> FleetMarkings {
         var result = FleetMarkings()
         var longestAgencyLine: String?
@@ -58,7 +129,7 @@ public enum SceneTextHeuristics {
 
             // Service class: first service keyword found anywhere wins,
             // but a later, higher-priority service keyword replaces it.
-            if let match = serviceKeywords.first(where: { upper.contains($0) }) {
+            if let match = serviceKeywords.first(where: { containsWord(upper, $0) || containsFuzzyWord(upper, $0) }) {
                 if let current = result.serviceClassText,
                    let ci = serviceKeywords.firstIndex(of: current),
                    let ni = serviceKeywords.firstIndex(of: match), ni < ci {
@@ -67,14 +138,14 @@ public enum SceneTextHeuristics {
                     result.serviceClassText = match
                 }
             }
-            let isAgencyLine = agencyKeywords.contains(where: { upper.contains($0) })
+            let isAgencyLine = agencyKeywords.contains(where: { containsWord(upper, $0) })
             if result.serviceClassText != nil || isAgencyLine {
                 result.hasFleetKeyword = true
             }
 
             // Agency guess: the longest ownership/service-bearing line
             // ("CITY OF AUSTIN POLICE" outranks "POLICE").
-            if isAgencyLine || result.serviceClassText.map({ upper.contains($0) }) == true,
+            if isAgencyLine || result.serviceClassText.map({ containsWord(upper, $0) || containsFuzzyWord(upper, $0) }) == true,
                line.count > (longestAgencyLine?.count ?? 0) {
                 longestAgencyLine = line
             }
@@ -92,7 +163,29 @@ public enum SceneTextHeuristics {
             }
         }
 
+        // Multi-word names are often read as separate stacked lines
+        // ("HIGHWAY" / "PATROL"): also try adjacent pairs.
+        if result.serviceClassText == nil || result.serviceClassText?.contains(" ") == false {
+            for (i, a) in observations.enumerated() {
+                for b in observations[(i + 1)...] where Self.areAdjacent(a.boundingBox, b.boundingBox) {
+                    for (x, y) in [(a, b), (b, a)] {
+                        let joined = (x.text + " " + y.text).uppercased()
+                        if let multi = serviceKeywords.first(where: { $0.contains(" ") && containsWord(joined, $0) }) {
+                            result.serviceClassText = multi
+                            result.hasFleetKeyword = true
+                            if longestAgencyLine == nil || (longestAgencyLine?.count ?? 0) < joined.count {
+                                longestAgencyLine = joined
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         result.agencyText = longestAgencyLine
+        if let agency = longestAgencyLine?.uppercased(), result.serviceClassText != nil {
+            result.agencyIsOwnerQualified = ownerMarkers.contains { containsWord(agency, $0) }
+        }
         return result
     }
 }

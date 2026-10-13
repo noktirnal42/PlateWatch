@@ -20,8 +20,12 @@ struct PlateWatchApp: App {
             fatalError("SwiftData unavailable: \(error)")
         }
         backend = SyncBackends.makeDefault()
-        LocationProvider.shared.authorizeIfNeeded()
+        #if DEBUG
+        SelfTest.runIfRequested()
+        #endif
     }
+
+    @AppStorage("hasOnboarded") private var hasOnboarded = false
 
     var body: some Scene {
         WindowGroup {
@@ -34,8 +38,18 @@ struct PlateWatchApp: App {
                     .tabItem { Label("Watchlist", systemImage: "eye") }
                 HeatmapView()
                     .tabItem { Label("Explore", systemImage: "map") }
+                SettingsView()
+                    .tabItem { Label("About", systemImage: "info.circle") }
+            }
+            .tint(Color.accentColor)
+            .fullScreenCover(isPresented: Binding(get: { !hasOnboarded }, set: { _ in })) {
+                OnboardingView {
+                    hasOnboarded = true
+                    LocationProvider.shared.authorizeIfNeeded()
+                }
             }
             .task {
+                if hasOnboarded { LocationProvider.shared.authorizeIfNeeded() }
                 try? await backend.ensureWatchlistSubscription()
                 // Steady drain loop: outbox empties opportunistically, never
                 // blocking the capture path.
