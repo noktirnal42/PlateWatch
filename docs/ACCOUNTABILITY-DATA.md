@@ -1,9 +1,13 @@
 # ACCOUNTABILITY-DATA.md — the people & records program (M7)
 
-PlateWatch watches **the powerful**. In the United States that is settled,
-encouraged ground: photographing and recording officials in public is
-First-Amendment-protected activity (*Glik v. Cunniffe*, 1st Cir. 2011;
-*Fields v. City of Philadelphia*, 3d Cir. 2017), public-records laws exist
+PlateWatch watches **the powerful**. In the United States that is well-trodden,
+protected ground — but not uniform ground: photographing and recording officials
+in public is First-Amendment-protected activity in the circuits that have decided
+it (*Glik v. Cunniffe*, 1st Cir. 2011; *Fields v. City of Philadelphia*, 3d Cir.
+2017, among others), while the rule varies by circuit, qualified immunity often
+decides the damages question, and several states have passed (and courts have
+sometimes enjoined) laws limiting how close you may record police. Contributors
+need the local rule, not a blanket assurance — see LEGAL-ETHICS. Public-records laws exist
 because citizens are entitled to see what government does, and officials
 acting in their public capacity carry no reasonable expectation of privacy in
 that conduct. Public-interest sites, cop-watch channels, court watchers and
@@ -22,13 +26,27 @@ assets are in scope. Their families, homes, and off-duty private lives are not.
    FOIA releases, GSA/state fleet data (importers already exist in
    `FleetImporters`). Links `UnitAssignment` (unit ↔ vehicle ↔ person).
 2. **Official photos** — from official government pages (agency bios, roster
-   headshots, campaign/official social accounts) so humans can verify a
-   record ("is this the right vehicle/person?"). Photos are stored **with
-   their citation** and are for human moderator/comparison use.
+   headshots) so humans can verify a record ("is this the right
+   vehicle/person?"). **Copyright matters here:** works of the *federal*
+   government are public domain (17 U.S.C. §105), but many state and local
+   agencies retain copyright and campaign/social photos are the photographer's.
+   Default: **store the URL, retrieval date, a SHA-256 of the file and a
+   thumbnail only where the licence allows — link out, don't re-host.** A photo
+   is stored with its citation and is for human moderator comparison only.
 3. **Credibility & conduct records** — Brady/Giglio lists released by
-   prosecutors, state POST decertification registers, National Decertification
-   Index public entries, lawsuit dockets (PACER, state courts), settled
+   prosecutors (public only where a jurisdiction has released them), **state POST
+   decertification lists that a state publishes**, lawsuit dockets, settled
    journalism. These attach to officials/agencies as cited records.
+   - **The National Decertification Index (NDI) is *not* public.** It is run by
+     IADLEST and is open only to verified law-enforcement/POST personnel (access
+     is approved by each state's POST; some states, e.g. California, bar even
+     private investigators). Public-record equivalents are individual state POST
+     registers that are published, plus public datasets such as the Invisible
+     Institute's Citizens Police Data Project. (The draft said "NDI public
+     entries" — corrected.)
+   - **Court dockets:** PACER charges per page and restricts bulk automated
+     access; prefer the free RECAP archive / CourtListener API (Free Law Project)
+     and state portals' own terms. Verify each docket against the filing.
 4. **Aggregation of existing publishers** — public-interest sites, watchdog
    channels, social accounts that already do this work. PlateWatch indexes
    what they publish, always citing the original source; it is a finding aid
@@ -43,6 +61,22 @@ assets are in scope. Their families, homes, and off-duty private lives are not.
 assigned to D756, what agency, what does the public record say about them",
 with links a journalist or resident can independently verify.
 
+## Location firewall (added in review — a gap in the first draft)
+
+Take-home and assigned vehicles are the sharp edge of the cross-reference chain.
+A cruiser seen parked overnight, joined to a person via `UnitAssignment`, would
+**derive an officer's home location** even though no home address is ever
+collected — exactly what Rule 6 forbids. Therefore:
+
+- **A person-linked record never carries a sighting location.** Sightings stay
+  agency/unit-level (coarse geohash6, k-anonymous aggregates); the person link
+  is shown as a *cited assignment*, never as "seen at <place> at <time>".
+- No overnight/residential-hours sighting is ever published against a named
+  individual, and the UI must not offer a per-person timeline or map.
+- A moderator confirming a unit↔person link reviews the **link**, not the
+  sighting history; a test asserts that `OfficialProfile`/`PersonLink` types
+  have no location field and cannot be constructed from a `Sighting`.
+
 ## Hard guardrails (encoded, not aspirational)
 
 These extend `docs/LEGAL-ETHICS.md` Rules 2/4/5; they are what keeps the
@@ -56,8 +90,9 @@ program lawful, accurate, and worth defending:
   date). Un-sourced enrichment is rejected in code (AGENTS.md guardrail 2).
 - **No biometric matching.** Photos are never run through face recognition
   against sighting frames or anyone's image. Beyond ethics, several states
-  (Illinois BIPA 740 ILCS 14, Texas, Washington) impose statutory liability
-  on biometric identification. Photos aid human verification; nothing more.
+  (Illinois BIPA 740 ILCS 14, Texas, Washington) regulate biometric identifiers
+  and some create private rights of action; the exact exemptions differ, so the
+  project's rule is simply *never*. Photos aid human verification; nothing more.
 - **Inference is labeled.** Auto-suggested unit↔person links carry a
   confidence and never auto-publish; publication requires moderator
   confirmation with its own citation.

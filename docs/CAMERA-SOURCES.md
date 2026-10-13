@@ -10,10 +10,10 @@ Status legend: ✅ working · ⚠️ code exists but not working · ⬜ planned
 
 | # | Source | Where | Status |
 |---|--------|-------|--------|
-| 1 | iPhone live camera (`AVCaptureSession`) | `apps/ios` + `CaptureKit` | ✅ (orientation/exposure done; handheld field test pending, NEXT-STEPS §2) |
+| 1 | iPhone live camera (`AVCaptureSession`) | `apps/ios` + `CaptureKit` | ⚠️ implemented and unit-tested; **never run on a live feed** (iPhone Mirroring cannot expose the camera) — handheld field test pending, NEXT-STEPS §2 |
 | 2 | Photo / video import (EXIF-correct) | `apps/ios` | ✅ |
-| 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ✅ (Reolink/Amcrest-class cameras, on-prem, no cloud) |
-| 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ✅ (filesystem-watch core shipped first) |
+| 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ⚠️ builds and launches, but the controller (and the watch) only starts **when the menu-bar window is first opened** — verified 2026-10-13: after minutes of running, `~/Documents/PlateWatch-Ingest` did not exist |
+| 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ⚠️ **dead code**: `startSnapshotServer` is never called. Also: the handler decodes the request body as a UTF-8 *string* (corrupts JPEG bytes) and reads a single 64 KB chunk ("assume small images"); default port 8088 collides with common dev servers (it was already taken by an `mlx_lm.server` on the owner's machine) |
 | 5 | Hub RTSP ingest | `apps/macos-hub/Sources/HubController.swift:409` | ⚠️ does not compile + wrong API — see §Network cameras |
 | 6 | Continuity Camera (iPhone as webcam) | `apps/macos-hub` | ⬜ M6 |
 | 7 | UVC webcams (any USB camera) | `apps/macos-hub` | ⬜ M6 |
@@ -26,7 +26,7 @@ does not care where the frame came from.
 
 ---
 
-## Live iPhone camera (shipped)
+## Live iPhone camera (implemented, not field-verified)
 
 `CaptureKit` runs `AVCaptureSession` with a `RotationCoordinator`-driven
 orientation, capped shutter for moving traffic, and a rate-limited
@@ -38,7 +38,8 @@ testing via sources 3–4.
 
 - v1: user picks a folder; cameras (or scripts) FTP/drop JPEGs in; a
   `DispatchSourceFileSystemObject` watch feeds `FileFrameSource`.
-- v2: Hub advertises `_platewatch._tcp` (Bonjour) and accepts POSTed frames on
+- v2: Hub advertises `_platewatch-snapshot._tcp` (Bonjour; see
+  `HubController.advertiseBonjour`) and accepts POSTed frames on
   port 8088 — phones and cameras that can push snapshots skip the FTP hop.
 - The operator sets `homeGeohash6` once per fixed installation (the geohash of
   the *camera*, which is stationary — more accurate than phone GPS).
@@ -98,9 +99,18 @@ gate parameter and `officialPlate:` evidence — rework must parse
 
 ## Public traffic cameras (M6 — planned)
 
-State DOTs and municipalities publish **public** camera feeds: 511 systems
-(Mass511, NY 511, WSDOT, Caltrans Districts…), city traffic-operation portals,
-and port/transit authority cams. Formats in the wild:
+State DOTs and municipalities publish camera feeds, but **access varies and several
+need credentials** (verified 2026-10-13):
+
+| Source | Access |
+|---|---|
+| 511NY | API **requires a registered account + developer key** and an access agreement; throttled (≈10 calls / 60 s) → out of scope until the owner opts in |
+| WSDOT | Traveler Information API requires a free **AccessCode** → same |
+| Caltrans | CCTV *dataset* (locations/status) is open via the California open-data/ArcGIS service; it lists cameras, **not live frames** — each camera's image URL must be checked separately |
+| Mass511 and others | ⚠ unverified — read each agency's terms before listing |
+
+Starter set rule: **keyless, published-for-public-use image URLs first**; keyed feeds only
+with the owner's explicit opt-in and the key kept out of the repo. Formats in the wild:
 
 - **Periodic JPEG snapshot URL** (most common; often an AXIS
   `/axis-cgi/jpg/image.cgi` style endpoint refreshed every 1–5 s).
@@ -140,3 +150,21 @@ Every source must pass the same harness: `FileFrameSource` still covers 1–4;
 sources 5–8 get a recorded-sample fixture (a short saved clip/snapshot set in
 `eval/corpus/` or a fixtures dir) so CI never depends on a live camera. The
 RedactionGate assertions in `PlateKitTests` remain the pass/fail authority.
+
+## Hub verification (2026-10-13)
+
+Built with `xcodegen` + `xcodebuild -scheme PlateWatchHub` (macOS, unsandboxed Debug): **builds**, **launches**
+as a menu-bar process (no Dock icon). Findings, in order of impact:
+
+1. **Nothing runs until the menu icon is clicked.** `HubController` is a `@StateObject` of `HubStatusView`, which
+   SwiftUI builds only when the `MenuBarExtra` window first opens, so the folder watch (started in `init`) is idle
+   at launch. A "resident" hub needs the controller owned by the `App`, not the popover view.
+2. **The snapshot/Bonjour server and the RTSP handler are never started** (`grep` finds no caller).
+3. **Snapshot POST handling cannot work for real photos:** binary body decoded as a String; one 64 KB read; no
+   Content-Length accumulation.
+4. **Port 8088 is a poor default** — configurable or auto-assigned (`port: 0`) with the chosen port advertised.
+5. The Hub's UI could not be driven with the computer-use tool (the app is not registered as installed), so the
+   popover itself was **not** exercised visually.
+
+Suggested fix order (WS2): own the controller in `PlateWatchHubApp`; start the folder watch and the snapshot
+server at launch; rewrite the HTTP read loop (accumulate to Content-Length, keep bytes as `Data`); then the RTSP/HLS rework.
