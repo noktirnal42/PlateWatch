@@ -14,6 +14,10 @@ public struct SourceCitation: Sendable, Codable, Hashable {
     public enum SourceType: String, Sendable, Codable, CaseIterable {
         case agencyRoster, fleetRegistry, foiaRelease, auctionListing
         case officialPost, openDataPortal, nhtsaVpic, communityVerified
+        // M7 accountability-record sources (docs/ACCOUNTABILITY-DATA.md).
+        case bradyList, decertificationRegister, courtDocket, newsReport
+        /// US Census Gazetteer (public domain) — canonical place/county names.
+        case censusGazetteer
     }
 
     public init(sourceType: SourceType,

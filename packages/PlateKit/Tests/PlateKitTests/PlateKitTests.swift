@@ -298,3 +298,83 @@ final class PlausiblePlateTests: XCTestCase {
         }
     }
 }
+
+final class OfficialPlateTests: XCTestCase {
+    func testMassachusettsPolicePlateLineParsesToItsRegistration() {
+        // Exactly what Vision returned for the Waltham Police photo.
+        let r = Plate.officialRegistration(from: "POLICE D756")
+        XCTAssertEqual(r?.registration, "D756")
+        XCTAssertEqual(r?.design, "government-official")
+        XCTAssertEqual(Plate.officialRegistration(from: "POLICE D756 OFFICIAL")?.registration, "D756")
+    }
+    func testOrdinaryTextIsNotAnOfficialPlate() {
+        for t in ["WALTHAM", "D756", "POLICE", "OFFICIAL", "ABC1234", "POLICE DEPARTMENT", "POLICE INTERCEPTOR"] {
+            XCTAssertNil(Plate.officialRegistration(from: t), t)
+        }
+    }
+    func testOfficialPlateIsDecisiveForTheGate() {
+        let gate = RedactionGate(config: .standard)
+        let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: FleetMarkings(),
+                                     knownUnitMatch: false, exemptPlateDesign: true, officialPlate: true)
+        XCTAssertEqual(gate.verdict(fleetConfidence: c), .persistAndSync)
+        let plate = Plate(text: "D756", plateDesign: "government-official", confidence: 0.9)
+        XCTAssertTrue(plate.isOfficialPlate)
+        XCTAssertTrue(plate.exemptDesignHint)
+    }
+}
+
+final class JurisdictionTests: XCTestCase {
+    func testOfficialPlateLineLogsItsIssuingRegion() {
+        // Plate crop joined lines: state header + registration.
+        let r = Plate.officialRegistration(from: "Massachusetts POLICE D756 OFFICIAL")
+        XCTAssertEqual(r?.registration, "D756")
+        XCTAssertEqual(r?.jurisdiction, "MASSACHUSETTS")
+        XCTAssertEqual(Plate.issuingRegion(forStateName: "Massachusetts"), "US-MA")
+        XCTAssertEqual(Plate.issuingRegion(forStateName: "new york"), "US-NY")
+        XCTAssertNil(Plate.issuingRegion(forStateName: "Ontario"))
+    }
+}
+
+final class FuzzyPhraseTests: XCTestCase {
+    private func obs(_ t: String) -> SceneTextObservation {
+        SceneTextObservation(text: t, boundingBox: .init(x: 0, y: 0, width: 0.2, height: 0.05), confidence: 0.9)
+    }
+    func testGarbledHighwayPatrolStillMatches() {
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("LIGHWAY PATROL")]).serviceClassText, "HIGHWAY PATROL")
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("AIGHWAY PATROL.")]).serviceClassText, "HIGHWAY PATROL")
+    }
+    func testTwoGarbledWordsDoNotFormAKeyword() {
+        XCTAssertNil(SceneTextHeuristics.parse([obs("LIGHWAY PATROI")]).serviceClassText)
+        XCTAssertNil(SceneTextHeuristics.parse([obs("HIGHLY PATRONS")]).serviceClassText)
+    }
+}
+
+final class GroundedMarkingsTests: XCTestCase {
+    private func obs(_ t: String) -> SceneTextObservation {
+        SceneTextObservation(text: t, boundingBox: .init(x: 0, y: 0, width: 0.2, height: 0.05), confidence: 0.9)
+    }
+    /// Seen in the app: the on-device LLM turned "HYBRID AND…" badge text into a fleet service.
+    func testHallucinatedServiceIsDroppedAndCannotRaiseTheGate() {
+        let lines = [obs("HYBRID AND"), obs("Ford")]
+        let claim = FleetMarkings(agencyText: "Hybridand", unitNumber: nil, serviceClassText: "Hybridand", hasFleetKeyword: true)
+        let g = SceneTextHeuristics.grounded(claim, in: lines, fallback: SceneTextHeuristics.parse(lines))
+        XCTAssertNil(g.serviceClassText)
+        XCTAssertFalse(g.hasFleetKeyword, "an invented keyword must not become a fleet signal")
+        let gate = RedactionGate(config: .standard)
+        let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: g, knownUnitMatch: false, exemptPlateDesign: false)
+        XCTAssertEqual(c, 0, accuracy: 0.001)
+    }
+    func testSupportedClaimsSurviveAndAreNormalised() {
+        let lines = [obs("AUSTIN POLICE DEPT"), obs("UNIT 4421")]
+        let claim = FleetMarkings(agencyText: "Austin Police Department", unitNumber: "4421", serviceClassText: "Police", hasFleetKeyword: true)
+        let g = SceneTextHeuristics.grounded(claim, in: lines, fallback: SceneTextHeuristics.parse(lines))
+        XCTAssertEqual(g.serviceClassText, "POLICE")
+        XCTAssertEqual(g.unitNumber, "4421")
+        XCTAssertTrue(g.hasFleetKeyword)
+    }
+    func testAnInventedUnitNumberIsRejected() {
+        let lines = [obs("CITY POLICE")]
+        let claim = FleetMarkings(unitNumber: "9999", serviceClassText: "POLICE", hasFleetKeyword: true)
+        XCTAssertNil(SceneTextHeuristics.grounded(claim, in: lines, fallback: SceneTextHeuristics.parse(lines)).unitNumber)
+    }
+}

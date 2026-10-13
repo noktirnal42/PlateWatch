@@ -18,13 +18,19 @@ public struct SightingSubmissionDTO: Sendable, Codable {
     public var plate: PlateDTO?
     public var vehicle: VehicleObservationDTO
     public var markings: FleetMarkingsDTO?
+    /// Structured, cross-referenceable identity (agency key, plate jurisdiction, unit, evidence).
+    /// Optional: servers that predate it ignore the key. The plate inside it follows the same
+    /// redaction rule as `plate` — stripped unless the sighting is allowed to carry one.
+    public var identity: VehicleIdentity?
 
     public init(capturedAt: Date, geohash6: String, exactLatitude: Double? = nil,
                 exactLongitude: Double? = nil, headingDegrees: Float? = nil,
                 roadClass: String? = nil, cropHashSHA256: String? = nil,
                 cropJPEGBase64: String? = nil, deviceIDHash: String,
                 fleetConfidence: Double, plate: PlateDTO? = nil,
-                vehicle: VehicleObservationDTO, markings: FleetMarkingsDTO? = nil) {
+                vehicle: VehicleObservationDTO, markings: FleetMarkingsDTO? = nil,
+                identity: VehicleIdentity? = nil) {
+        self.identity = identity
         self.capturedAt = capturedAt
         self.geohash6 = geohash6
         self.exactLatitude = exactLatitude
@@ -150,10 +156,15 @@ public struct PublicSightingDTO: Sendable, Codable {
     public var plateText: String?
     public var unitNumber: String?
     public var fleetConfidence: Double
+    /// Cross-reference join key ("US-MA/waltham/police") and display name — only present
+    /// when the identity was confident (not flagged for review).
+    public var agencyKey: String?
+    public var agencyName: String?
 
     public init(id: UUID, capturedAt: Date, geohash6: String,
                 plateText: String? = nil, unitNumber: String? = nil,
-                fleetConfidence: Double = 0) {
+                fleetConfidence: Double = 0, agencyKey: String? = nil, agencyName: String? = nil) {
+        self.agencyKey = agencyKey; self.agencyName = agencyName
         self.id = id; self.capturedAt = capturedAt; self.geohash6 = geohash6
         self.plateText = plateText; self.unitNumber = unitNumber
         self.fleetConfidence = fleetConfidence

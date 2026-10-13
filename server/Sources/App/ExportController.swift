@@ -12,18 +12,22 @@ public enum ExportRenderer {
         public var plateText: String?
         public var unitNumber: String?
         public var fleetConfidence: Double
+        public var agencyKey: String?
+        public var agencyName: String?
 
         public init(id: UUID, capturedAt: Date, geohash6: String,
-                    plateText: String?, unitNumber: String?, fleetConfidence: Double) {
+                    plateText: String?, unitNumber: String?, fleetConfidence: Double,
+                    agencyKey: String? = nil, agencyName: String? = nil) {
             self.id = id; self.capturedAt = capturedAt; self.geohash6 = geohash6
             self.plateText = plateText; self.unitNumber = unitNumber
             self.fleetConfidence = fleetConfidence
+            self.agencyKey = agencyKey; self.agencyName = agencyName
         }
     }
 
     /// RFC 4180-ish CSV with a header row. Cells are quoted when needed.
     public static func csv(_ rows: [Row]) -> String {
-        var out = "id,captured_at,geohash6,plate_text,unit_number,fleet_confidence\n"
+        var out = "id,captured_at,geohash6,plate_text,unit_number,fleet_confidence,agency_key,agency_name\n"
         let iso = ISO8601DateFormatter()
         for r in rows {
             out += [
@@ -33,6 +37,8 @@ public enum ExportRenderer {
                 r.plateText.map(csvEscape) ?? "",
                 r.unitNumber.map(csvEscape) ?? "",
                 String(format: "%.3f", r.fleetConfidence),
+                r.agencyKey.map(csvEscape) ?? "",
+                r.agencyName.map(csvEscape) ?? "",
             ].joined(separator: ",") + "\n"
         }
         return out
@@ -56,6 +62,8 @@ public enum ExportRenderer {
                 "captured_at": jsonString(iso.string(from: r.capturedAt)),
                 "fleet_confidence": String(format: "%.3f", r.fleetConfidence),
                 "unit_number": r.unitNumber.map(jsonString) ?? "null",
+                "agency_key": r.agencyKey.map(jsonString) ?? "null",
+                "agency_name": r.agencyName.map(jsonString) ?? "null",
             ]
             let propStr = props.sorted { $0.key < $1.key }
                 .map { "\"\($0.key)\":\($0.value)" }.joined(separator: ",")
@@ -135,7 +143,9 @@ struct ExportController: RouteCollection {
                 return ExportRenderer.Row(
                     id: id, capturedAt: s.capturedAt, geohash6: s.geohash6,
                     plateText: s.plateText, unitNumber: s.unitNumber,
-                    fleetConfidence: s.fleetConfidence)
+                    fleetConfidence: s.fleetConfidence,
+                    agencyKey: s.agencyNeedsReview == false ? s.agencyKey : nil,
+                    agencyName: s.agencyNeedsReview == false ? s.agencyName : nil)
             }
     }
 }

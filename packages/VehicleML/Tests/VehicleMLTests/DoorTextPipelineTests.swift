@@ -8,7 +8,7 @@ import XCTest
 /// Renders a mock cruiser door panel and runs the real Vision baseline over it.
 final class DoorTextPipelineTests: XCTestCase {
 
-    private func panel(lines: [String], plate: String? = nil) throws -> CVPixelBuffer {
+    private func panel(lines: [String], plate: String? = nil, plateSize: CGFloat = 95) throws -> CVPixelBuffer {
         let width = 1600, height = 900
         var buffer: CVPixelBuffer?
         CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
@@ -39,7 +39,7 @@ final class DoorTextPipelineTests: XCTestCase {
         if let plate {
             ctx.setFillColor(CGColor(gray: 0.95, alpha: 1))
             ctx.fill(CGRect(x: 1000, y: 120, width: 520, height: 260))
-            draw(plate, at: CGPoint(x: 1030, y: 215), size: 95, color: CGColor(gray: 0.05, alpha: 1))
+            draw(plate, at: CGPoint(x: 1030, y: 215), size: plateSize, color: CGColor(gray: 0.05, alpha: 1))
         }
         return pb
     }
@@ -72,6 +72,14 @@ final class DoorTextPipelineTests: XCTestCase {
             FramePacketLike(pixelBuffer: try panel(lines: [], plate: "FALCK")),
             context: AnalysisContext(models: [:]))
         XCTAssertTrue(frame.vehicles.flatMap(\.plates).isEmpty, "a brand word must not read as a plate")
+    }
+
+    func testOfficialPolicePlateIsReadAsAGovernmentPlate() async throws {
+        let frame = try await PlateAnalysisPipeline().analyze(
+            FramePacketLike(pixelBuffer: try panel(lines: [], plate: "POLICE D756", plateSize: 52)),
+            context: AnalysisContext(models: [:]))
+        let plates = frame.vehicles.flatMap(\.plates).compactMap(\.best)
+        XCTAssertTrue(plates.contains { $0.text == "D756" && $0.isOfficialPlate }, "plates: \(plates.map(\.text))")
     }
 
     func testRenderedPlateIsRead() async throws {

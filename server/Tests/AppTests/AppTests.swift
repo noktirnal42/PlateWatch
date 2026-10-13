@@ -165,3 +165,48 @@ final class RedactionGateServiceTests: XCTestCase {
         XCTAssertEqual(out.state, .fleetConfirmed)
     }
 }
+
+/// Identity (agency key, plate jurisdiction) rides on the submission and the public feed — but a
+/// flagged identity is never published as fact, and the registration never rides on the identity.
+final class SightingIdentityTests: XCTestCase {
+    private let payload = """
+    {"capturedAt":"2026-10-13T20:00:00Z","geohash6":"drt2yz","deviceIDHash":"aa","fleetConfidence":0.9,
+     "vehicle":{"vehicleClass":"patrol","classConfidence":0.8},
+     "identity":{"agency":{"name":"Waltham Police Department","service":"Police","place":"Waltham","state":"MA",
+        "agencyKey":"US-MA/waltham/police","confidence":0.93,"needsReview":false,"isInferred":true,
+        "vehicleClass":"patrol","alternatives":[]},
+       "plate":{"registration":"D756","state":"MA","stateName":"Massachusetts","confidence":0.9},
+       "unitNumbers":[],"vehicle":{"traits":[]},"evidence":[],"consistency":[]}}
+    """
+
+    func testSubmissionDecodesIdentityFromPlateKitJSON() throws {
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let dto = try decoder.decode(SightingSubmissionDTO.self, from: Data(payload.utf8))
+        XCTAssertEqual(dto.identity?.agency?.agencyKey, "US-MA/waltham/police")
+        XCTAssertEqual(dto.identity?.agency?.needsReview, false)
+        XCTAssertEqual(dto.identity?.plate?.state, "MA")
+    }
+
+    func testOldClientsWithoutIdentityStillDecode() throws {
+        let legacy = """
+        {"capturedAt":"2026-10-13T20:00:00Z","geohash6":"drt2yz","deviceIDHash":"aa","fleetConfidence":0.9,
+         "vehicle":{"vehicleClass":"patrol","classConfidence":0.8}}
+        """
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let dto = try decoder.decode(SightingSubmissionDTO.self, from: Data(legacy.utf8))
+        XCTAssertNil(dto.identity)
+    }
+
+    func testCSVAndGeoJSONCarryTheAgency() throws {
+        let row = ExportRenderer.Row(id: UUID(), capturedAt: Date(timeIntervalSince1970: 1_700_000_000), geohash6: "drt2yz",
+                                     plateText: nil, unitNumber: "4421", fleetConfidence: 0.9,
+                                     agencyKey: "US-MA/waltham/police", agencyName: "Waltham Police Department")
+        let csv = ExportRenderer.csv([row])
+        XCTAssertTrue(csv.hasPrefix("id,captured_at,geohash6,plate_text,unit_number,fleet_confidence,agency_key,agency_name"))
+        XCTAssertTrue(csv.contains("US-MA/waltham/police,Waltham Police Department"))
+        let json = ExportRenderer.geoJSON([row])
+        let obj = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        let props = ((obj?["features"] as? [[String: Any]])?.first?["properties"]) as? [String: Any]
+        XCTAssertEqual(props?["agency_key"] as? String, "US-MA/waltham/police")
+    }
+}

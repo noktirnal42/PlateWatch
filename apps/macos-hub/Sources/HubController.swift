@@ -267,12 +267,7 @@ final class HubController: ObservableObject {
 
             var fleetHits = 0
             for vehicle in frame.vehicles {
-                let markings = SceneTextHeuristics.parse(vehicle.sceneText)
-                let confidence = gate.fleetConfidence(
-                    vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
-                    hasFleetMarkings: markings.hasFleetKeyword,
-                    knownUnitMatch: false,
-                    exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
+                let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
                 if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
                     fleetHits += 1
                     fleetHitsToday += 1
@@ -352,12 +347,7 @@ final class HubController: ObservableObject {
                 }
 
                 for vehicle in frame.vehicles {
-                    let markings = SceneTextHeuristics.parse(vehicle.sceneText)
-                    let confidence = gate.fleetConfidence(
-                        vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
-                        hasFleetMarkings: markings.hasFleetKeyword,
-                        knownUnitMatch: false,
-                        exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
+                    let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
                     if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
                         fleetHitsToday += 1
                         if let context = modelContext {
@@ -601,12 +591,7 @@ final class RTSPStreamHandler: @unchecked Sendable {
         
         var fleetHits = 0
         for vehicle in frame.vehicles {
-            let markings = SceneTextHeuristics.parse(vehicle.sceneText)
-            let confidence = gate.fleetConfidence(
-                vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
-                hasFleetMarkings: markings.hasFleetKeyword,
-                knownUnitMatch: false,
-                exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
+            let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
                 fleetHits += 1
                 if let context = modelContext {

@@ -31,6 +31,7 @@ func configure(_ app: Application) async throws {
     app.migrations.add(CreateDeviceReputations())
     app.migrations.add(AddSightingCreatedAt())
     app.migrations.add(AddAgencyBudgetURL())
+    app.migrations.add(AddSightingIdentity())
     if app.environment != .testing {
         try await app.autoMigrate()
     }

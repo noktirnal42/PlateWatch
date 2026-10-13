@@ -17,6 +17,10 @@ struct ReviewCandidate: Identifiable {
     var submission: SightingSubmissionDTO
     var summary: String
     var confidence: Double
+    var identity: VehicleIdentity?
+    /// Kept so the identity can be re-resolved when a reviewer settles an ambiguous place.
+    var vehicle: VehicleObservation
+    var markings: FleetMarkings
     var confirmed = false
 }
 
@@ -32,6 +36,9 @@ struct CaptureResult: Identifiable {
     var approvalThreshold: Double = 0.55
     var markings: [String] = []   // human-readable: "Service: POLICE", "Unit: 4421"…
     var candidates: [ReviewCandidate] = []  // plausible fleet vehicles below the auto-record bar
+    /// Everything read off the best vehicle, structured for cross-referencing
+    /// (agency, plate jurisdiction, unit, make/model) with its evidence.
+    var identity: VehicleIdentity?
     var error: String?
 
     static func failed(_ source: String, _ message: String) -> CaptureResult {
@@ -63,6 +70,7 @@ final class CaptureViewModel: ObservableObject {
     private let session: PlateCaptureSession
     private let executor: AnalysisExecutor
     private let gate = RedactionGate(config: .standard)
+    private let identityResolver = IdentityResolver()
     private let modelManager: ModelManager
     private var modelContext: ModelContext?
     private var backend: (any SyncBackend)?
@@ -220,14 +228,12 @@ final class CaptureViewModel: ObservableObject {
         var review: [(VehicleObservation, Double, FleetMarkings)] = []
         var bestConfidence = 0.0
         var bestMarkings = FleetMarkings()
+        var best: (VehicleObservation, Double, FleetMarkings)?
         for vehicle in frame.vehicles {
-            let markings = await parseMarkings(vehicle.sceneText)
-            let confidence = gate.fleetConfidence(
-                vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
-                markings: markings,
-                knownUnitMatch: false,
-                exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true })
-            if confidence >= bestConfidence { bestConfidence = confidence; bestMarkings = markings }
+            let parsed = await parseMarkings(vehicle.sceneText)
+            // One scoring entry point for every caller (PlateKit.FleetScoring).
+            let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle, markings: parsed)
+            if confidence >= bestConfidence { bestConfidence = confidence; bestMarkings = markings; best = (vehicle, confidence, markings) }
             switch gate.verdict(fleetConfidence: confidence) {
             case .persistAndSync:
                 approved.append((vehicle, confidence, markings))
@@ -264,9 +270,12 @@ final class CaptureViewModel: ObservableObject {
         let candidates = approved.isEmpty ? review.map { vehicle, confidence, markings in
             ReviewCandidate(
                 submission: makeSubmission(frame: frame, vehicle: vehicle, confidence: confidence, markings: markings),
-                summary: Self.describe(markings).joined(separator: " · ").nonEmpty
+                summary: resolveIdentity(vehicle: vehicle, markings: markings).agency?.name
+                    ?? Self.describe(markings).joined(separator: " · ").nonEmpty
                     ?? "\(vehicle.vehicleClass.rawValue.capitalized)-shaped vehicle",
-                confidence: confidence)
+                confidence: confidence,
+                identity: resolveIdentity(vehicle: vehicle, markings: markings),
+                vehicle: vehicle, markings: markings)
         } : []
         return CaptureResult(source: source,
                              plates: plates,
@@ -277,6 +286,7 @@ final class CaptureViewModel: ObservableObject {
                              approvalThreshold: gate.config.persistThreshold,
                              markings: Self.describe(bestMarkings),
                              candidates: candidates,
+                             identity: best.map { resolveIdentity(vehicle: $0.0, markings: $0.2) },
                              error: nil)
     }
 
@@ -292,7 +302,30 @@ final class CaptureViewModel: ObservableObject {
             fleetConfidence: confidence,
             plate: vehicle.plates.first?.best.map(PlateDTO.init),
             vehicle: VehicleObservationDTO(vehicle),
-            markings: FleetMarkingsDTO(markings))
+            markings: FleetMarkingsDTO(markings),
+            identity: syncIdentity(vehicle: vehicle, confidence: confidence, markings: markings))
+    }
+
+    /// The structured identity for this vehicle, using the phone's coarse location (the same ~1 km
+    /// bucket sightings already use) only to settle ambiguous place names.
+    private func resolveIdentity(vehicle: VehicleObservation, markings: FleetMarkings) -> VehicleIdentity {
+        var hint: IdentityResolver.LocationHint?
+        if let bucket = LocationProvider.shared.currentBucket(),
+           let center = Geohash.decodeCenter(bucket.geohash6) {
+            hint = .init(latitude: center.latitude, longitude: center.longitude)
+        }
+        return identityResolver.resolve(sceneText: vehicle.sceneText, plates: vehicle.plates,
+                                        vehicleClass: vehicle.vehicleClass, markings: markings,
+                                        location: hint, enhancedText: vehicle.enhancedText)
+    }
+
+    /// Identity as it may leave the device: the registration is stripped unless the sighting is
+    /// allowed to carry a plate (fleet-confirmed), exactly like `plate`.
+    private func syncIdentity(vehicle: VehicleObservation, confidence: Double, markings: FleetMarkings) -> VehicleIdentity? {
+        let identity = resolveIdentity(vehicle: vehicle, markings: markings)
+        guard !identity.isEmpty else { return nil }
+        return FleetScoring.mayCarryPlate(confidence: confidence, markings: markings, vehicle: vehicle)
+            ? identity : identity.redactingRegistration()
     }
 
     private func enqueue(_ dto: SightingSubmissionDTO, in context: ModelContext) {
@@ -304,12 +337,27 @@ final class CaptureViewModel: ObservableObject {
     /// The user vouches that a below-threshold detection really is a
     /// government vehicle. It is queued at the persist floor, which the
     /// server files as `pending` moderation (no public plate, no exact geo).
+    /// The reviewer says which place an ambiguous reading means ("Atlanta, GA"): re-resolve with that
+    /// state, recorded as a human choice in the evidence trail.
+    func chooseState(_ candidateID: UUID, _ state: String) {
+        guard var result = lastResult,
+              let index = result.candidates.firstIndex(where: { $0.id == candidateID }) else { return }
+        let c = result.candidates[index]
+        let resolved = identityResolver.resolve(sceneText: c.vehicle.sceneText, plates: c.vehicle.plates,
+                                                vehicleClass: c.vehicle.vehicleClass, markings: c.markings,
+                                                enhancedText: c.vehicle.enhancedText, userState: state)
+        result.candidates[index].identity = resolved
+        lastResult = result
+    }
+
     func confirm(_ candidateID: UUID) {
         guard var result = lastResult,
               let index = result.candidates.firstIndex(where: { $0.id == candidateID }),
               !result.candidates[index].confirmed, let modelContext else { return }
         var dto = result.candidates[index].submission
         dto.fleetConfidence = max(dto.fleetConfidence, gate.config.persistThreshold)
+        // A confirmed review item is below the plate bar, so its identity carries no registration.
+        dto.identity = result.candidates[index].identity?.redactingRegistration()
         enqueue(dto, in: modelContext)
         try? modelContext.save()
         result.candidates[index].confirmed = true
@@ -381,15 +429,18 @@ final class CaptureViewModel: ObservableObject {
     /// LLM runs on-device (Apple Intelligence); pre-iOS 26 falls back to the
     /// regex heuristics without a network round-trip either.
     private func parseMarkings(_ observations: [SceneTextObservation]) async -> FleetMarkings {
+        let heuristic = SceneTextHeuristics.parse(observations)
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
             let lines = observations.map(\.text)
-            if let parsed = await FleetMarkingsLLMParser.parse(lines) {
-                return parsed
+            if let claim = await FleetMarkingsLLMParser.parse(lines) {
+                // The LLM can invent fields from garbled text ("Hybridand" as a service): its output is a
+                // claim, kept only where the OCR text supports it.
+                return SceneTextHeuristics.grounded(claim, in: observations, fallback: heuristic)
             }
         }
         #endif
-        return SceneTextHeuristics.parse(observations)
+        return heuristic
     }
 }
 

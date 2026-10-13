@@ -48,6 +48,7 @@ private struct SightingRow: View {
     }
 
     private var title: String {
+        if let name = submission?.identity?.agency?.name, submission?.identity?.agency?.needsReview == false { return name }
         let m = submission?.markings
         let parts = [m?.serviceClassText?.capitalized,
                      m?.unitNumber.map { "Unit \($0)" }].compactMap { $0 }
