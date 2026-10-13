@@ -447,3 +447,18 @@ cd0584d Fix: persist unitNumber on sightings (QA catch)
 - [ ] CloudKit import/deploy (owner account step) + moderator tool = pilot blockers.
 
 **Rules of engagement:** run `git status` before editing — expect parallel agents; keep diffs inside your workstream (docs/PROJECTS.md); commit small, push often; never hand-roll gate scoring; don't tick ROADMAP boxes you didn't verify.
+
+**Addendum 2026-10-13 late — word plates (Minnesota 'POLICE'):**
+- `Plate.officialRegistration` now handles word-only registrations (MN plates reading
+  just "POLICE" over the "10,000 Lakes" slogan): accepted inside a trusted plate-rectangle
+  crop (`allowWordRegistration: true`) or when a state name anchors the line; leftover may
+  not contain unknown words, so a "WALTHAM POLICE" tailgate band stays scene text (that
+  false plate read was caught and guarded). "OFFICIAL" is a design marker, never a
+  registration. Crop path now judges per-line before joining. Eval: recall 28/46 (61%),
+  precision 28/28, plate reads 18/62. Minneapolis user photo: `POLICE(US-MN) @ 1.00` on Mac.
+- **On-device gap (documented, not fixable until §4):** without the CoreML plate detector,
+  the Vision-rectangle crop OCR on device yields homoglyph-mangled reads ('ЬОГICE') for the
+  MN plate, and the fast path correctly refuses bare 'POLICE' (door-decal guard) — so the
+  word-plate is not read on-device. Markings still approve (persistAndSync @ 0.57). The
+  detector-model release (NEXT-STEPS §4) closes this; the crop path already consumes
+  detector boxes with word-registration allowed.
