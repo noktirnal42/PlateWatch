@@ -1,90 +1,131 @@
-# MODEL-TRAINING.md — datasets (USA) and Apple Create ML training path
+# MODEL-TRAINING.md — datasets (USA) and the Apple Create ML (GUI) training path
 
 Companion to NEXT-STEPS §3 (plate reading), §5 (fleet recall), ROADMAP M2.
-Scope: **USA vehicles and plates**. Every dataset candidate lists its license —
-AGENTS.md guardrail 5 requires recording it in `models/registry.json` before
-weights or derived models are committed/published. **Do not commit weights.**
+Scope: **USA vehicles and plates**. Every dataset lists its licence — AGENTS.md
+guardrail 5 requires recording it in `models/registry.json` before a derived
+model is committed or published. **Do not commit weights or training images.**
 
-## 1. Dataset shortlist (researched 2026-10-13)
+> **Revised 2026-10-13 (review pass).** First draft by GLM 5.3; claims were
+> re-verified against the dataset cards / Apple material and corrected — see
+> [SPEC-REVIEW.md](SPEC-REVIEW.md) for what changed and why. Anything still
+> unverified is marked **⚠ unverified**.
 
-### Recommended (license-compatible)
+## 0. The two rules that protect the numbers
 
-| Dataset | What | Size | License | Use for |
-|---|---|---|---|---|
-| **Open Images V7** — class "Vehicle registration plate" | Plate + vehicle bboxes on Flickr photos, US-heavy | ~15k plate images | Images **CC BY 2.0**, annotations CC BY 4.0 | Plate/vehicle **detector** training; also source of make/model variety |
-| **keremberke/license-plate-object-detection** (HF, mirrors Roboflow "vehicle-registration-plates-trudk") | Single-class plate detection | 8.8k (6.2k train) | CC BY 4.0 (per Roboflow) | Detector training; multi-country but plates are plates |
-| **justjuu/license-plate-detection** (HF, cleaned Roboflow export) | Single-class plate detection, traffic scenes | ~10k | CC BY 4.0 | Detector training |
-| **mabo7237/license-plates-700k** (HF) | Massive plate crop corpus | 700k | MIT | Plate **OCR** pretraining; verify provenance (likely PlatesMania-style scraping — spot-check images before use) |
+1. **Eval images never train.** `eval/corpus/` is the *test set* (see
+   EVALUATION.md). Training on it would make every reported accuracy meaningless.
+   Train from a **separate** crawl (`training/…`, gitignored) and keep a filename/hash
+   blocklist of every eval image so the two can never overlap.
+2. **Only train on licences we can honour.** CC0 / public domain / CC BY (attribution
+   file shipped with the model) are fine. CC BY-**SA** (share-alike) is *used for eval only*
+   unless the owner decides a model trained on SA images is acceptable. **NC / ND are never
+   used** (the project is AGPL and publishes derived models).
 
-### Excluded (recorded so nobody re-evaluates them)
+## 1. What Create ML can and cannot train
 
-| Dataset | Why excluded |
+| Task | Create ML template | Notes |
+|---|---|---|
+| Plate **detector** (find plates in a frame) | **Object Detection** | Needs boxes (annotation JSON). |
+| **Fleet class** (police / fire / EMS / transit / public / civilian) | **Image Classification** | Needs *hundreds* of images per class — see §3. |
+| **Plate design / state** of a cropped plate | Image Classification | Crops from the plate detector. |
+| Vehicle make/model, colour | Image Classification | Train on vehicle crops, not scenes. |
+| **Plate OCR** (reading the characters) | ❌ **none** | Create ML has no OCR/sequence template. OCR stays on Apple Vision (+ our plausibility rules) until a CLI-trained model (PyTorch → coremltools) is justified. A "700k plates" corpus therefore cannot be used through the GUI. |
+
+## 2. Dataset shortlist (verified 2026-10-13)
+
+### Usable
+
+| Dataset | What | Size | Licence | Use for | Verified notes |
+|---|---|---|---|---|---|
+| **Open Images V7** — class *Vehicle registration plate* (`/m/01jfm_`) | Plate boxes on Flickr photos | **⚠ unverified** count (draft said ~15k) | Annotations **CC BY 4.0**; images **CC BY 2.0 per-image** | Plate detector; also classes *Ambulance*, *Taxi*, *Van*, *Bus*, *Truck*, *Car* | Class + IDs confirmed in `oidv7-class-descriptions-boxable.csv`. Google states it does **not** guarantee each image's licence — check per image. Global, **⚠ "US-heavy" unverified**. |
+| **keremberke/license-plate-object-detection** (Hugging Face) | Single class `license_plate` | **8,823** images (6,176 / 1,765 / 882) | **CC BY 4.0** | Plate detector | COCO format. Re-export of the Roboflow Universe set *"Vehicle Registration Plates Dataset"* (Augmented Startups); **region and original image provenance not stated**. |
+| justjuu/license-plate-detection (Hugging Face) | — | **the same 8,823 images** | CC BY 4.0 | — | **Not a second dataset:** the card calls it "a cleaned and simplified version of a Roboflow-exported COCO dataset" with the same 8,823 rows / split sizes. Use one of the two, not both. |
+
+### Do not use (recorded so nobody re-evaluates)
+
+| Dataset | Why |
 |---|---|
-| UniDataPro/united-states-license-plate-dataset (73k US plates, OCR) | **CC BY-NC-ND**: non-commercial + no-derivatives — incompatible with AGPL app + publishing derived models; also paid "get the data" |
-| UniDataPro/license-plate-detection (86 countries) | Same CC BY-NC-ND |
-| CCPD (China), UFPR-ALPR (Brazil), AOLP (Taiwan), persian/taiwan/algerian sets | Out of USA scope |
-| Stanford Cars (make/model) | Research-only license; consider Open Images "car" crops + our own labeled corpus instead |
+| **mabo7237/license-plates-700k** (MIT-tagged) | The draft listed it as "recommended". Verified: card is **empty**, viewer errors, 20 GB, "Duplicated from guica/license-plates-700k", **no provenance**. An MIT tag on an unexplained scrape proves nothing — plate scrapes (e.g. PlatesMania-style sites) are rarely redistributable. Excluded until provenance is documented. |
+| UniDataPro/united-states-license-plate-dataset | `cc-by-nc-nd-4.0`; the free repo is a **5-row, 1 MB preview** of a paid 73k set. NC + ND is incompatible with an AGPL app that publishes derived models. |
+| UniDataPro/license-plate-detection (86 countries), UniqueData/license_plates | Same NC-ND licence / paid. |
+| CCPD (China), UFPR-ALPR (Brazil), AOLP / TLPD (Taiwan), Persian/Algerian sets | Out of USA scope. |
+| Stanford Cars, CompCars, VMMRdb | Research-only / unclear licence — not usable for a published model. |
 
-### For make/model/color (user goal)
+### The data we actually need does not exist as a ready download
+Every plate dataset above is **plates only**. Nothing found gives US **police / fire / EMS / transit /
+public-works vehicles**, door lettering, or plate state/design. For those the realistic sources are:
 
-- No recordable-license US make/model dataset found yet — decision pending in
-  `docs/DECISIONS.md` (M2 note). Practical path: **Open Images vehicle crops**
-  (CC BY 2.0) hand-labeled in batches (contact-sheet curation like
-  `eval/fetch_corpus.py`), or license-review of Stanford Cars for internal
-  eval-only use (never published).
-- **Color**: train from our own corpus — color labels are cheap to add by eye
-  and the corpus is fleet-scoped (matching the product). No external dataset
-  required.
+1. **Wikimedia Commons category crawl** (extend `eval/fetch_corpus.py` with
+   `generator=categorymembers` over e.g. *Police vehicles in the United States by state*, *Fire
+   engines of the United States*, *Ambulances in the United States*, *School buses in the United
+   States*, *Postal vehicles of the United States*) — hundreds of images per class, licence recorded per
+   file, filtered to **CC0 / PD / CC BY** for training.
+2. Open Images *Ambulance / Taxi / Bus / Truck / Van / Car* crops (CC BY 2.0 per image).
+3. The owner's own photos (the Waltham photo is a good example — labelled, but **never** shared
+   unless the owner says so).
 
-## 2. Create ML GUI path (user preference: no heavy CLI)
+## 3. How much data is enough (and why the current corpus is not)
 
-Apple's **Create ML app** (Xcode → Open Developer Tool → Create ML) trains
-CoreML models entirely in the GUI:
+| Template | Minimum to start | To get something trustworthy |
+|---|---|---|
+| Object Detection — *Transfer Learning* | dozens of images per class (WWDC: 30+/class, balanced) | a few hundred boxes |
+| Object Detection — *Full Network* | Apple suggests **> 200 boxes per class** | thousands (the 8.8k plate set is fine) |
+| Image Classification | ~10 images/class technically trains | **100–300+ per class, balanced** |
 
-### Plate detector (Object Detection project)
-1. Prepare a folder of images + a Create ML JSON annotation file
-   (`labels.json`): `{"image":"file.jpg","annotations":[{"label":"plate",
-   "coordinates":{"x":…,"y":…,"width":…,"height":…}}]}` — coordinates are the
-   bbox **center** in pixels, normalized 0–1 × image size.
-2. Split train/validation folders (~90/10).
-3. Create ML: `File → New → Object Detection`, drag the two folders in.
-4. Options: start from **Full Network** transfer-learning
-   (YOLOv2-based); augmentation on (crop, exposure, blur) helps plate
-   robustness; iterations 5k–20k.
-5. Watch live Precision/Recall per class in the **Evaluation** tab; drag test
-   images into **Preview** to eyeball misses.
-6. `Export` → `.mlpackage` → drop in `models/cache/` → run the eval harness
-   (`EvalHarness eval --models models/cache`) → if better than the YOLOv8n
-   baseline (15/62 plate reads today), update `models/registry.json`
-   (license field = "Trained in Create ML on <dataset>, license <…>").
+`eval/corpus/` has 5–13 images per fleet class — fine as a test set, **hopeless as training data**.
+That is why §2's Commons crawl comes first.
 
-### Fleet classifier (Image Classification project) — recall lift (NEXT-STEPS §5)
-1. Folders per class: `police/`, `fire/`, `ems/`, `transit/`, `public/`,
-   `civilian/` — source from `eval/corpus/` (licensed) grown via
-   `eval/fetch_corpus.py` and hand-curated.
-2. Create ML: `New → Image Classification`, drag folders, train (augmentations
-   default), check the confusion matrix in the Evaluation tab.
-3. Export → wire as a `VehicleCueClassifier` replacement/second opinion —
-   PlateKit's cue plumbing accepts any labels mapped to `VehicleClass`.
-4. **Guardrail (NEXT-STEPS §5):** never lower the 0.55 automatic threshold to
-   gain recall — add evidence; precision must stay 100 % with 0 civilian FP.
+## 4. Create ML GUI walkthrough (no heavy CLI)
 
-### Make/model (Image Classification) and color (Image Classification)
-Same GUI flow; classes = make/model strings or color names. Train on cropped
-vehicle boxes (the pipeline already produces them) so the classifier sees
-vehicles, not scenes.
+Open **Create ML**: *Xcode → Open Developer Tool → Create ML* (or the standalone app).
 
-## 3. One-time CLI step (agent can do)
+### 4a. Plate detector — *Object Detection* project
+1. **Prepare data** (one agent/CLI step, `scripts/coco_to_createml.py`): converts the COCO export
+   to Create ML's format. The JSON is an array of `{ "image": <file>, "annotations": [ { "label":
+   "plate", "coordinates": { "x", "y", "width", "height" } } ] }` where **x, y are the box *centre*
+   and all four values are in *pixels*** (not normalised, not top-left). Put images and the JSON in
+   the same folder; make a second folder for validation (~10 %).
+   **⚠ Key names:** Apple's WWDC slides use `image` / `annotations`; an Apple DTS forum answer says
+   `imagefilename` / `annotation`. The file name Create ML expects is `annotations.json` (the draft's
+   `labels.json` is probably wrong). **Verify:** drag the folder into a new project — the app
+   reports the number of images/annotations it parsed, or an error. Fix the keys if needed.
+2. *File → New Project → Object Detection*, drag the training and validation folders in.
+3. **Algorithm — two different options, not one:**
+   *Transfer Learning* (reuses an OS backbone, trains only the head; ~5× smaller model; best for
+   small data) vs *Full Network* (YOLOv2-based, trains everything; Apple suggests >200 boxes/class;
+   the default). For the 8.8k-image plate set start with **Full Network**; for a few hundred boxes
+   use **Transfer Learning**. Turn on augmentation (exposure, blur, crop).
+4. Train; read **Precision/Recall** on the Evaluation tab; drag a few unseen photos (including the
+   Waltham photo) onto **Preview** to see misses.
+5. **Export** the `.mlmodel`/`.mlpackage` → `models/cache/` → run the harness
+   (`EvalHarness eval --models models/cache --tasks plate-detection`). Keep it only if it beats the
+   YOLOv8n baseline on the **same** corpus (plate-read count today: 15/62 images; exact-match scoring
+   is being added — NEXT-STEPS §3).
+6. Record the licence in `models/registry.json`: `"Trained in Create ML on <dataset> (<licence>)"`
+   and ship the CC BY attribution file with the model.
 
-Converting Open Images CSV annotations → the Create ML `labels.json` format
-is a small script (`scripts/convert_openimages_to_createml.py`) — the only
-CLI involvement; training itself stays in the GUI. TODO before first training
-run.
+### 4b. Fleet classifier — *Image Classification* project
+1. Folders `police/ fire/ ems/ transit/ public/ civilian/` from the **training** crawl (not
+   `eval/corpus/`). Aim for ≥ 150 per class; include look-alikes (taxis, tow trucks, delivery vans,
+   private security cars) in `civilian/` — they are what produces false positives.
+2. *New Project → Image Classification*, drag the class folders in, train with default augmentation,
+   read the **confusion matrix**.
+3. Wire it as a *second opinion* alongside `VehicleCueClassifier` (labels map to `VehicleClass`).
+   **Guardrail:** it only ever contributes evidence (≤ 0.45); it never lowers the 0.55 bar.
+   Precision must stay 100 % with 0 civilian/commercial false positives on the eval corpus.
 
-## 4. After training (publishing)
+### 4c. Make/model, colour, plate design
+Same GUI flow on **cropped** vehicles/plates. Colour labels are cheap to add by eye on our own
+images; make/model has no licence-clean US dataset yet (DECISIONS.md M2 note).
 
-Per NEXT-STEPS §4: AppleArchive each `.mlpackage` (`aa archive … -a lzfse`),
-sha256 the archive, update `models/registry.json` (`license` field mandatory),
-`gh release create models-v0.1.0 *.aar` (owner runs), and surface model state
-in About. The harness decides regression-or-not — never ship a model that
-scores worse than the current one on the same corpus.
+## 5. CLI steps an agent does so you don't have to
+- `scripts/coco_to_createml.py` (COCO → Create ML JSON; pure Python, tested on a sample).
+- Commons category crawler → `training/<class>/` with a manifest of source, licence and author.
+- The overlap check that fails if any training file is also in `eval/manifest.json`.
+Training itself stays in the GUI.
+
+## 6. After training (publishing)
+Per NEXT-STEPS §4: Apple Archive each model (`aa archive … -a lzfse`), sha256 the archive, update
+`models/registry.json` (licence mandatory), publish a release (the owner runs `gh release create`),
+and surface the model in About. Never ship a model that scores worse than the current one on the
+same corpus.

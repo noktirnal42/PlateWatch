@@ -10,7 +10,7 @@ Status legend: ✅ working · ⚠️ code exists but not working · ⬜ planned
 
 | # | Source | Where | Status |
 |---|--------|-------|--------|
-| 1 | iPhone live camera (`AVCaptureSession`) | `apps/ios` + `CaptureKit` | ✅ (orientation/exposure done; handheld field test pending, NEXT-STEPS §2) |
+| 1 | iPhone live camera (`AVCaptureSession`) | `apps/ios` + `CaptureKit` | ⚠️ implemented and unit-tested; **never run on a live feed** (iPhone Mirroring cannot expose the camera) — handheld field test pending, NEXT-STEPS §2 |
 | 2 | Photo / video import (EXIF-correct) | `apps/ios` | ✅ |
 | 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ✅ (Reolink/Amcrest-class cameras, on-prem, no cloud) |
 | 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ✅ (filesystem-watch core shipped first) |
@@ -26,7 +26,7 @@ does not care where the frame came from.
 
 ---
 
-## Live iPhone camera (shipped)
+## Live iPhone camera (implemented, not field-verified)
 
 `CaptureKit` runs `AVCaptureSession` with a `RotationCoordinator`-driven
 orientation, capped shutter for moving traffic, and a rate-limited
@@ -38,7 +38,8 @@ testing via sources 3–4.
 
 - v1: user picks a folder; cameras (or scripts) FTP/drop JPEGs in; a
   `DispatchSourceFileSystemObject` watch feeds `FileFrameSource`.
-- v2: Hub advertises `_platewatch._tcp` (Bonjour) and accepts POSTed frames on
+- v2: Hub advertises `_platewatch-snapshot._tcp` (Bonjour; see
+  `HubController.advertiseBonjour`) and accepts POSTed frames on
   port 8088 — phones and cameras that can push snapshots skip the FTP hop.
 - The operator sets `homeGeohash6` once per fixed installation (the geohash of
   the *camera*, which is stationary — more accurate than phone GPS).
@@ -98,9 +99,18 @@ gate parameter and `officialPlate:` evidence — rework must parse
 
 ## Public traffic cameras (M6 — planned)
 
-State DOTs and municipalities publish **public** camera feeds: 511 systems
-(Mass511, NY 511, WSDOT, Caltrans Districts…), city traffic-operation portals,
-and port/transit authority cams. Formats in the wild:
+State DOTs and municipalities publish camera feeds, but **access varies and several
+need credentials** (verified 2026-10-13):
+
+| Source | Access |
+|---|---|
+| 511NY | API **requires a registered account + developer key** and an access agreement; throttled (≈10 calls / 60 s) → out of scope until the owner opts in |
+| WSDOT | Traveler Information API requires a free **AccessCode** → same |
+| Caltrans | CCTV *dataset* (locations/status) is open via the California open-data/ArcGIS service; it lists cameras, **not live frames** — each camera's image URL must be checked separately |
+| Mass511 and others | ⚠ unverified — read each agency's terms before listing |
+
+Starter set rule: **keyless, published-for-public-use image URLs first**; keyed feeds only
+with the owner's explicit opt-in and the key kept out of the repo. Formats in the wild:
 
 - **Periodic JPEG snapshot URL** (most common; often an AXIS
   `/axis-cgi/jpg/image.cgi` style endpoint refreshed every 1–5 s).

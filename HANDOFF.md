@@ -427,7 +427,7 @@ cd0584d Fix: persist unitNumber on sightings (QA catch)
 
 ## 999. Continuation-agent checklist (2026-10-13, for the next agent — copy freely)
 
-**Where I stopped / what is committed** (branch `fix/official-plates`, pushed; PRs need `gh` — not installed, owner creates them):
+**Where I stopped / what is committed** (branch `fix/official-plates`, pushed; `gh` **is** installed and authenticated on this machine — open PRs with `gh pr create` (PR #5 is the docs PR)):
 
 - [x] Claude's plate-detector wiring finished + **vehicle-detector fusion regression fixed** (`PlateAnalysisPipeline`: fused vehicles keep text-inferred fleet class; frame cue folded like baseline; detector-missed pseudo-vehicles unioned back). Eval: recall 27/46 (59%), precision 27/27, plate reads 15/62 (was 10/62). Commit `bbf4362`.
 - [x] macOS Hub **compiles again**: stale `RedactionGate` call sites now go through `PlateKit.FleetScoring.vehicleGateScore` — the ONE scoring entry point; never hand-roll `fleetConfidence` calls.
@@ -447,3 +447,14 @@ cd0584d Fix: persist unitNumber on sightings (QA catch)
 - [ ] CloudKit import/deploy (owner account step) + moderator tool = pilot blockers.
 
 **Rules of engagement:** run `git status` before editing — expect parallel agents; keep diffs inside your workstream (docs/PROJECTS.md); commit small, push often; never hand-roll gate scoring; don't tick ROADMAP boxes you didn't verify.
+
+
+### 999b. Spec review (Claude, 2026-10-13 evening) — read this before trusting §999
+
+A line-by-line review of the new docs is in **[`docs/SPEC-REVIEW.md`](docs/SPEC-REVIEW.md)**.
+Corrections applied: MODEL-TRAINING (duplicate dataset, unverifiable 700k set, Create ML format/algorithm/OCR facts,
+eval-leakage rule), ACCOUNTABILITY-DATA (NDI is **not** public, PACER/RECAP, photo copyright, **location firewall**),
+CAMERA-SOURCES (live-camera status, Bonjour name, 511 key requirements), this file (`gh`).
+**The low-contrast OCR TODO above is implemented** (branch `feat/vehicle-identity`) — but not the way it was specced:
+measured results, structural gating (`VehicleObservation.enhancedText`, naming only) and the new agency-identity
+inference (`IdentityResolver`) are described in SPEC-REVIEW §1 and docs/EVALUATION.md.
