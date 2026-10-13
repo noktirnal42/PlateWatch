@@ -40,8 +40,13 @@ CI matrix source of truth: `.github/workflows/ci.yml`.
 - Swift 6 strict concurrency; `Sendable` value types preferred over classes.
 - SwiftUI for all UI; SwiftData only inside `PlateSync` local cache.
 - CoreML models are referenced by registry name — never hardcode file paths.
-- Package dependency direction: `PlateKit ← CaptureKit/VehicleML ← PlateSync`.
-  No cycles. Apps depend on packages, packages never depend on apps.
+- Package dependency direction: `PlateKit ← CaptureKit/VehicleML ← PlateSync`,
+  `PlateKit ← AccountabilityKit`, `PlateKit ← FeedIngest`. No cycles. Apps
+  depend on packages, packages never depend on apps.
+- **Workstream-scoped work.** `docs/PROJECTS.md` is the dashboard: load ONE
+  workstream section (its packages, docs, test command) per session and keep
+  diffs inside it. Cross-cutting PlateKit/DTO changes = WS6; run every package's
+  tests. Update your workstream's Status line at the end of the session.
 - Server DTOs in `server/Sources/App/DTO` must stay field-compatible with
   `PlateKit`'s `*DTO` types (they are the cross-platform protocol).
 - Documentation lives in `docs/`; update the relevant doc when you change

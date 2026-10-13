@@ -1,15 +1,23 @@
 # LEGAL-ETHICS.md — guardrails that keep this lawful and worthwhile
 
-This project watches power, not people. The rules below are encoded in the
-data layer (`RedactionGate`, `SourceCitation` requirements, moderation states)
-and are conditions for contribution, not vibes.
+This project watches **the powerful** — public institutions and the officials
+who run them — and it deliberately does not watch private individuals. The
+rules below are encoded in the data layer (`RedactionGate`, `SourceCitation`
+requirements, moderation states) and are conditions for contribution, not
+vibes.
 
 ## Mission scope
 
 The platform documents **publicly funded vehicles and agencies** — police,
 fire, EMS, public works, transit, school districts, federal fleets — because
 taxpayers own them and accountability for public assets is a legitimate civic
-function. It is **not** a general-purpose people-tracking system.
+function. It is **not** a general-purpose people-tracking system. Officials
+acting in their public capacity are not shielded from public scrutiny:
+photographing and recording them on duty is protected activity (*Glik v.
+Cunniffe*; *Fields v. City of Philadelphia*), and aggregating what public
+records and public-interest publishers already say, with citations, is the
+platform's purpose. See `docs/ACCOUNTABILITY-DATA.md` (M7) for the people &
+records program and its guardrails.
 
 ## Rule 1 — Fleet-focused ingestion (enforced in code)
 
@@ -69,6 +77,29 @@ undercover-adjacent units revealed only by speculation. These are:
 - The database documents assets and assignments **as institutions**, and
   commentary features are deliberately absent — this is a records tool, not
   a forum.
+
+## Rule 6 — Public officials in public capacity (people & records program)
+
+Public officials are legitimate subjects of public scrutiny; private
+individuals are not subjects at all. The M7 program
+(`docs/ACCOUNTABILITY-DATA.md`) may collect and publish, **with citations**:
+
+- official rosters/assignments, official bios and photos, Brady/Giglio
+  releases, decertification registers, lawsuit dockets, and the work of
+  public-interest publishers — always attributed to the original source;
+
+and may never:
+
+- profile or track a **private individual** (civilian plates, bystanders,
+  family members);
+- publish home addresses, family details, or off-duty private life;
+- run **biometric matching** (no face recognition against sightings or any
+  image collection — BIPA/Tex./Wash. statutes make it independently unlawful);
+- assert as fact what a docket only alleges — records are stored verbatim
+  with status and source.
+
+Auto-inferred person↔vehicle links are labeled as inference and never
+auto-publish. Removal/appeal follows the SafetyHold process.
 
 ## Why publish this policy
 

@@ -98,3 +98,39 @@ detections (and plates) next to public data would have broken LEGAL-ETHICS Rule 
 Images come from Wikimedia Commons under CC0/PD/CC-BY/CC-BY-SA, are kept out of git (some show
 civilian plates), and only `eval/manifest.json` (source, license, author, labels) is committed.
 We do **not** write fabricated sightings from these photos into any shared database.
+## 2026-10-13 (later) — watch the powerful: person-records program (M7) adopted
+
+**Decision.** The mission statement changes from "watches power, not people"
+to "**watches the powerful**": public officials in their public capacity are
+legitimate subjects (First Amendment photography in public, public-records
+laws, Brady/Giglio disclosure practice), and aggregating already-published
+public-interest reporting with citations is an explicit product goal
+(`docs/ACCOUNTABILITY-DATA.md`). Private individuals remain out of scope
+absolutely; the Rule-6 guardrails (no home/family data, no biometric matching
+per BIPA/Tex./Wash., verbatim docket records, labeled inference, takedown)
+are conditions for that program.
+
+**Commits us to.** `AccountabilityKit` types with citation enforcement before
+any collection code; moderator confirmation before any person-linked record
+publishes; ethics review by the owner before ingest begins.
+
+## 2026-10-13 (later) — monorepo + workstreams (PROJECTS.md)
+
+**Decision.** Keep the single repository; organize work as six workstreams
+(`docs/PROJECTS.md`) with per-workstream packages (`AccountabilityKit`,
+`FeedIngest` joining the existing five), docs, and test commands. No
+multi-repo split — versioning/CI friction outweighs the benefit at this
+contributor count.
+
+**Commits us to.** Dependency direction `PlateKit ← AccountabilityKit` and
+`PlateKit ← FeedIngest`; workstream-scoped diffs; the shared
+`PlateKit.FleetScoring` entry point replacing per-app scoring calls.
+
+## 2026-10-13 (later) — name stays, scope retitled
+
+**Decision.** Keep the name **PlateWatch** (repo, `org.platewatch.*` bundle
+IDs, `iCloud.org.platewatch.platewatch` container, package names stay); all
+user-facing copy retitles the scope: "open accountability infrastructure for
+publicly funded fleets and the officials who run them." Renaming technical
+identifiers this early would break CloudKit, signing, and URLs for cosmetic
+gain. Revisit only if the umbrella ever outgrows vehicles+officials.

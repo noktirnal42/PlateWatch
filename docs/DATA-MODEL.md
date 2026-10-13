@@ -94,3 +94,36 @@ the public record; we tombstone with moderationState).
 - `Sighting(plateText, capturedAt)` composite; `Sighting` geohash-6 column
   for ~1 km buckets; `Vehicle(primaryPlateText)` unique-ish (collisions
   allowed across regions); full-text on `Agency.name`.
+
+## Planned entities (M6/M7 — designed, not implemented)
+
+These land with `AccountabilityKit`/`FeedIngest` (see
+[CAMERA-SOURCES.md](CAMERA-SOURCES.md),
+[ACCOUNTABILITY-DATA.md](ACCOUNTABILITY-DATA.md)). Listed here so schemas,
+DTOs and the server mirror are designed against one model — none of these
+exist in code yet.
+
+### PublicFeedSource (M6)
+A published public camera feed (traffic cam, port/transit cam). Fields: name,
+URL, kind (`snapshotJPEG | hls | rtsp`), `refreshInterval`, static
+`geohash6` (the camera's own location — fixed installations), and one required
+`SourceCitation` for the feed listing. Frames from a feed go through the same
+`RedactionGate` as handheld captures; the feed citation rides on every
+derived record.
+
+### OfficialProfile (M7)
+A public official/employee **in their public capacity**. Fields: name, role,
+agency (reference), public photo URL + retrieval date, `SourceCitation`s
+(≥ 1 mandatory). No home address, no personal contact data, no biometric
+templates — photos are for human verification only (LEGAL-ETHICS Rule 6).
+
+### IncidentRecord (M7)
+A cited public record about an official or agency: kind
+(`brady | decertification | lawsuit | news | report`), verbatim reference
+(docket/report identifier), status, publisher, citations. Allegation ≠ fact:
+content is stored as released, never summarized beyond the filing.
+
+### Person linking (M7)
+`UnitAssignment` (existing) gains the person reference + an `inference`
+confidence. Auto-inferred links never auto-publish; publication requires a
+moderator confirmation that itself carries a citation.

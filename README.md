@@ -1,6 +1,8 @@
 # PlateWatch
 
-**Open-source Automatic License Plate Recognition for public accountability.**
+**Open accountability infrastructure: on-device recognition of publicly funded
+fleets, plus cited public records (rosters, FOIA releases, Brady lists, court
+dockets) that connect vehicles to the officials who run them.**
 Turning the tables on mass surveillance: a community platform for identifying,
 cataloging, and sharing information about taxpayer-funded vehicles — police,
 fire, public works, transit, and government fleets — using commodity cameras
@@ -104,6 +106,7 @@ open apps/ios/PlateWatch.xcodeproj
 - [docs/LEGAL-ETHICS.md](docs/LEGAL-ETHICS.md) — the guardrails that keep this lawful and safe
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones and feature backlog
 - [docs/QA-REPORT.md](docs/QA-REPORT.md) — latest QA findings, ranked by severity, with resolution status
+- [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) — what is not done yet and how to do it (start here)
 - [docs/EVALUATION.md](docs/EVALUATION.md) — real-world accuracy on a licensed photo corpus
 - [cloudkit/README.md](cloudkit/README.md) — CloudKit schema and one-time setup
 - [docs/DECISIONS.md](docs/DECISIONS.md) — decision log for model and design choices
