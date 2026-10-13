@@ -67,6 +67,8 @@ public struct RedactionGate: Sendable {
             if let service = markings.serviceClassText, let agency = markings.agencyText,
                agency.uppercased().trimmingCharacters(in: .whitespaces) != service {
                 score += 0.15
+                // …and it names an owner ("CITY OF…", "…DEPARTMENT", "STATE…").
+                if markings.agencyIsOwnerQualified { score += 0.10 }
             }
             if markings.unitNumber != nil { score += 0.10 }
         }

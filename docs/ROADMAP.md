@@ -9,15 +9,20 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 > **M-Alpha** below for the work that comes first.
 
 ## M-Alpha — Make it work end to end (current focus)
-Source: [QA-REPORT.md](QA-REPORT.md).
-- ⬜ Camera frame orientation + overlay mapping (P0-1) — plates read in portrait/landscape
-- ⬜ Graceful camera/permission/launch states; defer notification prompt (P1-1…P1-3)
-- ⬜ Publish `models-v0.1.0` release; reconcile `models/registry.json` (P0-3)
-- ⬜ Stand up CloudKit: schema export, Development→Production deploy, security roles (P0-5)
-- ⬜ App icon, accent colour, launch screen, redesigned tabs (P1-4, P1-5)
-- ⬜ Manual "record this vehicle" path + fleet classifier so sightings are possible without door text (P0-2, P0-4)
-- ⬜ Real map for Explore wired to `/v1/aggregates/heatmap` (P1-6)
+Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
+- ✅ Camera frame orientation + overlay mapping; EXIF-correct photo import (P0-1)
+- ✅ Graceful camera / permission / launch states; permission prompts asked in context (P1-1…P1-3)
+- ✅ Fleet detection without CoreML models: door-text vehicles, graded markings score, Apple Vision classifier cue (P0-2, P0-4) — **57 % automatic recall at 100 % precision on real photos, 76 % with human confirmation**
+- ✅ Human-in-the-loop "confirm this is a government vehicle" → moderation queue
+- ✅ App icon, accent colour, launch screen, onboarding, About, branded empty states (P1-3…P1-5); painted icon pending image-generator access
+- ✅ Real map for Explore; aggregates work on CloudKit via client-side k-anonymity (P1-6)
+- ✅ Evaluation corpus + harness (`eval/`), verified on a physical iPhone
+- ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
+- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; **needs the Apple-account step** (import schema, deploy to production) and a moderator publish tool (P0-5)
+- ⬜ Publish a verified `models-v0.1.0` release + archive extraction in `ModelManager` (`.mlpackage` is a directory) (P0-3)
+- ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
+- ⬜ Full visual redesign of Sightings/Watchlist/Capture (current screens are functional + branded, not final)
 
 ## M0 — Foundation (this bootstrap)
 - ✅ Monorepo + package architecture (PlateKit, CaptureKit, VehicleML, PlateSync)
@@ -64,7 +69,7 @@ Source: [QA-REPORT.md](QA-REPORT.md).
 - ◐ "Agency report card": server-rendered report page implemented (fleet size, 30-day sightings, budget link); no iOS surface yet
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
 - ✅ Public feed is fleet-confirmed only (plates not persisted for unconfirmed sightings)
-- ◐ iOS UI pass: plate-style badges, privacy chip, Open Settings and sync pills shipped; app icon, branding and tab redesign still open (QA P1-4/P1-5)
+- ✅ iOS UI pass: plate-style badges, privacy chip, Open Settings, sync pills, app icon, launch screen, onboarding, About, branded empty states, Explore map (full redesign still open — see M-Alpha)
 - ◐ CarPlay passive capture mode: scene delegate written; needs the Apple CarPlay entitlement and on-device verification (QA P1-8)
 
 ## M5 — Beyond Apple

@@ -68,6 +68,8 @@ final class CaptureViewModel: ObservableObject {
     private var backend: (any SyncBackend)?
     private let contextBox = AnalysisContextBox()
     private var lastPacket: FramePacket?
+    private var lastEscalation = Date.distantPast
+    private var escalating = false
 
     var captureSession: AVCaptureSession { session.previewSession }
 
@@ -330,6 +332,9 @@ final class CaptureViewModel: ObservableObject {
         latestFrame = frame
 
         let result = await evaluateAndPersist(frame: frame, source: "live")
+        if result.fleetCount == 0, !result.candidates.isEmpty {
+            escalate(packet) // fleet evidence, not yet confident: look harder at this frame
+        }
         if processingStill {
             return // a manual pass owns the status line right now
         }
@@ -347,6 +352,29 @@ final class CaptureViewModel: ObservableObject {
         PassiveCaptureStatus.shared.set(statusText: statusText,
                                         fleetHit: result.fleetCount > 0,
                                         modelStatus: modelStatus)
+    }
+
+    /// Re-analyze one promising live frame with the slower, thorough pass
+    /// (tiled text + plate-rectangle reads). Rate-limited: it costs several
+    /// Vision requests, so it must not run on every frame or heat the phone.
+    private func escalate(_ packet: FramePacket) {
+        guard !escalating, !processingStill, Date().timeIntervalSince(lastEscalation) > 6 else { return }
+        escalating = true
+        lastEscalation = Date()
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.escalating = false }
+            guard let frame = try? await self.executor.submit(
+                FramePacketLike(pixelBuffer: packet.pixelBuffer), mode: .processAll) else { return }
+            let result = await self.evaluateAndPersist(frame: frame, source: "live")
+            if result.fleetCount > 0 {
+                self.latestFrame = frame
+                self.statusText = result.watchlistHits > 0
+                    ? "Watchlist hit · \(result.watchlistHits)" : "Fleet vehicle recorded"
+            } else if !result.candidates.isEmpty {
+                self.statusText = "Possible fleet vehicle — tap the shutter to review"
+            }
+        }
     }
 
     /// LLM-first markings parse with deterministic fallback. FleetMarkings

@@ -20,6 +20,9 @@ struct PlateWatchApp: App {
             fatalError("SwiftData unavailable: \(error)")
         }
         backend = SyncBackends.makeDefault()
+        #if DEBUG
+        SelfTest.runIfRequested()
+        #endif
     }
 
     @AppStorage("hasOnboarded") private var hasOnboarded = false

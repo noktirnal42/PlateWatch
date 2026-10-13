@@ -1,11 +1,13 @@
 # BACKEND.md — CloudKit-first, free-forever hosting strategy
 
-> **Status (2026-10-13): CloudKit is the chosen backend but is not live yet.**
-> Container `iCloud.org.platewatch.platewatch` is declared in the app
-> entitlements; the record-type schema has not been exported to the repo or
-> deployed Development → Production, and public-database security roles are not
-> configured. Until then the app falls back to the REST mirror. Tracked as
-> QA P0-5 in [QA-REPORT.md](QA-REPORT.md).
+> **Status (2026-10-13): CloudKit backend is implemented but not deployed.**
+> The public database has one default zone and everything readable is readable by
+> everyone, so uploads go to a creator-only `SightingSubmission` type and only moderated
+> records exist as world-readable `Sighting`/`Vehicle`/`Agency`. The schema is in
+> [`cloudkit/schema.ckdb`](../cloudkit/schema.ckdb); the one-time import/deploy (needs the
+> developer account) is in [`cloudkit/README.md`](../cloudkit/README.md). A moderator tool
+> that publishes accepted submissions is not built yet. Until then the REST reference server
+> (moderator console, exports) is the working path.
 
 ## Decision: CloudKit public database is the primary backend
 

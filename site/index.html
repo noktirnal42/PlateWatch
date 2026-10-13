@@ -105,15 +105,16 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
 
 <section id="status"><div class="wrap">
   <h2>Where the project stands</h2>
-  <p class="sub">Honest status, updated from the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">2026-10-13 QA pass</a> on a physical iPhone and the simulator. The foundations are tested; the camera-to-sighting loop is not finished.</p>
+  <p class="sub">Honest status, updated from the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">2026-10-13 QA pass</a> on a physical iPhone and the simulator. The foundations are tested; the live-camera loop still needs field testing.</p>
   <div class="scroll"><table>
     <thead><tr><th>Area</th><th>State</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr><td>Core packages</td><td><span class="tag ok">tested</span></td><td>PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters — 129 tests across packages and server.</td></tr>
-      <tr><td>Reference server</td><td><span class="tag ok">builds · 41 tests</span></td><td>Ingest, delta sync, CSV/GeoJSON exports, k-anonymous heatmap API, agency report, moderator console. Not yet deployed publicly.</td></tr>
-      <tr><td>iOS app</td><td><span class="tag wip">in progress</span></td><td>Builds and launches. Live plate capture does not yet work reliably (frame orientation, no fleet classifier). UI unbranded; no app icon.</td></tr>
-      <tr><td>CloudKit backend</td><td><span class="tag no">not live</span></td><td>Container declared; schema, production deploy and security roles outstanding. App falls back to the REST mirror.</td></tr>
-      <tr><td>CoreML models</td><td><span class="tag no">unpublished</span></td><td>Detectors converted locally; release not yet published, so the app currently runs on Apple Vision only.</td></tr>
+      <tr><td>Recognition (real photos)</td><td><span class="tag ok">100% precision</span></td><td>On 62 licensed US photos: 0 civilian false positives, 57% fully-automatic recall, 76% with a human confirmation step — identical on a real iPhone. Recall is the main thing still improving. <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/EVALUATION.md">Method &amp; limits</a></td></tr>
+      <tr><td>Core packages</td><td><span class="tag ok">tested</span></td><td>PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters — 155 tests across packages and server.</td></tr>
+      <tr><td>iOS app</td><td><span class="tag wip">pre-alpha</span></td><td>Photo import → recognise → record works on simulator and iPhone, with onboarding, map and review flow. Live-camera field testing and a full visual redesign are still to do.</td></tr>
+      <tr><td>Reference server</td><td><span class="tag ok">builds · 41 tests</span></td><td>Ingest, moderation, exports, k-anonymous heatmap, agency report. Not yet deployed publicly.</td></tr>
+      <tr><td>CloudKit backend</td><td><span class="tag wip">schema ready</span></td><td>Moderated two-tier design and schema written; waiting on the one-time import and production deploy.</td></tr>
+      <tr><td>CoreML models</td><td><span class="tag no">not yet</span></td><td>Optional upgrade. For now PlateWatch uses Apple’s built-in vehicle classifier plus on-device text recognition.</td></tr>
       <tr><td>watchOS · macOS Hub · CarPlay</td><td><span class="tag wip">unverified</span></td><td>Code present; not exercised in the latest pass. CarPlay needs Apple’s entitlement.</td></tr>
     </tbody>
   </table></div>
@@ -148,7 +149,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
   <h2>Roadmap</h2>
   <p class="sub">Current focus is <b>M-Alpha</b>: make the core loop work end to end. Full list in the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/ROADMAP.md">roadmap</a>.</p>
   <div class="roadmap">
-    <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Correct camera orientation</li><li>Publish CoreML model release</li><li>Bring CloudKit live</li><li>App icon &amp; brand pass</li><li>Fleet classifier + manual record</li></ul></div>
+    <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Deploy CloudKit schema</li><li>Moderator publish tool</li><li>Live-camera field test</li><li>Fleet-specific classifier (recall)</li><li>Visual redesign</li></ul></div>
     <div class="card"><div class="num">NEXT · M2</div><h3>Identification depth</h3><ul><li>Plate detector + OCR models</li><li>Make/model/colour</li><li>Plate-design classifier</li><li>Vehicle re-ID</li></ul></div>
     <div class="card"><div class="num">THEN · M4</div><h3>Network &amp; UX</h3><ul><li>Real heatmap &amp; timeline</li><li>Agency report card in-app</li><li>Watchlist push to watchOS</li><li>CarPlay passive mode</li></ul></div>
     <div class="card"><div class="num">LATER · M5</div><h3>Beyond Apple</h3><ul><li>Public REST mirror</li><li>Raspberry Pi edge agent</li><li>Android client</li><li>Web explorer</li></ul></div>

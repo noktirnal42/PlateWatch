@@ -77,3 +77,27 @@ final class HeatmapAggregatorTests: XCTestCase {
         XCTAssertEqual(agg.withheldCells, 0)
     }
 }
+
+final class CloudKitPrivacyTests: XCTestCase {
+    private func dto(confidence: Double, markings: FleetMarkingsDTO?) -> SightingSubmissionDTO {
+        SightingSubmissionDTO(
+            capturedAt: Date(), geohash6: "9v6kn7", deviceIDHash: "aa", fleetConfidence: confidence,
+            plate: PlateDTO(text: "1ABC234"),
+            vehicle: VehicleObservationDTO(vehicleClass: "patrol", classConfidence: 0.8),
+            markings: markings)
+    }
+
+    /// Uploads are creator-readable only, but the plate still stays on the
+    /// device unless the same rule that publishes it on the REST server holds.
+    func testPlateOnlyLeavesTheDeviceWhenFleetConfirmed() {
+        let marked = FleetMarkingsDTO(agencyText: "CITY OF AUSTIN", unitNumber: "4421", serviceClassText: "POLICE")
+        XCTAssertTrue(CloudKitBackend.mayUploadPlate(dto(confidence: 0.85, markings: marked)))
+        XCTAssertFalse(CloudKitBackend.mayUploadPlate(dto(confidence: 0.6, markings: marked)))
+        XCTAssertFalse(CloudKitBackend.mayUploadPlate(dto(confidence: 0.95, markings: nil)))
+    }
+
+    func testRecordTypesAreTheDocumentedOnes() {
+        XCTAssertEqual(CloudKitBackend.RecordType.submission, "SightingSubmission")
+        XCTAssertEqual(CloudKitBackend.RecordType.sighting, "Sighting")
+    }
+}

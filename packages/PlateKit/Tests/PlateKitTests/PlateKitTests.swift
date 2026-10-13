@@ -248,3 +248,53 @@ final class FleetTextRobustnessTests: XCTestCase {
         XCTAssertEqual(SceneTextHeuristics.parse([obs("SCHOOL BUS")]).serviceClassText, "SCHOOL BUS")
     }
 }
+
+final class StackedAndOwnedTextTests: XCTestCase {
+    private func obs(_ text: String, x: Double = 0.1, y: Double = 0.5) -> SceneTextObservation {
+        SceneTextObservation(text: text, boundingBox: .init(x: x, y: y, width: 0.2, height: 0.05), confidence: 0.9)
+    }
+
+    func testStackedLinesFormAMultiWordKeyword() {
+        // "HIGHWAY" above "PATROL" (Oklahoma): read as two lines, one keyword.
+        let m = SceneTextHeuristics.parse([obs("HIGHWAY", y: 0.52), obs("PATROL", y: 0.46), obs("OKLAHOMA", y: 0.40)])
+        XCTAssertEqual(m.serviceClassText, "HIGHWAY PATROL")
+        XCTAssertTrue(m.hasFleetKeyword)
+    }
+
+    func testFarApartWordsDoNotJoin() {
+        let m = SceneTextHeuristics.parse([obs("PUBLIC", x: 0.05, y: 0.9), obs("WORKS", x: 0.7, y: 0.1)])
+        XCTAssertNil(m.serviceClassText)
+    }
+
+    func testOwnerQualifiedAgencyClearsTheGateAlone() {
+        let gate = RedactionGate(config: .standard)
+        for lines in [["SEATTLE FIRE DEPARTMENT"], ["WYOMING HIGHWAY PATROL", "STATE TROOPER"], ["City of Pittsburgh", "PUBLIC WORKS"]] {
+            let m = SceneTextHeuristics.parse(lines.map { obs($0) })
+            let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: m, knownUnitMatch: false, exemptPlateDesign: false)
+            XCTAssertTrue(m.agencyIsOwnerQualified, "\(lines)")
+            XCTAssertEqual(gate.verdict(fleetConfidence: c), .persistAndSync, "\(lines) conf=\(c)")
+        }
+    }
+
+    func testServiceWordsWithoutAnOwnerStillNeedMoreEvidence() {
+        let gate = RedactionGate(config: .standard)
+        for lines in [["POLICE"], ["FIRE RESCUE"], ["ABOUT US", "FIRE"]] {
+            let m = SceneTextHeuristics.parse(lines.map { obs($0) })
+            let c = gate.fleetConfidence(vehicleClassifierFleet: 0, markings: m, knownUnitMatch: false, exemptPlateDesign: false)
+            XCTAssertNotEqual(gate.verdict(fleetConfidence: c), .persistAndSync, "\(lines) conf=\(c)")
+        }
+    }
+}
+
+final class PlausiblePlateTests: XCTestCase {
+    func testRealPlateShapesAreAccepted() {
+        for p in ["1ABC234", "K398HN", "JL923", "7ABC123", "FDB574", "PZ3122G", "ABC1234"] {
+            XCTAssertTrue(Plate.isPlausibleReading(p), p)
+        }
+    }
+    func testWordsSlogansAndAssetIdsAreRejected() {
+        for p in ["NEWYORK", "GEORGIA", "COMPANY7", "DRIVEU", "FALCK", "0325775", "2116585", "1623", "T10", "ROUTE5076", "ABCDEFGHI1"] {
+            XCTAssertFalse(Plate.isPlausibleReading(p), p)
+        }
+    }
+}
