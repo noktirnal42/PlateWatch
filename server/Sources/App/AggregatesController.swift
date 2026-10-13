@@ -33,8 +33,9 @@ enum KAnonymity {
 
 /// GET /v1/aggregates/heatmap — fleet-confirmed sightings bucketed by
 /// geohash-6 cell (~1 km) and by UTC day, with k-anonymity applied.
+/// GET /heatmap — the same numbers as a public HTML page (HeatmapPage).
 ///
-/// Query:
+/// Query (both routes):
 /// - `since`, `until`: ISO-8601 instants. Default window: last 30 days.
 ///   Maximum window: 366 days.
 /// - `agencyID`: optional. Restricts to sightings whose linked vehicle belongs
@@ -45,6 +46,7 @@ struct AggregatesController: RouteCollection {
 
     func boot(routes: any RoutesBuilder) throws {
         routes.grouped("v1", "aggregates").get("heatmap", use: heatmap)
+        routes.get("heatmap", use: heatmapPage)
     }
 
     struct HeatmapCell: Content, Equatable {
@@ -70,13 +72,26 @@ struct AggregatesController: RouteCollection {
 
     @Sendable
     func heatmap(req: Request) async throws -> HeatmapResponse {
+        try await Self.report(req)
+    }
+
+    @Sendable
+    func heatmapPage(req: Request) async throws -> Response {
+        let report = try await Self.report(req)
+        let html = HeatmapPage.render(report)
+        return Response(status: .ok, headers: HeatmapPage.headers, body: .init(string: html))
+    }
+
+    // MARK: - Shared path (JSON and HTML)
+
+    static func report(_ req: Request) async throws -> HeatmapResponse {
         let until = try parseDate(req.query[String.self, at: "until"]) ?? Date()
         let since = try parseDate(req.query[String.self, at: "since"])
             ?? until.addingTimeInterval(-30 * 86_400)
         guard since < until else {
             throw Abort(.badRequest, reason: "since must be before until")
         }
-        guard until.timeIntervalSince(since) <= Self.maxWindow else {
+        guard until.timeIntervalSince(since) <= maxWindow else {
             throw Abort(.badRequest, reason: "window may not exceed 366 days")
         }
         let agencyID = try req.query[String.self, at: "agencyID"].map { raw -> UUID in
@@ -86,24 +101,30 @@ struct AggregatesController: RouteCollection {
             return id
         }
 
-        var query = Sighting.query(on: req.db)
+        let rows = try await Sighting.query(on: req.db)
             .filter(\.$moderationState == RedactionGateService.ModerationState.fleetConfirmed.rawValue)
             .filter(\.$capturedAt >= since)
             .filter(\.$capturedAt <= until)
             .with(\.$vehicle)
-        let rows = try await query.all()
+            .all()
+        // Agency filter runs on the joined vehicle in memory; the window bounds the set.
         let scoped = rows.filter { row in
             guard let agencyID else { return true }
             return row.vehicle?.$agency.id == agencyID
         }
+        return summarize(scoped.map { ($0.geohash6, $0.capturedAt) }, since: since, until: until)
+    }
 
+    /// Pure aggregation + suppression. Kept free of database access so the
+    /// k-anonymity rule is testable on its own.
+    static func summarize(_ points: [(geohash6: String, capturedAt: Date)],
+                          since: Date, until: Date) -> HeatmapResponse {
         var byCell: [String: Int] = [:]
         var byDay: [String: Int] = [:]
-        for row in scoped {
-            byCell[row.geohash6, default: 0] += 1
-            byDay[Self.dayFormatter.string(from: row.capturedAt), default: 0] += 1
+        for point in points {
+            byCell[point.geohash6, default: 0] += 1
+            byDay[dayFormatter.string(from: point.capturedAt), default: 0] += 1
         }
-
         let cells = KAnonymity.suppress(byCell)
         let days = KAnonymity.suppress(byDay)
         return HeatmapResponse(
@@ -116,9 +137,9 @@ struct AggregatesController: RouteCollection {
             withheldDays: days.withheldBuckets)
     }
 
-    private func parseDate(_ raw: String?) throws -> Date? {
+    private static func parseDate(_ raw: String?) throws -> Date? {
         guard let raw, !raw.isEmpty else { return nil }
-        guard let date = Self.isoFormatter.date(from: raw) ?? Self.plainISO.date(from: raw) else {
+        guard let date = isoFormatter.date(from: raw) ?? plainISO.date(from: raw) else {
             throw Abort(.badRequest, reason: "dates must be ISO-8601")
         }
         return date

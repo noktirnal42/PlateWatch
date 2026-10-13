@@ -30,6 +30,7 @@ func configure(_ app: Application) async throws {
     app.migrations.add(CreateSightings())
     app.migrations.add(CreateDeviceReputations())
     app.migrations.add(AddSightingCreatedAt())
+    app.migrations.add(AddAgencyBudgetURL())
     if app.environment != .testing {
         try await app.autoMigrate()
     }
@@ -37,6 +38,7 @@ func configure(_ app: Application) async throws {
     try app.register(collection: SightingsController())
     try app.register(collection: VehiclesController())
     try app.register(collection: AgenciesController())
+    try app.register(collection: AgencyReportController())
     try app.register(collection: StatsController())
     try app.register(collection: ExportController())
     try app.register(collection: AggregatesController())

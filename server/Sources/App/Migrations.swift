@@ -120,3 +120,16 @@ struct AddSightingCreatedAt: AsyncMigration {
             .update()
     }
 }
+
+struct AddAgencyBudgetURL: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Agency.schema)
+            .field("budget_url", .string)
+            .update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema(Agency.schema)
+            .deleteField("budget_url")
+            .update()
+    }
+}

@@ -33,6 +33,7 @@ final class Agency: Model, @unchecked Sendable {
     @OptionalField(key: "jurisdiction_geojson") var jurisdictionGeoJSON: String?
     @OptionalParent(key: "parent_agency_id") var parentAgency: Agency?
     @OptionalField(key: "public_contact_url") var publicContactURL: String?
+    @OptionalField(key: "budget_url") var budgetURL: String?
 
     init() {}
 }

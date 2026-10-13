@@ -34,6 +34,9 @@ struct FleetMarkingsDTO: Content {
     var agencyText: String?
     var unitNumber: String?
     var serviceClassText: String?
+    /// Free-text field note (watch dictation). Optional — decoded from
+    /// newer clients, absent in older payloads.
+    var note: String?
 }
 
 struct SightingSubmissionDTO: Content {
@@ -91,4 +94,5 @@ struct AgencyDTO: Content {
     var level: String
     var parentAgencyID: UUID?
     var publicContactURL: String?
+    var budgetURL: String?
 }
