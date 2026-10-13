@@ -12,8 +12,8 @@ Status legend: ✅ working · ⚠️ code exists but not working · ⬜ planned
 |---|--------|-------|--------|
 | 1 | iPhone live camera (`AVCaptureSession`) | `apps/ios` + `CaptureKit` | ⚠️ implemented and unit-tested; **never run on a live feed** (iPhone Mirroring cannot expose the camera) — handheld field test pending, NEXT-STEPS §2 |
 | 2 | Photo / video import (EXIF-correct) | `apps/ios` | ✅ |
-| 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ✅ (Reolink/Amcrest-class cameras, on-prem, no cloud) |
-| 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ✅ (filesystem-watch core shipped first) |
+| 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ⚠️ builds and launches, but the controller (and the watch) only starts **when the menu-bar window is first opened** — verified 2026-10-13: after minutes of running, `~/Documents/PlateWatch-Ingest` did not exist |
+| 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ⚠️ **dead code**: `startSnapshotServer` is never called. Also: the handler decodes the request body as a UTF-8 *string* (corrupts JPEG bytes) and reads a single 64 KB chunk ("assume small images"); default port 8088 collides with common dev servers (it was already taken by an `mlx_lm.server` on the owner's machine) |
 | 5 | Hub RTSP ingest | `apps/macos-hub/Sources/HubController.swift:409` | ⚠️ does not compile + wrong API — see §Network cameras |
 | 6 | Continuity Camera (iPhone as webcam) | `apps/macos-hub` | ⬜ M6 |
 | 7 | UVC webcams (any USB camera) | `apps/macos-hub` | ⬜ M6 |
@@ -150,3 +150,21 @@ Every source must pass the same harness: `FileFrameSource` still covers 1–4;
 sources 5–8 get a recorded-sample fixture (a short saved clip/snapshot set in
 `eval/corpus/` or a fixtures dir) so CI never depends on a live camera. The
 RedactionGate assertions in `PlateKitTests` remain the pass/fail authority.
+
+## Hub verification (2026-10-13)
+
+Built with `xcodegen` + `xcodebuild -scheme PlateWatchHub` (macOS, unsandboxed Debug): **builds**, **launches**
+as a menu-bar process (no Dock icon). Findings, in order of impact:
+
+1. **Nothing runs until the menu icon is clicked.** `HubController` is a `@StateObject` of `HubStatusView`, which
+   SwiftUI builds only when the `MenuBarExtra` window first opens, so the folder watch (started in `init`) is idle
+   at launch. A "resident" hub needs the controller owned by the `App`, not the popover view.
+2. **The snapshot/Bonjour server and the RTSP handler are never started** (`grep` finds no caller).
+3. **Snapshot POST handling cannot work for real photos:** binary body decoded as a String; one 64 KB read; no
+   Content-Length accumulation.
+4. **Port 8088 is a poor default** — configurable or auto-assigned (`port: 0`) with the chosen port advertised.
+5. The Hub's UI could not be driven with the computer-use tool (the app is not registered as installed), so the
+   popover itself was **not** exercised visually.
+
+Suggested fix order (WS2): own the controller in `PlateWatchHubApp`; start the folder watch and the snapshot
+server at launch; rewrite the HTTP read loop (accumulate to Content-Length, keep bytes as `Data`); then the RTSP/HLS rework.

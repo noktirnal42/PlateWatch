@@ -70,6 +70,7 @@ fleet evidence and its place is unresolved. Corpus fleet metrics are unchanged (
 | 511NY / WSDOT as public-feed starting points | ✏️ both need keys (511NY: account + developer key + agreement, ~10 calls/60 s; WSDOT: free AccessCode). Caltrans' open dataset lists cameras, not live frames. Starter set = keyless feeds only |
 | RTSP can't be opened by `AVAssetReader`; VLCKit LGPL-2.1 | ✅ consistent with AVFoundation behaviour; ⚠ LGPL + App Store distribution needs a legal look (record in DECISIONS) |
 | Continuity Camera `.continuityCamera` device type, macOS 13+ | ✅ (also needs the sandbox camera entitlement in the Hub) |
+| Hub folder watch and Bonjour snapshot endpoint ✅ shipped | ✏️ **not true** — folder watch starts only after the menu is first opened; the snapshot server is never started and its HTTP handler corrupts binary bodies (verified 2026-10-13; details in CAMERA-SOURCES §Hub verification) |
 
 ## 5. HANDOFF §999 — ✏️
 - "PRs need `gh` — not installed": **`gh` is installed and authenticated** (PR #5 exists).
