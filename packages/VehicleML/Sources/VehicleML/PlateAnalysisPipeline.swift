@@ -108,7 +108,34 @@ public struct PlateAnalysisPipeline: Sendable {
             fused[index].sceneText = baselineFrame.vehicles
                 .flatMap(\.sceneText)
                 .filter { box.contains(centerOf: $0.boundingBox) }
+            // A generic detector (COCO "car"/"truck") cannot vouch for a fleet
+            // class. When its label maps to a non-fleet class, keep the
+            // baseline's text-inferred class (e.g. POLICE door text → .patrol)
+            // instead of collapsing the vehicle to .unknown — otherwise the
+            // gate loses the classifier contribution that markings earned.
+            // Text inference is not a classifier score, so confidence resets.
+            if !fused[index].vehicleClass.isFleet {
+                let markings = SceneTextHeuristics.parse(fused[index].sceneText)
+                fused[index].vehicleClass = VisionBaselineAnalyzer.vehicleClass(for: markings)
+                fused[index].classConfidence = 0
+            }
         }
+        // Vehicles the detector missed entirely (heavy crops, unusual angles,
+        // low light) still exist in the baseline as plate/markings
+        // pseudo-vehicles. Keep any whose center no detector box claims, so
+        // detector coverage never *reduces* what the text pipeline found.
+        let claimedBoxes = fused.map(\.boundingBox)
+        for missed in baselineFrame.vehicles
+        where !claimedBoxes.contains(where: { $0.contains(centerOf: missed.boundingBox) }) {
+            fused.append(missed)
+        }
+        // Fold the frame-level classifier cue exactly like the baseline: boost
+        // the single candidate, or the vehicle carrying fleet text. (The
+        // cue-only-append branch can add a bystander box — the baseline has
+        // the same behavior and holds 100 % precision with it.)
+        VisionBaselineAnalyzer.applyCue(VehicleCueClassifier.classify(frame.pixelBuffer),
+                                        sceneText: baselineFrame.vehicles.first?.sceneText ?? [],
+                                        to: &fused)
         var out = baselineFrame
         out.vehicles = fused
         return out

@@ -1,4 +1,5 @@
 import CaptureKit
+import CoreML
 import Foundation
 import PlateKit
 import VehicleML
@@ -32,6 +33,23 @@ let args = CommandLine.arguments
 let evalDir = URL(fileURLWithPath: args.count > 1 ? args[1] : "eval")
 let manifestURL = evalDir.appendingPathComponent("manifest.json")
 let entries = try JSONDecoder().decode([Entry].self, from: Data(contentsOf: manifestURL))
+// Optional: `--models <dir>` loads cached .mlpackage detectors (plate-detector-*, vehicle-detector-*).
+var loadedModels: [String: MLModel] = [:]
+if let i = args.firstIndex(of: "--models"), i + 1 < args.count {
+    let dir = URL(fileURLWithPath: args[i + 1])
+    // `--tasks plate-detection,vehicle-detection` limits which detectors load (default: both).
+    let wanted: Set<String>? = args.firstIndex(of: "--tasks").map { Set(args[$0 + 1].split(separator: ",").map(String.init)) }
+    for (file, task) in [("plate-detector-yolov8n", "plate-detection"), ("vehicle-detector-yolov8n", "vehicle-detection")]
+    where wanted?.contains(task) ?? true {
+        let url = dir.appendingPathComponent(file + ".mlpackage")
+        if FileManager.default.fileExists(atPath: url.path),
+           let compiled = try? await MLModel.compileModel(at: url),
+           let model = try? MLModel(contentsOf: compiled) {
+            loadedModels[task] = model
+            print("loaded model \(task)")
+        }
+    }
+}
 let gate = RedactionGate(config: .standard)
 let pipeline = PlateAnalysisPipeline()
 
@@ -51,7 +69,7 @@ for entry in entries {
     }
     let start = Date()
     let frame = try await pipeline.analyze(FramePacketLike(pixelBuffer: buffer),
-                                           context: AnalysisContext(models: [:], thorough: true))
+                                           context: AnalysisContext(models: loadedModels, thorough: true))
     var best = 0.0
     var bestMarkings = FleetMarkings()
     var approved = false

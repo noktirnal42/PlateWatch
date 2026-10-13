@@ -117,7 +117,7 @@ extension VisionTextRunner {
 /// cannot do. Stills only — it runs several extra Vision requests.
 enum PlateRectangleReader {
 
-    static func read(_ pixelBuffer: CVPixelBuffer) async -> [PlateObservation] {
+    static func read(_ pixelBuffer: CVPixelBuffer, detectorBoxes: [CGRect] = []) async -> [PlateObservation] {
         var cg: CGImage?
         VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cg)
         guard let image = cg else { return [] }
@@ -134,10 +134,12 @@ enum PlateRectangleReader {
 
         var found: [PlateObservation] = []
         var seen = Set<String>()
-        for rect in request.results ?? [] {
-            let box = rect.boundingBox   // Vision space, bottom-left origin
-            let pixelAspect = (box.width * w) / max(box.height * h, 1)
-            guard (1.5...3.4).contains(pixelAspect) else { continue }
+        // Detector boxes are trusted (no aspect filter); rectangles must look like a plate.
+        let candidates: [CGRect] = detectorBoxes
+            + (request.results ?? []).map(\.boundingBox).filter {
+                (1.5...3.4).contains(($0.width * w) / max($0.height * h, 1))
+            }
+        for box in candidates {        // Vision space, bottom-left origin
             // Pad a little so edge characters are not clipped.
             let padded = box.insetBy(dx: -box.width * 0.06, dy: -box.height * 0.12)
                 .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -256,9 +258,10 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
                 plates.append(plate)
             }
         }
-        if context.thorough {
+        let detectorBoxes = await Self.plateDetectorBoxes(context, pixelBuffer)
+        if context.thorough || !detectorBoxes.isEmpty {
             let known = Set(plates.compactMap { $0.best.map { Plate.normalize($0.text) } })
-            for extra in await PlateRectangleReader.read(pixelBuffer)
+            for extra in await PlateRectangleReader.read(pixelBuffer, detectorBoxes: detectorBoxes)
             where !known.contains(Plate.normalize(extra.best?.text ?? "")) {
                 plates.append(extra)
             }
@@ -298,6 +301,16 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         return DetectionFrame(timestamp: context.timestamp,
                               imageSize: CGSize(width: width, height: height),
                               vehicles: vehicles)
+    }
+
+    /// Plate boxes (Vision space) from the optional CoreML plate detector.
+    static func plateDetectorBoxes(_ context: AnalysisContext, _ pixelBuffer: CVPixelBuffer) async -> [CGRect] {
+        guard context.models["plate-detection"] != nil,
+              let detected = try? await CoreMLDetectorStage(task: "plate-detection")
+                .process(FramePacketLike(pixelBuffer: pixelBuffer), context: context) else { return [] }
+        return detected.observations
+            .filter { $0.label.lowercased().contains("plate") || $0.label == "0" }
+            .map { CGRect(x: $0.box.x, y: 1 - ($0.box.y + $0.box.height), width: $0.box.width, height: $0.box.height) }
     }
 
     /// Fold the image-level classifier cue into the vehicle list.
