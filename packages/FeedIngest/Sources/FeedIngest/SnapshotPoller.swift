@@ -42,9 +42,9 @@ public struct SnapshotPoller: Sendable {
                 throw URLError(.cannotDecodeContentData)
             }
             await sink.accept(data, from: source)
-            schedule.recordSuccess(now: Date())
+            schedule.recordSuccess(now: now)
         } catch {
-            schedule.recordFailure(now: Date())
+            schedule.recordFailure(now: now)
         }
         return schedule
     }

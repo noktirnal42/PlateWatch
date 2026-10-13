@@ -19,12 +19,12 @@ final class FeedIngestTests: XCTestCase {
     func testSourceValidation() {
         XCTAssertThrowsError(try PublicFeedSource(name: "x", url: URL(string: "https://a.b/c")!,
                                                   kind: .snapshotJPEG, refreshInterval: 0.2,
-                                                  geohash: "drt2zq", citation: citation)) {
+                                                  geohash6: "drt2zq", citation: citation)) {
             XCTAssertEqual($0 as? PublicFeedSource.CreationError, .refreshIntervalTooAggressive)
         }
         XCTAssertThrowsError(try PublicFeedSource(name: "x", url: URL(string: "https://a.b/c")!,
                                                   kind: .hls, refreshInterval: 5,
-                                                  geohash: "drt", citation: citation)) {
+                                                  geohash6: "drt", citation: citation)) {
             XCTAssertEqual($0 as? PublicFeedSource.CreationError, .invalidGeohash)
         }
         XCTAssertEqual(source().kind, .snapshotJPEG)
