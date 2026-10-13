@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlateWatch — open-source ALPR for public accountability</title>
+<meta name="description" content="PlateWatch is an open-source, on-device license plate recognition platform that tracks taxpayer-funded government vehicles. Pre-alpha.">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<meta property="og:title" content="PlateWatch">
+<meta property="og:description" content="Open-source ALPR for public accountability — taxpayer-funded vehicles only, on-device, public records only.">
+<style>
+:root{
+  --bg:#F6F4EE; --surface:#FFFFFF; --ink:#12151B; --muted:#586070; --line:#E3DFD3;
+  --amber:#FFC21A; --amber-ink:#5A4300; --good:#1E7A4A; --warn:#9A5B00; --bad:#B3261E;
+  --code:#EFEBDD;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0D11; --surface:#141820; --ink:#F1EFE8; --muted:#9AA3B2; --line:#232A36;
+    --amber-ink:#FFD866; --good:#5CD08B; --warn:#FFB347; --bad:#FF8A80; --code:#1B212C;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0D11; --surface:#141820; --ink:#F1EFE8; --muted:#9AA3B2; --line:#232A36;
+  --amber-ink:#FFD866; --good:#5CD08B; --warn:#FFB347; --bad:#FF8A80; --code:#1B212C;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+header.nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none}
+.brand img{width:30px;height:30px;border-radius:8px}
+.nav nav{margin-left:auto;display:flex;gap:18px;font-size:14px;color:var(--muted)}
+.nav nav a{text-decoration:none}.nav nav a:hover{color:var(--ink)}
+@media(max-width:640px){.nav nav a.opt{display:none}}
+.hero{padding:72px 0 48px}
+.pill{display:inline-flex;align-items:center;gap:8px;font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--amber-ink);background:color-mix(in srgb,var(--amber) 22%,transparent);border:1px solid color-mix(in srgb,var(--amber) 55%,transparent);padding:7px 12px;border-radius:999px}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--amber)}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.04;letter-spacing:-.03em;margin:20px 0 16px;max-width:15ch}
+h1 em{font-style:normal;background:var(--amber);color:#12151B;padding:0 .14em;border-radius:.12em}
+.lede{font-size:clamp(17px,2.2vw,20px);color:var(--muted);max-width:60ch;margin:0 0 28px}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-block;padding:12px 18px;border-radius:12px;font-weight:600;font-size:15px;text-decoration:none;border:1px solid var(--line);background:var(--surface)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#12151B}
+.btn:hover{transform:translateY(-1px)}
+section{padding:44px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(24px,3.4vw,34px);letter-spacing:-.02em;margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 28px;max-width:62ch}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h3{margin:0 0 6px;font-size:16px}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.num{font:700 12px ui-monospace,Menlo,monospace;color:var(--amber-ink);letter-spacing:.08em}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;font-size:14.5px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:var(--bg)}
+.tag{display:inline-block;font:600 12px ui-monospace,Menlo,monospace;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.tag.ok{color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)}
+.tag.wip{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.tag.no{color:var(--bad);background:color-mix(in srgb,var(--bad) 13%,transparent)}
+.scroll{overflow-x:auto}
+.rules{counter-reset:r;display:grid;gap:12px}
+.rule{display:grid;grid-template-columns:40px 1fr;gap:12px;align-items:start}
+.rule::before{counter-increment:r;content:counter(r);display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--amber);color:#12151B;font-weight:800}
+.rule b{display:block}.rule span{color:var(--muted);font-size:14.5px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:600 13px ui-monospace,Menlo,monospace}
+.flow span{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+.flow b{color:var(--muted)}
+pre{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;font:13.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0}
+.roadmap{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.roadmap .card ul{margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:14px}
+.roadmap .card li{margin:3px 0}
+footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
+:focus-visible{outline:3px solid var(--amber);outline-offset:3px;border-radius:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.btn:hover{transform:none}}
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="#top"><img src="logo.svg" alt="" width="30" height="30">PlateWatch</a>
+  <nav aria-label="Primary">
+    <a href="#status">Status</a><a class="opt" href="#how">How it works</a><a class="opt" href="#rules">Principles</a><a href="#roadmap">Roadmap</a>
+    <a href="https://github.com/noktirnal42/PlateWatch">GitHub</a>
+  </nav>
+</div></header>
+
+<main id="top">
+<div class="wrap">
+  <div class="hero">
+    <span class="pill"><i></i>Pre-alpha · building in the open</span>
+    <h1>Watch the <em>public fleet</em>.</h1>
+    <p class="lede">PlateWatch is an open-source, on-device license plate recognition platform for one purpose: holding taxpayer-funded vehicles — police, fire, transit, public works, federal fleets — accountable. Private-citizen plates are redacted by design.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/noktirnal42/PlateWatch">View on GitHub</a>
+      <a class="btn" href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">Read the latest QA report</a>
+      <a class="btn" href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/LEGAL-ETHICS.md">Legal &amp; ethics</a>
+    </div>
+  </div>
+</div>
+
+<section id="status"><div class="wrap">
+  <h2>Where the project stands</h2>
+  <p class="sub">Honest status, updated from the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">2026-10-13 QA pass</a> on a physical iPhone and the simulator. The foundations are tested; the camera-to-sighting loop is not finished.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Area</th><th>State</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Core packages</td><td><span class="tag ok">tested</span></td><td>PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters — 129 tests across packages and server.</td></tr>
+      <tr><td>Reference server</td><td><span class="tag ok">builds · 41 tests</span></td><td>Ingest, delta sync, CSV/GeoJSON exports, k-anonymous heatmap API, agency report, moderator console. Not yet deployed publicly.</td></tr>
+      <tr><td>iOS app</td><td><span class="tag wip">in progress</span></td><td>Builds and launches. Live plate capture does not yet work reliably (frame orientation, no fleet classifier). UI unbranded; no app icon.</td></tr>
+      <tr><td>CloudKit backend</td><td><span class="tag no">not live</span></td><td>Container declared; schema, production deploy and security roles outstanding. App falls back to the REST mirror.</td></tr>
+      <tr><td>CoreML models</td><td><span class="tag no">unpublished</span></td><td>Detectors converted locally; release not yet published, so the app currently runs on Apple Vision only.</td></tr>
+      <tr><td>watchOS · macOS Hub · CarPlay</td><td><span class="tag wip">unverified</span></td><td>Code present; not exercised in the latest pass. CarPlay needs Apple’s entitlement.</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How it works</h2>
+  <p class="sub">Everything sensitive happens on the device. Only structured, human-reviewable detections that clear a fleet-confidence gate ever sync.</p>
+  <div class="flow" aria-label="Pipeline">
+    <span>Camera</span><b>→</b><span>Vehicle &amp; plate detect</span><b>→</b><span>OCR + multi-frame fusion</span><b>→</b><span>Fleet-confidence gate</span><b>→</b><span>Outbox</span><b>→</b><span>CloudKit / REST mirror</span><b>→</b><span>Public dataset</span>
+  </div>
+  <div class="grid" style="margin-top:20px">
+    <div class="card"><div class="num">ON-DEVICE</div><h3>Apple Neural Engine</h3><p>Vision text recognition today, CoreML detectors and classifiers next. No frame has to leave the phone.</p></div>
+    <div class="card"><div class="num">GATED</div><h3>Fleet-only ingestion</h3><p>A RedactionGate drops private-plate reads before upload; exact location is withheld until a vehicle is fleet-confirmed.</p></div>
+    <div class="card"><div class="num">SOURCED</div><h3>Provenance on everything</h3><p>Enrichment — agency, unit, cost — carries a citation to a public record. No citation, no enrichment.</p></div>
+    <div class="card"><div class="num">OPEN</div><h3>Portable by design</h3><p>CloudKit for Apple devices, a Vapor REST reference server for everyone else, AGPL-3.0 throughout.</p></div>
+  </div>
+</div></section>
+
+<section id="rules"><div class="wrap">
+  <h2>Non-negotiable principles</h2>
+  <p class="sub">Encoded in the data layer, not just the docs.</p>
+  <div class="rules">
+    <div class="rule"><div><b>Government and fleet focus</b><span>The platform tracks publicly funded assets. It is not a people-tracking tool.</span></div></div>
+    <div class="rule"><div><b>Public records only</b><span>Fleet registries, FOIA releases, rosters and auction listings. Never DMV or data-broker data.</span></div></div>
+    <div class="rule"><div><b>On-device first</b><span>No telemetry, analytics SDKs, frame uploads or third-party trackers.</span></div></div>
+    <div class="rule"><div><b>Evidence quality</b><span>Every sighting is content-hashed and timestamped, with its sources.</span></div></div>
+  </div>
+</div></section>
+
+<section id="roadmap"><div class="wrap">
+  <h2>Roadmap</h2>
+  <p class="sub">Current focus is <b>M-Alpha</b>: make the core loop work end to end. Full list in the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/ROADMAP.md">roadmap</a>.</p>
+  <div class="roadmap">
+    <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Correct camera orientation</li><li>Publish CoreML model release</li><li>Bring CloudKit live</li><li>App icon &amp; brand pass</li><li>Fleet classifier + manual record</li></ul></div>
+    <div class="card"><div class="num">NEXT · M2</div><h3>Identification depth</h3><ul><li>Plate detector + OCR models</li><li>Make/model/colour</li><li>Plate-design classifier</li><li>Vehicle re-ID</li></ul></div>
+    <div class="card"><div class="num">THEN · M4</div><h3>Network &amp; UX</h3><ul><li>Real heatmap &amp; timeline</li><li>Agency report card in-app</li><li>Watchlist push to watchOS</li><li>CarPlay passive mode</li></ul></div>
+    <div class="card"><div class="num">LATER · M5</div><h3>Beyond Apple</h3><ul><li>Public REST mirror</li><li>Raspberry Pi edge agent</li><li>Android client</li><li>Web explorer</li></ul></div>
+  </div>
+</div></section>
+
+<section id="build"><div class="wrap">
+  <h2>Build it</h2>
+  <p class="sub">Swift 6 · Xcode 27 · macOS 27 SDK. Contributions welcome — start with the QA report.</p>
+<pre>git clone https://github.com/noktirnal42/PlateWatch.git &amp;&amp; cd PlateWatch
+swift test --package-path packages/PlateKit
+swift test --package-path server
+(cd apps/ios &amp;&amp; xcodegen) &amp;&amp; open apps/ios/PlateWatch.xcodeproj</pre>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>© PlateWatch contributors · AGPL-3.0</span>
+  <span><a href="https://github.com/noktirnal42/PlateWatch">Source</a> · <a href="https://github.com/noktirnal42/PlateWatch/blob/main/CONTRIBUTING.md">Contribute</a> · <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/LEGAL-ETHICS.md">Legal &amp; ethics</a></span>
+</div></footer>
+</body>
+</html>
