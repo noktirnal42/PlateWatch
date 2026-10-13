@@ -423,3 +423,27 @@ cd0584d Fix: persist unitNumber on sightings (QA catch)
 ---
 
 **End of Handoff.** This document reflects state as of commit `5d52990` (2026-10-11). All 50 tests pass. The codebase is ready for M3 work or M2 completion.
+---
+
+## 999. Continuation-agent checklist (2026-10-13, for the next agent — copy freely)
+
+**Where I stopped / what is committed** (branch `fix/official-plates`, pushed; PRs need `gh` — not installed, owner creates them):
+
+- [x] Claude's plate-detector wiring finished + **vehicle-detector fusion regression fixed** (`PlateAnalysisPipeline`: fused vehicles keep text-inferred fleet class; frame cue folded like baseline; detector-missed pseudo-vehicles unioned back). Eval: recall 27/46 (59%), precision 27/27, plate reads 15/62 (was 10/62). Commit `bbf4362`.
+- [x] macOS Hub **compiles again**: stale `RedactionGate` call sites now go through `PlateKit.FleetScoring.vehicleGateScore` — the ONE scoring entry point; never hand-roll `fleetConfidence` calls.
+- [x] New packages green: `AccountabilityKit` (citation-gated types, no collection logic), `FeedIngest` (`PublicFeedSource`, `FeedSchedule`, `SnapshotPoller` + URLProtocol tests, commit `7347232`).
+- [x] Plate **jurisdiction logging**: official plate lines set `Plate.issuingRegion` (US-MA…) via `officialRegistration` 3-tuple + `Plate.issuingRegion(forStateName:)`. Commit `6c61b49`.
+- [x] **Physical iPhone QA done** (iPhone 16 Pro Max, UDID 00008140-0014589C3C6A801C): install + SelfTest 66 images exit 0; difficult Waltham photo `persistAndSync` @ 0.70 plate `D756`; webp passes (SelfTest enumerates webp/heic, `a31f9cd`); **0 civilian false positives**; verdicts match Mac eval.
+- [x] Docs on `docs/next-steps` (PR #5): CAMERA-SOURCES, ACCOUNTABILITY-DATA, PROJECTS (six workstreams), ROADMAP M6/M7, LEGAL-ETHICS Rule 6 ("watch the powerful"), DATA-MODEL planned entities, site/README retitle, DECISIONS.
+
+**TODO — open, with collision notes:**
+
+- [ ] **Low-contrast (stealth-livery) OCR pass** — `VisionBaselineAnalyzer` (Claude's file). Spec: when thorough AND (hasFleetKeyword OR official plate present) AND `markings.agencyText == nil`: re-OCR vehicle ROI with CoreImage contrast enhancement (CIColorControls ~2 + histogram equalization; normal + inverted variants), `.accurate`, merge unseen lines. The condition means it can never CREATE a fleet flag — only name the department on an already-fleet vehicle. Verify on `eval/user/police car plate.webp` ("WALTHAM POLICE" gray-on-black) + re-run eval for precision.
+- [ ] Ground-truth `plate` labels + exact-match/CER scoring in EvalHarness (NEXT-STEPS §3-1).
+- [ ] EvalHarness + iOS CaptureViewModel/SelfTest: adopt `FleetScoring` (mechanical).
+- [ ] FeedIngest HLS source via `AVPlayerItemVideoOutput` (WS2, no collisions).
+- [ ] Moderator publish tool (server/, NEXT-STEPS §1b) — coordinate ownership first.
+- [ ] `docs/MODEL-TRAINING.md`: US dataset shortlist (Open Images V7 plate class CC BY 2.0; keremberke + justjuu HF CC BY 4.0; 700k MIT set — verify provenance; AVOID UniDataPro CC-BY-NC-ND) + Create ML **GUI** walkthrough (Object Detection/Image Classification projects — user wants GUI, not CLI training).
+- [ ] CloudKit import/deploy (owner account step) + moderator tool = pilot blockers.
+
+**Rules of engagement:** run `git status` before editing — expect parallel agents; keep diffs inside your workstream (docs/PROJECTS.md); commit small, push often; never hand-roll gate scoring; don't tick ROADMAP boxes you didn't verify.
