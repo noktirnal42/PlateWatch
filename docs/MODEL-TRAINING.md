@@ -87,29 +87,34 @@ That is why §2's Commons crawl comes first.
 Open **Create ML**: *Xcode → Open Developer Tool → Create ML* (or the standalone app).
 
 ### 4a. Plate detector — *Object Detection* project
-1. **Prepare data** (one agent/CLI step, `scripts/coco_to_createml.py`): converts the COCO export
-   to Create ML's format. The JSON is an array of `{ "image": <file>, "annotations": [ { "label":
-   "plate", "coordinates": { "x", "y", "width", "height" } } ] }` where **x, y are the box *centre*
-   and all four values are in *pixels*** (not normalised, not top-left). Put images and the JSON in
-   the same folder; make a second folder for validation (~10 %).
+1. **Prepare data** (one CLI step, already scripted): `python3 -I scripts/make_plate_dataset.py training/plate-detector`
+   builds `CreateML/{train,validation,test}/` from Open Images' *Vehicle registration plate* boxes —
+   **built 2026-10-13: 2,167 train / 259 validation / 279 test images (2,738 / 321 / 338 boxes)**, every image
+   CC BY 2.0 with an `ATTRIBUTION.md`. Each folder holds the images plus `annotations.json`: an array of
+   `{ "image": <file>, "annotations": [ { "label": "plate", "coordinates": { "x", "y", "width", "height" } } ] }`
+   where **x, y are the box *centre* and all four values are in *pixels***.
    **⚠ Key names:** Apple's WWDC slides use `image` / `annotations`; an Apple DTS forum answer says
-   `imagefilename` / `annotation`. The file name Create ML expects is `annotations.json` (the draft's
-   `labels.json` is probably wrong). **Verify:** drag the folder into a new project — the app
-   reports the number of images/annotations it parsed, or an error. Fix the keys if needed.
-2. *File → New Project → Object Detection*, drag the training and validation folders in.
-3. **Algorithm — two different options, not one:**
+   `imagefilename` / `annotation`. **Verify on import** (step 3 below). If Create ML reports 0 annotations or an
+   error, run the script again with `--keys dts` (writes `CreateML-dts/`).
+2. *File → New Project → Object Detection → Next*, name it.
+3. On the **Data** tab set Training Data = `train`, Validation Data = `validation`, Testing Data = `test`.
+   Create ML shows the parsed image/annotation counts — they must match the numbers above.
+4. **Algorithm — two different options, not one:**
    *Transfer Learning* (reuses an OS backbone, trains only the head; ~5× smaller model; best for
    small data) vs *Full Network* (YOLOv2-based, trains everything; Apple suggests >200 boxes/class;
-   the default). For the 8.8k-image plate set start with **Full Network**; for a few hundred boxes
-   use **Transfer Learning**. Turn on augmentation (exposure, blur, crop).
-4. Train; read **Precision/Recall** on the Evaluation tab; drag a few unseen photos (including the
-   Waltham photo) onto **Preview** to see misses.
-5. **Export** the `.mlmodel`/`.mlpackage` → `models/cache/` → run the harness
-   (`EvalHarness eval --models models/cache --tasks plate-detection`). Keep it only if it beats the
-   YOLOv8n baseline on the **same** corpus (plate-read count today: 15/62 images; exact-match scoring
-   is being added — NEXT-STEPS §3).
-6. Record the licence in `models/registry.json`: `"Trained in Create ML on <dataset> (<licence>)"`
-   and ship the CC BY attribution file with the model.
+   the default). With 2.7k boxes start with **Full Network**. Turn on augmentation (exposure, blur, crop). Train.
+5. Read **Precision/Recall** on the Evaluation tab; drag unseen photos (the Waltham and Minneapolis photos in
+   `eval/user/`) onto **Preview** to see misses.
+6. **Export** the `.mlmodel`/`.mlpackage` — **one file runs on both macOS and iOS** (choose the minimum OS at export).
+   Put it in `models/cache/` and run the harness (`EvalHarness eval --models models/cache --tasks plate-detection`).
+   Keep it only if it beats the YOLOv8n baseline on the **same** corpus (plate-read count today: 17/62 images).
+7. Record the licence in `models/registry.json`: `"Trained in Create ML on Open Images V7 (CC BY 2.0 images)"`
+   and ship the attribution file with the model.
+
+**Where the model runs.** The iPhone app and the macOS Hub both load models by registry name through
+`ModelManager`. Today **neither has a released model**: the app runs baseline Vision, and the Hub passes
+`AnalysisContext(models: [:])` (HubController.swift lines 259/341/554). The Mac eval harness is the only place the
+CoreML detectors currently run — which is why it finds plates the phone does not.
 
 ### 4b. Fleet classifier — *Image Classification* project
 1. Folders `police/ fire/ ems/ transit/ public/ civilian/` from the **training** crawl (not
@@ -121,7 +126,8 @@ Open **Create ML**: *Xcode → Open Developer Tool → Create ML* (or the standa
    **Guardrail:** it only ever contributes evidence (≤ 0.45); it never lowers the 0.55 bar.
    Precision must stay 100 % with 0 civilian/commercial false positives on the eval corpus.
 
-### 4c. Make/model, colour, plate design
+### 4c. Make/model, colour, plate design (state)
+**Plate state is the first one needed:** Apple Vision cannot read small cursive state banners ("Minnesota" on a squad plate was unreadable at every scale/contrast tried — `docs/IDENTITY.md`). `scripts/crawl_commons_plates.py` collects CC0/PD/CC BY plate images per state (`training/plate-state/<State>/`) for an *Image Classification* project, one class per state; test it on real photo plate crops, not only on the flat scans it trains on.
 Same GUI flow on **cropped** vehicles/plates. Colour labels are cheap to add by eye on our own
 images; make/model has no licence-clean US dataset yet (DECISIONS.md M2 note).
 
