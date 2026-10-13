@@ -36,9 +36,12 @@ jobs:
         run: brew install xcodegen
       - name: Generate projects
         run: |
-          (cd apps/ios && xcodegen)
-          (cd apps/macos-hub && xcodegen)
-          (cd apps/watchos && xcodegen)
+          # project.local.yml (team ID, gitignored) is optional locally but the runner's
+          # xcodegen requires the included file to exist: use the example (no team) in CI.
+          for d in ios macos-hub watchos; do
+            cp "apps/$d/project.local.example.yml" "apps/$d/project.local.yml"
+            (cd "apps/$d" && xcodegen)
+          done
       - name: Build iOS app (simulator, unsigned)
         run: xcodebuild -project apps/ios/PlateWatch.xcodeproj -scheme PlateWatch -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
       - name: Build macOS hub (unsigned)
