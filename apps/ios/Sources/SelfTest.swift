@@ -34,21 +34,25 @@ enum SelfTest {
             guard let frame = try? await executor.submit(FramePacketLike(pixelBuffer: buffer), mode: .processAll) else {
                 print("SELFTEST \(url.lastPathComponent): ANALYSIS-FAIL"); continue
             }
+            // One scoring entry point (PlateKit.FleetScoring) — same as the app and the eval harness.
             var best = 0.0, verdict = RedactionGate.Verdict.discard, markings = FleetMarkings()
+            var primary: VehicleObservation?
             for vehicle in frame.vehicles {
-                let m = SceneTextHeuristics.parse(vehicle.sceneText)
-                let c = gate.fleetConfidence(
-                    vehicleClassifierFleet: vehicle.vehicleClass.isFleet ? vehicle.classConfidence : 0,
-                    markings: m, knownUnitMatch: false,
-                    exemptPlateDesign: vehicle.plates.contains { $0.best?.exemptDesignHint == true },
-                officialPlate: vehicle.plates.contains { $0.best?.isOfficialPlate == true })
-                if c >= best { best = c; markings = m; verdict = gate.verdict(fleetConfidence: c) }
+                let (c, m) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
+                if c >= best { best = c; markings = m; verdict = gate.verdict(fleetConfidence: c); primary = vehicle }
             }
             let plates = frame.vehicles.flatMap(\.plates).compactMap(\.best).map(\.text)
+            let identity = primary.map { IdentityResolver().resolve(vehicle: $0) }
+            let agency = identity?.agency
             print(String(format: "SELFTEST %@ | %@ | conf=%.2f | vehicles=%d | plates=%@ | service=%@ unit=%@ | %.2fs",
                          url.lastPathComponent, "\(verdict)", best, frame.vehicles.count,
                          plates.joined(separator: ","), markings.serviceClassText ?? "-",
                          markings.unitNumber ?? "-", Date().timeIntervalSince(start)))
+            if let agency {
+                print("SELFTEST   identity | \(agency.name) | key=\(agency.agencyKey) | conf=\(String(format: "%.2f", agency.confidence))"
+                      + " | review=\(agency.needsReview) | plateState=\(identity?.plate?.state ?? "-")"
+                      + " | alt=\(agency.alternatives.joined(separator: ";"))")
+            }
         }
         print("SELFTEST end")
     }

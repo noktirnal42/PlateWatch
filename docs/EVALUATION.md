@@ -77,3 +77,11 @@ cannot reach 0.55 on a cue alone (max 0.45), and none reached the review band in
 - 62 images is a smoke test, not a benchmark; numbers will move as the corpus grows.
 - This is a still-photo evaluation. The live camera path (orientation, exposure) is
   covered by unit tests and a physical-device run of the app, but not scored here.
+
+## Update — identity, official plates, tiling (2026-10-13 evening)
+Fleet scoring is unchanged in kind but improved: **61 % automatic recall on the Mac and 63 % on an iPhone 16 Pro
+Max, 100 % precision, 0 of 14 civilian/commercial false positives.** New: agency identity inference and its own
+scoring — see [IDENTITY.md](IDENTITY.md). The harness takes `--models <dir> --tasks plate-detection` (the CoreML plate
+detector lifts plate reads from 10 to 15 images without touching fleet recall), prints the identity per image, and scores
+hand-labelled agencies and plates (`agency` / `plates` keys in the manifest).
+
