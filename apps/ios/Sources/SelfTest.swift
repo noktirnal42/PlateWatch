@@ -21,7 +21,7 @@ enum SelfTest {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("selftest")
         let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
-            .filter { ["jpg", "jpeg", "png"].contains($0.pathExtension.lowercased()) }
+            .filter { ["jpg", "jpeg", "png", "webp", "heic"].contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         print("SELFTEST begin: \(files.count) images, device=\(ProcessInfo.processInfo.hostName)")
         let gate = RedactionGate(config: .standard)
