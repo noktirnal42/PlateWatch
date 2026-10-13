@@ -2,6 +2,37 @@ import Fluent
 import Foundation
 import Vapor
 
+/// Delta-sync page cursor: the last row's captured timestamp plus its ID.
+/// Second-precision timestamps collide constantly (client submissions land
+/// on whole seconds), so the ID tiebreaker is what keeps pages from
+/// skipping or looping rows at the boundary.
+struct SightingCursor: Equatable {
+    var timestamp: Date
+    var lastID: UUID
+
+    nonisolated(unsafe) static let tokenFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    nonisolated(unsafe) static let plainFormatter = ISO8601DateFormatter()
+
+    var token: String {
+        "\(Self.tokenFormatter.string(from: timestamp))|\(lastID.uuidString)"
+    }
+
+    /// Accepts the compound token, or a bare ISO-8601 date (legacy `since`).
+    static func parse(_ raw: String?) -> SightingCursor? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let parts = raw.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, let id = UUID(uuidString: String(parts[1])) else { return nil }
+        guard let t = tokenFormatter.date(from: String(parts[0]))
+                ?? plainFormatter.date(from: String(parts[0])) else { return nil }
+        return SightingCursor(timestamp: t, lastID: id)
+    }
+}
+
 /// POST /v1/sightings — community detection ingest.
 /// GET  /v1/sightings?cursor=… — delta read for sync clients.
 struct SightingsController: RouteCollection {
@@ -25,7 +56,7 @@ struct SightingsController: RouteCollection {
             let receipt = SubmissionReceiptDTO(
                 sightingID: try existing.requireID(),
                 moderationState: existing.moderationState,
-                serverReceivedAt: existing.$capturedAt.wrappedValue)
+                serverReceivedAt: existing.createdAt ?? Date())
             return try await receipt.encodeResponse(status: .ok, for: req)
         }
 
@@ -53,7 +84,11 @@ struct SightingsController: RouteCollection {
         record.fleetConfidence = dto.fleetConfidence
         record.moderationState = outcome.state.rawValue
         record.idempotencyKey = idem
-        record.plateText = dto.plate?.text
+        // LEGAL-ETHICS Rule 1: a plate is only persisted once the sighting is
+        // fleet-confirmed. Pending/redacted rows keep the fleet signal
+        // (unit, confidence, crop hash) but never the plate text.
+        record.plateText = outcome.state == .fleetConfirmed ? dto.plate?.text : nil
+        record.unitNumber = dto.markings?.unitNumber
         record.cropSHA256 = dto.cropHashSHA256
         record.headingDeg = dto.headingDegrees
         if outcome.exactGeoAllowed {
@@ -65,30 +100,48 @@ struct SightingsController: RouteCollection {
         let receipt = SubmissionReceiptDTO(
             sightingID: try record.requireID(),
             moderationState: outcome.state.rawValue,
-            serverReceivedAt: Date())
+            serverReceivedAt: record.createdAt ?? Date())
         return try await receipt.encodeResponse(status: .created, for: req)
     }
 
     @Sendable
     func list(req: Request) async throws -> SightingPageDTO {
         let limit = min(req.query["limit"] ?? 200, 1000)
+        // Public feed: fleet-confirmed rows only. Pending/redacted rows are
+        // review-queue material and must never reach public clients.
         var query = Sighting.query(on: req.db)
-            .filter(\.$moderationState != "rejected")
+            .filter(\.$moderationState == RedactionGateService.ModerationState.fleetConfirmed.rawValue)
             .sort(\.$capturedAt, .descending)
+            .sort(\.$id, .descending)
             .limit(limit)
-        if let since = try? req.query.get(Date.self, at: "since") {
-            query = query.filter(\.$capturedAt > since)
+
+        if let raw = req.query[String.self, at: "cursor"], !raw.isEmpty {
+            if let cursor = SightingCursor.parse(raw) {
+                // Resume strictly after the boundary row: strictly older
+                // rows, or rows sharing its timestamp with a lower ID
+                // (matching the capturedAt DESC, id DESC ordering).
+                let t = cursor.timestamp
+                let lastID = cursor.lastID
+                query = query.group(.or) { group in
+                    group.filter(\.$capturedAt < t)
+                    group.filter(\.$capturedAt == t).filter(\.$id < lastID)
+                }
+            } else if let since = SightingCursor.plainFormatter.date(from: raw) {
+                // Legacy ad-hoc `since` filter (no resume guarantee).
+                query = query.filter(\.$capturedAt > since)
+            }
         }
+
         let rows = try await query.all()
         let items = rows.compactMap { row -> PublicSightingDTO? in
             guard let id = row.id else { return nil }
             return PublicSightingDTO(
                 id: id, capturedAt: row.capturedAt, geohash6: row.geohash6,
-                plateText: row.plateText, unitNumber: nil,
+                plateText: row.plateText, unitNumber: row.unitNumber,
                 fleetConfidence: row.fleetConfidence)
         }
-        let next = items.last.map {
-            ISO8601DateFormatter().string(from: $0.capturedAt)
+        let next = items.last.flatMap { dto in
+            SightingCursor(timestamp: dto.capturedAt, lastID: dto.id).token
         }
         return SightingPageDTO(items: items, nextCursor: next)
     }

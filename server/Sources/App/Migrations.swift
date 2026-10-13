@@ -67,6 +67,7 @@ struct CreateSightings: AsyncMigration {
             .id()
             .field("vehicle_id", .uuid, .references("vehicles", "id"))
             .field("plate_text", .string)
+            .field("unit_number", .string)
             .field("captured_at", .datetime, .required)
             .field("geohash6", .string, .required)
             .field("exact_lat", .double)
@@ -104,5 +105,31 @@ struct CreateDeviceReputations: AsyncMigration {
     }
     func revert(on database: any Database) async throws {
         try await database.schema(DeviceReputation.schema).delete()
+    }
+}
+
+struct AddSightingCreatedAt: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .field("created_at", .datetime)
+            .update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .deleteField("created_at")
+            .update()
+    }
+}
+
+struct AddAgencyBudgetURL: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Agency.schema)
+            .field("budget_url", .string)
+            .update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema(Agency.schema)
+            .deleteField("budget_url")
+            .update()
     }
 }

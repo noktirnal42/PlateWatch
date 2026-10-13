@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PlateWatch">
+  <rect width="512" height="512" rx="112" fill="#0E1116"/>
+  <g fill="none" stroke="#FFC21A" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M112 180v-48a20 20 0 0 1 20-20h48"/>
+    <path d="M332 112h48a20 20 0 0 1 20 20v48"/>
+    <path d="M400 332v48a20 20 0 0 1-20 20h-48"/>
+    <path d="M180 400h-48a20 20 0 0 1-20-20v-48"/>
+  </g>
+  <rect x="136" y="180" width="240" height="152" rx="20" fill="#FFC21A"/>
+  <rect x="136" y="180" width="240" height="30" rx="20" fill="#0E1116" opacity=".16"/>
+  <rect x="136" y="196" width="240" height="14" fill="#0E1116" opacity=".16"/>
+  <circle cx="162" cy="195" r="5" fill="#0E1116" opacity=".55"/>
+  <circle cx="350" cy="195" r="5" fill="#0E1116" opacity=".55"/>
+  <g fill="none" stroke="#0E1116" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M186 308V232h28a21 21 0 0 1 0 42h-28"/>
+    <path d="M254 232l16 76 22-56 22 56 16-76" transform="translate(-6 0)"/>
+  </g>
+</svg>

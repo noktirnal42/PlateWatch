@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import PlateKit
 import SwiftData
@@ -7,7 +8,7 @@ import SwiftData
 /// zone must never lose evidence.
 @Model
 public final class PendingSubmission {
-    @Attribute(.unique) public var idempotencyKey: String
+    public var idempotencyKey: String
     public var createdAt: Date
     public var payloadJSON: Data   // SightingSubmissionDTO
     public var retryCount: Int
@@ -35,15 +36,24 @@ public actor OutboxDrainer {
     }
 
     public static func idempotencyKey(for dto: SightingSubmissionDTO) -> String {
-        // Content-addressed: same detection re-submitted = same key.
-        // (Device key id is folded in upstream when signing.)
-        var hasher = Hasher()
-        hasher.combine(dto.capturedAt.timeIntervalSince1970)
-        hasher.combine(dto.geohash6)
-        hasher.combine(dto.plate?.text)
-        hasher.combine(dto.vehicle.vehicleClass)
-        hasher.combine(dto.cropHashSHA256)
-        return String(format: "%016llx", UInt64(bitPattern: Int64(hasher.finalize())))
+        // Content-addressed: same detection re-submitted = same key, across
+        // app launches AND devices. Swift's `Hasher` is seeded per process,
+        // so a cryptographic digest over a canonical byte serialization is
+        // required here — a Hasher-based key silently breaks the server's
+        // idempotency dedupe after every restart.
+        var data = Data()
+        withUnsafeBytes(of: dto.capturedAt.timeIntervalSince1970.bitPattern.bigEndian) {
+            data.append(contentsOf: $0)
+        }
+        for component in [dto.geohash6,
+                          dto.plate?.text ?? "",
+                          dto.vehicle.vehicleClass,
+                          dto.cropHashSHA256 ?? ""] {
+            data.append(contentsOf: component.utf8)
+            data.append(0) // field separator
+        }
+        let digest = SHA256.hash(data: data)
+        return digest.prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 
     public func drain(context: ModelContext) async {

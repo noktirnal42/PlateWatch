@@ -134,7 +134,7 @@ struct ExportController: RouteCollection {
                 guard let id = s.id else { return nil }
                 return ExportRenderer.Row(
                     id: id, capturedAt: s.capturedAt, geohash6: s.geohash6,
-                    plateText: s.plateText, unitNumber: nil,
+                    plateText: s.plateText, unitNumber: s.unitNumber,
                     fleetConfidence: s.fleetConfidence)
             }
     }

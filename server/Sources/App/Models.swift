@@ -33,6 +33,7 @@ final class Agency: Model, @unchecked Sendable {
     @OptionalField(key: "jurisdiction_geojson") var jurisdictionGeoJSON: String?
     @OptionalParent(key: "parent_agency_id") var parentAgency: Agency?
     @OptionalField(key: "public_contact_url") var publicContactURL: String?
+    @OptionalField(key: "budget_url") var budgetURL: String?
 
     init() {}
 }
@@ -60,6 +61,9 @@ final class Sighting: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
     @OptionalParent(key: "vehicle_id") var vehicle: Vehicle?
     @OptionalField(key: "plate_text") var plateText: String?
+    /// Parsed unit/fleet number — the join key into agency rosters.
+    /// Nullable pre-enrichment; exports surface it when present.
+    @OptionalField(key: "unit_number") var unitNumber: String?
     @Field(key: "captured_at") var capturedAt: Date
     @Field(key: "geohash6") var geohash6: String
     @OptionalField(key: "exact_lat") var exactLat: Double?
@@ -71,6 +75,8 @@ final class Sighting: Model, @unchecked Sendable {
     @Field(key: "moderation_state") var moderationState: String
     /// Idempotency dedupe — replays return the original receipt.
     @Field(key: "idempotency_key") var idempotencyKey: String
+    /// When the server accepted the row — the receipt's serverReceivedAt.
+    @Timestamp(key: "created_at", on: .create) var createdAt: Date?
 
     init() {}
 }

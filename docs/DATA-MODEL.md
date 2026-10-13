@@ -51,7 +51,7 @@ Canonical taxpayer-funded asset.
 ### Sighting
 | Field | Type | Notes |
 |---|---|---|
-| id, vehicleID?, plateText? | — | vehicle link may be null pre-verification |
+| id, vehicleID?, plateText? | — | vehicle link may be null pre-verification; `plateText` is stored only when `moderationState = fleetConfirmed` (server-enforced) |
 | capturedAt | Date (UTC) | device clock + server receipt delta stored |
 | geo | lat/lon | exact only when fleet-confirmed; else ~1 km bucket |
 | heading, roadClass | Float?, String? | |

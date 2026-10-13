@@ -1,5 +1,12 @@
 # BACKEND.md — CloudKit-first, free-forever hosting strategy
 
+> **Status (2026-10-13): CloudKit is the chosen backend but is not live yet.**
+> Container `iCloud.org.platewatch.platewatch` is declared in the app
+> entitlements; the record-type schema has not been exported to the repo or
+> deployed Development → Production, and public-database security roles are not
+> configured. Until then the app falls back to the REST mirror. Tracked as
+> QA P0-5 in [QA-REPORT.md](QA-REPORT.md).
+
 ## Decision: CloudKit public database is the primary backend
 
 The user's requirement: free Apple technology now, free option later for
@@ -41,6 +48,21 @@ use the **reference REST protocol**. Two free ways to serve it:
   (server-to-server token) so Apple users and everyone else share one truth.
   Sync service is a small Swift job in `server/` (`CloudKitMirrorService`).
 
+### REST delta-sync protocol (stable contract for non-Apple clients)
+
+- `POST /v1/sightings` with an `Idempotency-Key` header. The key is the
+  client's content-addressed digest (SHA-256 prefix, see
+  `OutboxDrainer.idempotencyKey`) — the same detection resubmitted after a
+  restart or retry must produce the same key, or the server stores it twice.
+- `GET /v1/sightings?cursor=…&limit=…` pages newest-first, ordered by
+  `(capturedAt DESC, id DESC)`. The response's `nextCursor` is
+  `"<ISO-8601-with-fractional-seconds>|<last-row-UUID>"` — echo it back
+  verbatim to resume strictly after the boundary row. Second-precision
+  timestamps collide constantly, so the ID tiebreaker is load-bearing: a
+  bare-timestamp filter would skip or loop rows at the page boundary.
+  A cursor that is only a date (legacy `since` style) is still accepted
+  and treated as "rows newer than this instant".
+
 ### Option B — Cloudflare free tier (documented alternative)
 Workers + D1 (SQLite) free tier can serve the read API + nightly exports for
 essentially unlimited read traffic. A community TypeScript port of
@@ -59,6 +81,36 @@ single host. "Librarians, not gatekeepers."
   public DB; bootstrap moderators are provisioned by the project owner.
 - The REST mirror authenticates by the same ed25519 signature scheme, so a
   device identity works on both backends.
+
+### Reference server operations (`server/`)
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `PORT` | `8083` | HTTP port (8080 is often taken by a local Apache) |
+| `HOST` | `127.0.0.1` | Bind address; set `0.0.0.0` only behind a TLS proxy |
+| `DATABASE_URL` | local docker-compose Postgres | Use `sslmode=require` in production |
+| `MODERATOR_TOKEN` | unset (console disabled) | Password for the moderator console; ≥ 24 characters |
+
+**Public feed rule.** `GET /v1/sightings` and the exports return only
+`fleetConfirmed` rows. `pending` and `redacted` rows never leave the server.
+Plate text is persisted only for `fleetConfirmed` rows (LEGAL-ETHICS Rule 1).
+
+**Moderator console.** `GET /moderator` lists `pending` sightings (unit
+number, ~1 km area, fleet confidence, ID; never a plate). Each decision is a
+`POST` that must carry an HMAC form token derived from `MODERATOR_TOKEN`, so
+a cross-site form cannot act on a sighting. Responses are `no-store`, use a
+strict CSP, and contain no third-party assets. Authentication is HTTP Basic
+(any username, password = `MODERATOR_TOKEN`); unset or short tokens return 404.
+Every decision is logged by sighting ID only.
+
+**Public aggregates.** `GET /v1/aggregates/heatmap?since=&until=&agencyID=`
+returns counts per geohash-6 cell and per UTC day for fleet-confirmed sightings.
+Any bucket with fewer than 5 sightings is withheld, and only the number of
+withheld buckets is reported. The window defaults to 30 days and is capped at
+366. No per-sighting data is returned.
+
+**Nightly export.** `NightlyExportJob` writes the public dataset at 03:00 UTC.
+It is not scheduled under `swift test`.
 
 ## Cost ceiling targets (keep us free)
 

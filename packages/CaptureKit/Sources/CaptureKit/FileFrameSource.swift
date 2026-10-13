@@ -53,4 +53,32 @@ public struct FileFrameSource: Sendable {
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
         return pixelBuffer
     }
+
+    /// Decode raw image data into a BGRA pixel buffer.
+    public static func pixelBuffer(from data: Data) -> CVPixelBuffer? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+
+        var buffer: CVPixelBuffer?
+        let result = CVPixelBufferCreate(
+            kCFAllocatorDefault, cg.width, cg.height, kCVPixelFormatType_32BGRA,
+            [kCVPixelBufferCGImageCompatibilityKey: true,
+             kCVPixelBufferCGBitmapContextCompatibilityKey: true] as CFDictionary,
+            &buffer)
+        guard result == kCVReturnSuccess, let pixelBuffer = buffer else { return nil }
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer),
+              let ctx = CGContext(
+                data: baseAddress, width: cg.width, height: cg.height,
+                bitsPerComponent: 8,
+                bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+              ) else { return nil }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+        return pixelBuffer
+    }
 }

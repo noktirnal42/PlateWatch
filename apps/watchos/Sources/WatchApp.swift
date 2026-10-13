@@ -1,19 +1,27 @@
+import PlateKit
+import PlateSync
+import SwiftData
 import SwiftUI
+import WatchKit
 
 @main
 struct PlateWatchWatchApp: App {
+    @WKExtensionDelegateAdaptor(WatchExtensionDelegate.self) private var delegate
+
     var body: some Scene {
         WindowGroup {
-            WatchRootView()
+            WatchRootView(hits: Binding(
+                get: { delegate.hits.map(\.title) },
+                set: { _ in }))
         }
     }
 }
 
 /// watchOS is intentionally camera-less: this app is the alert-and-log
 /// companion. CKQuerySubscription pushes wake it when a watchlist vehicle is
-/// fleet-confirmed nearby.
+/// fleet-confirmed nearby; the extension delegate plays the haptic.
 struct WatchRootView: View {
-    @State private var hits: [String] = [] // fed by push handler (CloudKit)
+    @Binding var hits: [String]
 
     var body: some View {
         NavigationStack {
@@ -35,25 +43,52 @@ struct WatchRootView: View {
     }
 }
 
-/// Dictation-based field note: "Black and white unit 8823 on 5th" → text →
-/// outbox as an unverified community observation (lowest confidence tier).
+/// Dictation-based field note: "Black and white unit 8823 on 5th" → outbox
+/// row on the watch, drained whenever the paired network path exists.
 struct QuickLogView: View {
     @State private var note = ""
     @State private var saved = false
+    @State private var container: ModelContainer?
 
     var body: some View {
         VStack(spacing: 12) {
             TextField("Say or type what you saw…", text: $note)
-            Button("Log it") {
-                // Persist to PlateSync outbox as a manual, unverified note.
-                saved = true
-            }
-            .disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Log it") { save() }
+                .disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
             if saved {
                 Label("Queued", systemImage: "checkmark.circle")
                     .foregroundStyle(.green)
             }
         }
         .padding()
+        .task {
+            if container == nil {
+                let schema = Schema([PendingSubmission.self])
+                let config = ModelConfiguration("PlateWatchWatch", schema: schema,
+                                                cloudKitDatabase: .none)
+                container = try? ModelContainer(for: schema, configurations: config)
+            }
+        }
+    }
+
+    private func save() {
+        guard let container else { return }
+        let dto = SightingSubmissionDTO(
+            capturedAt: Date(),
+            geohash6: "",   // no GPS fix required for manual notes
+            deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
+            fleetConfidence: 0.0,   // manual note = lowest confidence tier
+            vehicle: VehicleObservationDTO(vehicleClass: VehicleClass.unknown.rawValue,
+                                           classConfidence: 0),
+            markings: FleetMarkingsDTO(note: note.trimmingCharacters(in: .whitespaces)))
+        guard let payload = try? JSONEncoder.withISODates.encode(dto) else { return }
+        let context = ModelContext(container)
+        context.insert(PendingSubmission(
+            idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
+            payloadJSON: payload))
+        try? context.save()
+        saved = true
+        note = ""
+        WKInterfaceDevice.current().play(.click)
     }
 }

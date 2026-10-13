@@ -9,8 +9,8 @@ jobs:
   packages:
     strategy:
       fail-fast: false
-      matrix:
-        package: [PlateKit, CaptureKit, VehicleML, PlateSync]
+matrix:
+         package: [PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters]
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4

@@ -1,3 +1,6 @@
+include:
+  - path: project.local.yml
+    required: false
 name: PlateWatch
 options:
   bundleIdPrefix: org.platewatch
@@ -27,6 +30,13 @@ targets:
         CFBundleDisplayName: PlateWatch
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [remote-notification]
+        PlateWatchUseCloudKit: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: PlateWatchCarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     entitlements:
       path: Support/PlateWatch.entitlements
       properties:

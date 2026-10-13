@@ -9,6 +9,7 @@ docs/.build
 
 # Generated Xcode projects (regenerate with `xcodegen` in each apps/* dir)
 apps/*/*.xcodeproj
+apps/*/project.local.yml
 
 # SwiftPM
 .swiftpm/

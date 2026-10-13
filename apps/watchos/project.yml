@@ -1,3 +1,6 @@
+include:
+  - path: project.local.yml
+    required: false
 name: PlateWatchWatch
 options:
   bundleIdPrefix: org.platewatch

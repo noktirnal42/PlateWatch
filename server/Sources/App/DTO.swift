@@ -13,18 +13,30 @@ struct PlateDTO: Content {
     var confidence: Double
 }
 
-struct VehicleObservationDTO: Content {
-    var vehicleClass: String
-    var classConfidence: Double
+/// Field-compatible with PlateKit.VehicleAttributes (SyncDTOs.swift).
+struct VehicleAttributesDTO: Content {
+    var make: String?
+    var model: String?
+    var color: String?
+    var bodyType: String?
     var hasLightBar: Bool?
     var hasPushBar: Bool?
     var hasFleetDecals: Bool?
+}
+
+struct VehicleObservationDTO: Content {
+    var vehicleClass: String
+    var classConfidence: Double
+    var attributes: VehicleAttributesDTO?
 }
 
 struct FleetMarkingsDTO: Content {
     var agencyText: String?
     var unitNumber: String?
     var serviceClassText: String?
+    /// Free-text field note (watch dictation). Optional — decoded from
+    /// newer clients, absent in older payloads.
+    var note: String?
 }
 
 struct SightingSubmissionDTO: Content {
@@ -82,4 +94,5 @@ struct AgencyDTO: Content {
     var level: String
     var parentAgencyID: UUID?
     var publicContactURL: String?
+    var budgetURL: String?
 }
