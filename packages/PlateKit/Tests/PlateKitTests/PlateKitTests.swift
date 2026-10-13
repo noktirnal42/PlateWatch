@@ -334,3 +334,17 @@ final class JurisdictionTests: XCTestCase {
         XCTAssertNil(Plate.issuingRegion(forStateName: "Ontario"))
     }
 }
+
+final class FuzzyPhraseTests: XCTestCase {
+    private func obs(_ t: String) -> SceneTextObservation {
+        SceneTextObservation(text: t, boundingBox: .init(x: 0, y: 0, width: 0.2, height: 0.05), confidence: 0.9)
+    }
+    func testGarbledHighwayPatrolStillMatches() {
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("LIGHWAY PATROL")]).serviceClassText, "HIGHWAY PATROL")
+        XCTAssertEqual(SceneTextHeuristics.parse([obs("AIGHWAY PATROL.")]).serviceClassText, "HIGHWAY PATROL")
+    }
+    func testTwoGarbledWordsDoNotFormAKeyword() {
+        XCTAssertNil(SceneTextHeuristics.parse([obs("LIGHWAY PATROI")]).serviceClassText)
+        XCTAssertNil(SceneTextHeuristics.parse([obs("HIGHLY PATRONS")]).serviceClassText)
+    }
+}

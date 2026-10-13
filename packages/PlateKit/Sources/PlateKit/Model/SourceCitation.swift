@@ -16,6 +16,8 @@ public struct SourceCitation: Sendable, Codable, Hashable {
         case officialPost, openDataPortal, nhtsaVpic, communityVerified
         // M7 accountability-record sources (docs/ACCOUNTABILITY-DATA.md).
         case bradyList, decertificationRegister, courtDocket, newsReport
+        /// US Census Gazetteer (public domain) — canonical place/county names.
+        case censusGazetteer
     }
 
     public init(sourceType: SourceType,

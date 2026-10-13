@@ -93,7 +93,12 @@
     "author": "Harrison Keely",
     "query": "Dodge Charger Pursuit police",
     "id": 13,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Atlanta",
+      "state": "GA",
+      "service": "Police"
+    }
   },
   {
     "file": "corpus/police/2012_Dodge_Charger_Police_Pursuit_Vehicle_5454891798_.jpg",
@@ -141,7 +146,12 @@
     "author": "Raymond Wambsgans",
     "query": "Chevrolet Tahoe police",
     "id": 17,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Milan",
+      "state": "OH",
+      "service": "Police"
+    }
   },
   {
     "file": "corpus/police/FBI_Police_Chevrolet_Tahoe_J133742.jpg",
@@ -165,7 +175,12 @@
     "author": "Raymond Wambsgans",
     "query": "Chevrolet Tahoe police",
     "id": 19,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": null,
+      "state": "MI",
+      "service": "State Police"
+    }
   },
   {
     "file": "corpus/sheriff/A_California_Highway_Patrol_vehicle_amid_structural_debris_following_the_January_2025_Pali",
@@ -189,7 +204,12 @@
     "author": "An Errant Knight",
     "query": "county sheriff's office vehicle",
     "id": 24,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Utah",
+      "state": "UT",
+      "service": "Sheriff"
+    }
   },
   {
     "file": "corpus/sheriff/Juab_County_Sheriff_s_Office_vehicle_Utah.JPG",
@@ -201,7 +221,12 @@
     "author": "An Errant Knight",
     "query": "county sheriff's office vehicle",
     "id": 25,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Juab",
+      "state": "UT",
+      "service": "Sheriff"
+    }
   },
   {
     "file": "corpus/sheriff/Power_County_Sheriff_s_Office_vehicle_Jun_17.jpg",
@@ -213,7 +238,12 @@
     "author": "An Errant Knight",
     "query": "county sheriff's office vehicle",
     "id": 27,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Power",
+      "state": "ID",
+      "service": "Sheriff"
+    }
   },
   {
     "file": "corpus/sheriff/Police_Car_Missouri_Highway_Patrol_15177420427_.jpg",
@@ -225,7 +255,12 @@
     "author": "Tony Hisgett from Birmingham, UK",
     "query": "state highway patrol car",
     "id": 28,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": null,
+      "state": "MO",
+      "service": "Highway Patrol"
+    }
   },
   {
     "file": "corpus/sheriff/Police_Car_Oklahoma_Highway_Patrol_15391843332_.jpg",
@@ -237,7 +272,12 @@
     "author": "Tony Hisgett from Birmingham, UK",
     "query": "state highway patrol car",
     "id": 29,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": null,
+      "state": "OK",
+      "service": "Highway Patrol"
+    }
   },
   {
     "file": "corpus/sheriff/A_Wyoming_Highway_Patrol_car_in_Gillette_Wyoming.jpg",
@@ -249,7 +289,12 @@
     "author": "Mr. Satterly",
     "query": "state highway patrol car",
     "id": 30,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": null,
+      "state": "WY",
+      "service": "Highway Patrol"
+    }
   },
   {
     "file": "corpus/sheriff/Wyoming_Highway_Patrol_State_Trooper_-_Casper.jpg",
@@ -273,7 +318,12 @@
     "author": "David Ratledge",
     "query": "fire department ladder truck USA",
     "id": 36,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Knoxville",
+      "state": "TN",
+      "service": "Fire"
+    }
   },
   {
     "file": "corpus/fire/Akron_Fire_Department_Pierce_Truck_10_16194886153_.jpg",
@@ -285,7 +335,12 @@
     "author": "Raymond Wambsgans from Akron Ohio, USA",
     "query": "fire department ladder truck USA",
     "id": 37,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Akron",
+      "state": "OH",
+      "service": "Fire"
+    }
   },
   {
     "file": "corpus/fire/AFD_Ladder_L623_Pierce_Lance_14745940339_.jpg",
@@ -297,7 +352,12 @@
     "author": "Raymond Wambsgans from Akron Ohio, USA",
     "query": "fire department ladder truck USA",
     "id": 39,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Akron",
+      "state": "OH",
+      "service": "Fire"
+    }
   },
   {
     "file": "corpus/fire/Minneapolis-Fire-Deputy_Chief-20080928.jpg",
@@ -321,7 +381,12 @@
     "author": "Joe Mabel",
     "query": "fire department chief SUV",
     "id": 41,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Seattle",
+      "state": "WA",
+      "service": "Fire"
+    }
   },
   {
     "file": "corpus/fire/Seattle_Fire_Department_-_Battalion_6_command_vehicle.jpg",
@@ -333,7 +398,12 @@
     "author": "Joe Mabel",
     "query": "fire department chief SUV",
     "id": 42,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Seattle",
+      "state": "WA",
+      "service": "Fire"
+    }
   },
   {
     "file": "corpus/fire/CFDBatallionChief.jpg",
@@ -537,7 +607,12 @@
     "author": "Tony Webster from Minneapolis, Minnesota, United States",
     "query": "city public works truck United States",
     "id": 67,
-    "difficulty": "standard"
+    "difficulty": "standard",
+    "agency": {
+      "place": "Pittsburgh",
+      "state": "PA",
+      "service": "Public Works"
+    }
   },
   {
     "file": "corpus/public/National_Park_Service_ranger_vehicle.jpg",

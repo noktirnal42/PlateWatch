@@ -92,6 +92,37 @@ extension VisionTextRunner {
         return out
     }
 
+    /// The slow pass for dark-on-dark lettering: contrast-stretched, upscaled OCR over the
+    /// frame and a wide mid-body band, on dark regions only. Callers gate it (see
+    /// `VisionBaselineAnalyzer.nameFleetVehicles`).
+    static func recognizeEnhanced(in pixelBuffer: CVPixelBuffer, minimumTextHeight: Float) async -> [RawTextHit] {
+        var cg: CGImage?
+        VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cg)
+        guard let image = cg else { return [] }
+        let w = Double(image.width), h = Double(image.height)
+        // Vision space (origin bottom-left): the whole frame, a wide mid-body band, and the two halves of it.
+        let regions: [(x: Double, y: Double, w: Double, h: Double)] = [
+            (0, 0, 1, 1), (0, 0.30, 1, 0.36), (0.0, 0.34, 0.55, 0.30), (0.45, 0.34, 0.55, 0.30),
+        ]
+        var out: [RawTextHit] = []
+        for r in regions {
+            let crop = CGRect(x: r.x * w, y: (1 - r.y - r.h) * h, width: r.w * w, height: r.h * h)
+            guard let region = image.cropping(to: crop),
+                  ContrastVariants.meanLuminance(region) < ContrastVariants.darkThreshold else { continue }
+            for recipe in ContrastVariants.darkRecipes {
+                guard let v = ContrastVariants.stretched(region, scale: 2, gain: recipe.gain, bias: recipe.bias),
+                      let hits = try? await recognize(in: v, level: .accurate, minimumTextHeight: minimumTextHeight)
+                else { continue }
+                for hit in hits {
+                    let box = CGRect(x: r.x + Double(hit.box.minX) * r.w, y: r.y + Double(hit.box.minY) * r.h,
+                                     width: Double(hit.box.width) * r.w, height: Double(hit.box.height) * r.h)
+                    out.append(RawTextHit(texts: hit.texts, confidence: hit.confidence, box: box))
+                }
+            }
+        }
+        return out
+    }
+
     /// Drop tile hits that repeat something the full-frame pass already found.
     static func merge(_ base: [RawTextHit], with extra: [RawTextHit]) -> [RawTextHit] {
         var merged = base
@@ -158,7 +189,8 @@ enum PlateRectangleReader {
                     boundingBox: NormalizedBox(visionRect: box),
                     candidates: [Plate(text: official.registration,
                                        issuingRegion: official.jurisdiction.flatMap(Plate.issuingRegion(forStateName:)),
-                                       plateDesign: official.design, confidence: 0.9)]))
+                                       plateDesign: official.design, confidence: 0.9,
+                                       officialWords: Plate.officialWords(in: joined))]))
                 continue
             }
             for hit in hits {
@@ -231,7 +263,8 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
                     candidates: [Plate(text: official.registration,
                                        issuingRegion: official.jurisdiction.flatMap(Plate.issuingRegion(forStateName:)),
                                        plateDesign: official.design,
-                                       confidence: 0.9)]))
+                                       confidence: 0.9,
+                                       officialWords: Plate.officialWords(in: text))]))
                 continue
             }
             let observation = SceneTextObservation(
@@ -301,6 +334,7 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         }
 
         Self.applyCue(VehicleCueClassifier.classify(pixelBuffer), sceneText: sceneText, to: &vehicles)
+        if context.thorough { await Self.nameFleetVehicles(&vehicles, pixelBuffer: pixelBuffer) }
 
         return DetectionFrame(timestamp: context.timestamp,
                               imageSize: CGSize(width: width, height: height),
@@ -315,6 +349,31 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         return detected.observations
             .filter { $0.label.lowercased().contains("plate") || $0.label == "0" }
             .map { CGRect(x: $0.box.x, y: 1 - ($0.box.y + $0.box.height), width: $0.box.width, height: $0.box.height) }
+    }
+
+    /// A vehicle that already has fleet evidence (fleet door text, an official plate, or a fleet
+    /// classifier cue) but whose agency place could not be read gets one more look with
+    /// contrast-enhanced OCR. The result is stored apart (`enhancedText`) and used only to
+    /// *name* the agency — so it can never turn a non-fleet vehicle into a fleet one.
+    static func nameFleetVehicles(_ vehicles: inout [VehicleObservation], pixelBuffer: CVPixelBuffer) async {
+        let resolver = IdentityResolver()
+        let candidates = vehicles.indices.filter { i in
+            let v = vehicles[i]
+            let fleetEvidence = SceneTextHeuristics.parse(v.sceneText).hasFleetKeyword
+                || v.plates.contains { $0.best?.isOfficialPlate == true }
+                || (v.vehicleClass.isFleet && v.classConfidence > 0)
+            return fleetEvidence && resolver.resolve(vehicle: v).agency?.place == nil
+        }
+        guard !candidates.isEmpty else { return }
+        let hits = await VisionTextRunner.recognizeEnhanced(in: pixelBuffer, minimumTextHeight: thoroughMinimumTextHeight)
+        var seen = Set<String>()
+        let lines: [SceneTextObservation] = hits.compactMap { hit in
+            let text = (hit.texts.first ?? "").trimmingCharacters(in: .whitespaces)
+            guard text.count >= 3, seen.insert(text.uppercased()).inserted else { return nil }
+            return SceneTextObservation(text: text, boundingBox: NormalizedBox(visionRect: hit.box),
+                                        confidence: Double(hit.confidence))
+        }
+        for i in candidates { vehicles[i].enhancedText = lines }
     }
 
     /// Fold the image-level classifier cue into the vehicle list.

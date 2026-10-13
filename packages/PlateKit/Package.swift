@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "PlateKit", targets: ["PlateKit"]),
     ],
     targets: [
-        .target(name: "PlateKit"),
+        .target(name: "PlateKit", resources: [.copy("Resources/gazetteer.tsv")]),
         .testTarget(name: "PlateKitTests", dependencies: ["PlateKit"]),
     ]
 )

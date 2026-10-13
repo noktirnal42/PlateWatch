@@ -41,6 +41,10 @@ public struct VehicleObservation: Sendable, Identifiable {
     /// All scene text read on/near the vehicle (doors, roof, hood) —
     /// input for the fleet-markings parser.
     public var sceneText: [SceneTextObservation]
+    /// Lines recovered only by the slow contrast-enhanced OCR pass (dark-on-dark lettering).
+    /// Used to *name* an already-fleet vehicle's agency; never part of gate scoring, so
+    /// enhanced noise can never create a fleet flag.
+    public var enhancedText: [SceneTextObservation] = []
     /// Perceptual feature print for re-identification (hex).
     public var featurePrintAnchorLookahead: String?
     /// Classifier-derived attributes, when available.

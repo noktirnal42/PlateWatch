@@ -70,7 +70,8 @@ public enum SceneTextHeuristics {
     /// "SHERIFE"). Single-word keywords of 5+ letters tolerate one edit; short
     /// ones (FIRE, EMS) stay exact so "FIRM"/"EMS"-like words do not match.
     private static func containsFuzzyWord(_ upper: String, _ keyword: String) -> Bool {
-        guard keyword.count >= 5, !keyword.contains(" ") else { return false }
+        if keyword.contains(" ") { return containsFuzzyPhrase(upper, keyword) }
+        guard keyword.count >= 5 else { return false }
         let target = Array(keyword)
         return upper.split(whereSeparator: { !$0.isLetter }).contains {
             $0.count >= 5 && withinOneEdit(Array($0), target)
@@ -101,6 +102,25 @@ public enum SceneTextHeuristics {
         let overlapsVertically = verticalGap < maxHeight * 0.5
         return (overlapsHorizontally && verticalGap < maxHeight * 2.0)
             || (overlapsVertically && horizontalGap < maxHeight * 2.5)
+    }
+
+    /// "LIGHWAY PATROL" for "HIGHWAY PATROL": every word of a multi-word keyword must match the
+    /// next token exactly, or within one edit when the word is 5+ letters. At least one word must be
+    /// an exact match, so two garbled words alone cannot form a keyword.
+    private static func containsFuzzyPhrase(_ upper: String, _ keyword: String) -> Bool {
+        let want = keyword.split(separator: " ").map(String.init)
+        let have = upper.split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard have.count >= want.count else { return false }
+        for start in 0...(have.count - want.count) {
+            var exact = 0, ok = true
+            for (i, w) in want.enumerated() {
+                let h = have[start + i]
+                if h == w { exact += 1 }
+                else if !(w.count >= 5 && h.count >= 4 && TextMatching.withinOneEdit(Array(w), Array(h))) { ok = false; break }
+            }
+            if ok && exact >= 1 { return true }
+        }
+        return false
     }
 
     /// Whole-word match: "EMS" must not fire inside "SYSTEMS"/"ITEMS", nor

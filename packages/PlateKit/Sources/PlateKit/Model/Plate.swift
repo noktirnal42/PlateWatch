@@ -19,12 +19,17 @@ public struct Plate: Sendable, Hashable, Codable {
     public let plateDesign: String?
     /// Recognition confidence 0…1 (multi-frame fused where available).
     public let confidence: Double
+    /// Official-use words printed on the plate ("POLICE", "OFFICIAL"). Kept after the
+    /// registration is extracted so the service can be attributed to the plate.
+    public let officialWords: [String]
 
     public init(text raw: String,
                 issuingRegion: String? = nil,
                 country: String = "US",
                 plateDesign: String? = nil,
-                confidence: Double = 0) {
+                confidence: Double = 0,
+                officialWords: [String] = []) {
+        self.officialWords = officialWords
         self.rawText = raw
         self.text = Plate.normalize(raw)
         self.issuingRegion = issuingRegion
@@ -36,6 +41,13 @@ public struct Plate: Sendable, Hashable, Codable {
     /// Uppercases and removes anything that is not A–Z0–9.
     public static func normalize(_ raw: String) -> String {
         raw.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    }
+
+    /// Official-use words present in a plate line ("POLICE D756 OFFICIAL" → ["POLICE", "OFFICIAL"]).
+    public static func officialWords(in raw: String) -> [String] {
+        let padded = " " + raw.uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
+            .reduce(into: "") { $0.append($1) } + " "
+        return officialPlateWords.filter { padded.contains(" \($0) ") }
     }
 
     /// ISO 3166-2 region code for a US state name as printed on plate headers
