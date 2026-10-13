@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PlateWatch — open-source ALPR for public accountability</title>
-<meta name="description" content="PlateWatch is an open-source, on-device license plate recognition platform that tracks taxpayer-funded government vehicles. Pre-alpha.">
+<title>PlateWatch — open accountability infrastructure for public fleets & officials</title>
+<meta name="description" content="PlateWatch is open, on-device accountability infrastructure: it documents publicly funded fleets and cross-references the public record about the officials who run them. Private citizens are out of scope by design. Pre-alpha.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <meta property="og:title" content="PlateWatch">
 <meta property="og:description" content="Open-source ALPR for public accountability — taxpayer-funded vehicles only, on-device, public records only.">
@@ -93,8 +93,8 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
 <div class="wrap">
   <div class="hero">
     <span class="pill"><i></i>Pre-alpha · building in the open</span>
-    <h1>Watch the <em>public fleet</em>.</h1>
-    <p class="lede">PlateWatch is an open-source, on-device license plate recognition platform for one purpose: holding taxpayer-funded vehicles — police, fire, transit, public works, federal fleets — accountable. Private-citizen plates are redacted by design.</p>
+    <h1>Watch the <em>public fleet</em>.<br>Watch the <em>record</em>.</h1>
+    <p class="lede">PlateWatch is open accountability infrastructure. On-device recognition documents publicly funded vehicles — police, fire, transit, public works, federal fleets — from phones, webcams and public traffic cameras; cited public records (rosters, FOIA releases, Brady lists, court dockets) connect those vehicles to the officials who run them. Public officials are not shielded from public scrutiny. Private citizens are out of scope by design.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/noktirnal42/PlateWatch">View on GitHub</a>
       <a class="btn" href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">Read the latest QA report</a>
@@ -138,7 +138,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
   <h2>Non-negotiable principles</h2>
   <p class="sub">Encoded in the data layer, not just the docs.</p>
   <div class="rules">
-    <div class="rule"><div><b>Government and fleet focus</b><span>The platform tracks publicly funded assets. It is not a people-tracking tool.</span></div></div>
+    <div class="rule"><div><b>Watches the powerful, never the private</b><span>Public officials in their public capacity are fair subject matter — photographing them on duty is protected activity. Private individuals, their plates and their homes are out of scope absolutely.</span></div></div>
     <div class="rule"><div><b>Public records only</b><span>Fleet registries, FOIA releases, rosters and auction listings. Never DMV or data-broker data.</span></div></div>
     <div class="rule"><div><b>On-device first</b><span>No telemetry, analytics SDKs, frame uploads or third-party trackers.</span></div></div>
     <div class="rule"><div><b>Evidence quality</b><span>Every sighting is content-hashed and timestamped, with its sources.</span></div></div>
@@ -152,6 +152,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
     <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Deploy CloudKit schema</li><li>Moderator publish tool</li><li>Live-camera field test</li><li>Fleet-specific classifier (recall)</li><li>Visual redesign</li></ul></div>
     <div class="card"><div class="num">NEXT · M2</div><h3>Identification depth</h3><ul><li>Plate detector + OCR models</li><li>Make/model/colour</li><li>Plate-design classifier</li><li>Vehicle re-ID</li></ul></div>
     <div class="card"><div class="num">THEN · M4</div><h3>Network &amp; UX</h3><ul><li>Real heatmap &amp; timeline</li><li>Agency report card in-app</li><li>Watchlist push to watchOS</li><li>CarPlay passive mode</li></ul></div>
+    <div class="card"><div class="num">NEXT · M6/M7</div><h3>Sources & records</h3><ul><li>iPhone-as-webcam + webcams (Hub)</li><li>Public traffic-cam feeds</li><li>Official rosters, photos, Brady lists</li><li>Cited cross-references</li></ul></div>
     <div class="card"><div class="num">LATER · M5</div><h3>Beyond Apple</h3><ul><li>Public REST mirror</li><li>Raspberry Pi edge agent</li><li>Android client</li><li>Web explorer</li></ul></div>
   </div>
 </div></section>

@@ -78,6 +78,36 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ⬜ Android client via shared DTO spec + ONNX models
 - ⬜ Web read-only explorer (Lite: exports; Full: mirror API)
 
+## M6 — Remote camera sources & public feeds (macOS Hub)
+Sources: [CAMERA-SOURCES.md](CAMERA-SOURCES.md). Every source feeds the same
+`RedactionGate` — widening coverage must never widen what persists.
+- ⬜ Continuity Camera (iPhone as webcam) + UVC webcam enumeration with a
+  camera picker in the Hub (AVCaptureDevice `DiscoverySession`)
+- ⬜ RTSP ingest rework — current `RTSPStreamHandler` uses `AVAssetReader` on
+  an `rtsp://` URL (cannot open live streams) and calls a removed
+  `RedactionGate` API (Hub does not compile); plan: HLS via
+  `AVPlayerItemVideoOutput` first, VLCKit (LGPL) as fallback
+- ⬜ Public traffic-cam feeds: `PublicFeedSource` + polite poller (HLS /
+  snapshot JPEG; state 511 catalogs, USA first), citations per feed
+- ⬜ Per-source recorded fixtures so CI never depends on live cameras
+
+## M7 — Accountability records (people & vehicles cross-reference)
+Sources: [ACCOUNTABILITY-DATA.md](ACCOUNTABILITY-DATA.md),
+[LEGAL-ETHICS.md](LEGAL-ETHICS.md) Rule 6. **Ethics review required before
+any collection code lands**; the `AccountabilityKit` type skeleton may land
+first.
+- ⬜ `AccountabilityKit` package: `OfficialProfile`, `IncidentRecord`,
+  citation enforcement (no record without `SourceCitation`)
+- ⬜ Roster/assignment importers extended to person-level records
+- ⬜ Brady/decertification register + lawsuit docket importers (verbatim,
+  cited, status-aware)
+- ⬜ Cross-reference chain: sighting → unit → assignment → official → records
+  (inference labeled, moderator-confirmed before publish)
+- ⬜ Aggregation of existing public-interest publishers (cite-first, no
+  re-hosting without attribution)
+- ✅ FOIA request generator (`FleetImporters`, M3) — foundation for records
+  requests that feed this program
+
 ## Ideas bin (brainstormed, not scheduled)
 - ALPR-countermeasure documentation (where commercial ALPRs are, via EFF
   Atlas of Surveillance import) — "watch the watchers' watchers"

@@ -1,6 +1,18 @@
 # PlateWatch — Handoff Document
 
-**Project:** PlateWatch — Open-source ALPR for government vehicle accountability
+> **Session 2026-10-13 (evening, continuation agent):** vehicle-detector fusion fixed
+> (recording fleet evidence no longer erased when the CoreML vehicle detector runs —
+> recall back to 59 % with plate reads up 10→15/62); CoreML plate detector wired into
+> the eval harness (`--models models/cache`); difficult stealth-livery photo verified
+> passing (`D756`, official-plate rule). New programs documented: M6 camera sources
+> (`docs/CAMERA-SOURCES.md`), M7 accountability records (`docs/ACCOUNTABILITY-DATA.md`,
+> LEGAL-ETHICS Rule 6), monorepo workstreams (`docs/PROJECTS.md`). Mission retitled to
+> "watch the powerful"; name/identifiers unchanged. See docs/DECISIONS.md.
+
+---
+
+
+**Project:** PlateWatch — Open accountability infrastructure for publicly funded fleets and the officials who run them
 **Date:** 2026-10-13 (QA pass; see §00)
 **Branch:** `fix/sighting-unit-number` (10 commits ahead of origin)
 **Status:** Core loop works on real photos (155 tests; 100 % precision / 57 % auto recall on a 62-image real corpus); CloudKit awaiting the developer-account step — see `docs/QA-REPORT.md`, `docs/EVALUATION.md`
@@ -169,7 +181,7 @@ build only, not by running in the simulator.
 
 ## 1. Executive Summary
 
-PlateWatch is a Swift-first, on-device ALPR system focused on **taxpayer-funded vehicle accountability** (police, fire, EMS, public works, transit, federal fleets). It is **not** a general people-tracking system. All code respects the legal/ethical guardrails in `docs/LEGAL-ETHICS.md`: fleet-only ingestion, public-records-only enrichment, provenance everywhere, on-device first, no secrets in repo.
+PlateWatch is Swift-first, on-device accountability infrastructure: it documents **taxpayer-funded vehicles** (police, fire, EMS, public works, transit, federal fleets) and cross-references **public records about the officials who operate them** (rosters, official photos, Brady/Giglio lists, court dockets — always cited). It never tracks private individuals. All code respects the legal/ethical guardrails in `docs/LEGAL-ETHICS.md`: fleet-only ingestion, public-records-only enrichment, provenance everywhere, on-device first, no secrets in repo.
 
 **Architecture:** Monorepo with 5 Swift packages + 1 FoundationModels parser + Vapor reference server + 3 app targets (iOS, macOS-Hub, watchOS).
 

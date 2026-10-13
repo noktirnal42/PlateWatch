@@ -220,3 +220,27 @@ import (the app shows a branded "No live camera" card).
 fabricated "sightings" in any shared database.
 
 **Crash reports:** `~/Library/Logs/DiagnosticReports/PlateWatch-*.ips` — the CoreLocation crash was found this way.
+
+---
+
+## 9. Expansion programs added 2026-10-13 (later)
+
+Three workstreams opened after this handoff was written — tracked in
+[`docs/PROJECTS.md`](PROJECTS.md), decisions in `docs/DECISIONS.md`:
+
+- **M6 — remote camera sources (WS2):** Continuity Camera (iPhone-as-webcam),
+  UVC webcams, RTSP rework (current Hub code does not compile and cannot open
+  live RTSP), and public traffic-cam feeds (HLS/snapshot, USA first).
+  See [CAMERA-SOURCES.md](CAMERA-SOURCES.md).
+- **M7 — accountability records (WS4):** public officials in public capacity —
+  rosters, official photos, Brady/Giglio lists, lawsuit dockets, aggregation
+  of existing public-interest publishers, cross-referenced to vehicles/units.
+  Guardrails in `LEGAL-ETHICS.md` Rule 6; see
+  [ACCOUNTABILITY-DATA.md](ACCOUNTABILITY-DATA.md). Ethics review before any
+  collection code lands.
+- **Restructure:** monorepo + workstreams; `AccountabilityKit`/`FeedIngest`
+  package skeletons; shared `PlateKit.FleetScoring` scoring entry point so
+  call sites cannot drift again (the Hub breakage pattern).
+
+Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
+(blocked on the owner's Apple account) unless the owner reorders.

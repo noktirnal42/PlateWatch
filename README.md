@@ -1,6 +1,8 @@
 # PlateWatch
 
-**Open-source Automatic License Plate Recognition for public accountability.**
+**Open accountability infrastructure: on-device recognition of publicly funded
+fleets, plus cited public records (rosters, FOIA releases, Brady lists, court
+dockets) that connect vehicles to the officials who run them.**
 Turning the tables on mass surveillance: a community platform for identifying,
 cataloging, and sharing information about taxpayer-funded vehicles — police,
 fire, public works, transit, and government fleets — using commodity cameras
