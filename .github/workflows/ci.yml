@@ -9,8 +9,8 @@ jobs:
   packages:
     strategy:
       fail-fast: false
-matrix:
-         package: [PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters]
+      matrix:
+        package: [PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters, AccountabilityKit, FeedIngest]
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +45,13 @@ matrix:
         run: xcodebuild -project apps/macos-hub/PlateWatchHub.xcodeproj -scheme PlateWatchHub -destination 'generic/platform=macOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
       - name: Build watchOS app (simulator, unsigned)
         run: xcodebuild -project apps/watchos/PlateWatchWatch.xcodeproj -scheme PlateWatchWatch -destination 'generic/platform=watchOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+
+  eval-harness:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the evaluation harness (the corpus itself is not in CI)
+        run: swift build -c release --package-path eval/harness
 
   model-pipeline:
     runs-on: macos-26
