@@ -116,7 +116,14 @@ public struct Plate: Sendable, Hashable, Codable {
     /// does not apply — but at least one digit and one letter/digit run is required.
     /// A leading state name ("Massachusetts POLICE D756") is returned as
     /// `jurisdiction`, never as part of the registration.
-    public static func officialRegistration(from raw: String) -> (registration: String, design: String, jurisdiction: String?)? {
+    ///
+    /// Word-only registrations exist: Minnesota issues police plates reading
+    /// just "POLICE" (with the "10,000 Lakes" slogan). Those are accepted when
+    /// `allowWordRegistration` (the caller read the line inside a trusted
+    /// plate-rectangle crop) or when a state name anchors the line — a bare
+    /// "POLICE" door decal still is not a plate.
+    public static func officialRegistration(from raw: String,
+                                            allowWordRegistration: Bool = false) -> (registration: String, design: String, jurisdiction: String?)? {
         var upper = " " + raw.uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
             .reduce(into: "") { $0.append($1) } + " "
         var matched: [String] = []
@@ -138,10 +145,24 @@ public struct Plate: Sendable, Hashable, Codable {
                 return true
             }
             .joined()
-        guard (3...8).contains(leftover.count), leftover.contains(where: \.isNumber) else { return nil }
-        var run = 0
-        for ch in leftover { run = ch.isLetter ? run + 1 : 0; if run >= 5 { return nil } }
-        return (leftover, "government-official", jurisdiction)
+        if (3...8).contains(leftover.count), leftover.contains(where: \.isNumber) {
+            var run = 0
+            for ch in leftover { run = ch.isLetter ? run + 1 : 0; if run >= 5 { return nil } }
+            return (leftover, "government-official", jurisdiction)
+        }
+        // Word-only registration: the plate reads just the official word
+        // ("POLICE" — Minnesota). "OFFICIAL" itself is the design marker,
+        // never the registration. The leftover must not contain unknown
+        // words: "WALTHAM POLICE" on a tailgate is a department name, not a
+        // plate, and must stay scene text. State names (→ jurisdiction) and
+        // pure digits (slogan numerals) are ignored here.
+        let canUseWord = allowWordRegistration || jurisdiction != nil
+        let unknownWords = upper.split(separator: " ").map(String.init).filter {
+            !$0.isEmpty && !Plate.usaStateNames.contains($0) && !$0.allSatisfy(\.isNumber)
+        }
+        guard canUseWord, unknownWords.isEmpty,
+              let wordRegistration = matched.first(where: { $0 != "OFFICIAL" }) else { return nil }
+        return (wordRegistration, "government-official", jurisdiction)
     }
 
     /// (State names moved to `usaStateNames` — used for jurisdiction logging.)

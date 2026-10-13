@@ -151,9 +151,16 @@ enum PlateRectangleReader {
             // Join everything read inside the plate (state name, number, slogan);
             // the plausible-reading filter picks the registration.
             // Official-use plate: judge the crop's lines together ("Massachusetts /
-            // POLICE D756 / OFFICIAL"), since the words and registration are separate lines.
-            let joined = hits.compactMap { $0.texts.first }.joined(separator: " ")
-            if let official = Plate.officialRegistration(from: joined), seen.insert(official.registration).inserted {
+            // POLICE D756 / OFFICIAL"), since the words and registration are separate
+            // lines — but try each line on its own first: word-only plates
+            // ("MINNESOTA" / "POLICE" / "10,000 LAKES") are cleaner per line, and
+            // per-line judgment keeps slogan words out of the joined leftover.
+            let lines = hits.compactMap { $0.texts.first }
+            let officialCandidates = (lines + [lines.joined(separator: " ")]).compactMap {
+                Plate.officialRegistration(from: $0, allowWordRegistration: true)
+            }
+            if let official = officialCandidates.first,
+               seen.insert(official.registration).inserted {
                 found.append(PlateObservation(
                     boundingBox: NormalizedBox(visionRect: box),
                     candidates: [Plate(text: official.registration,

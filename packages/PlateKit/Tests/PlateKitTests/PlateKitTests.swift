@@ -334,3 +334,32 @@ final class JurisdictionTests: XCTestCase {
         XCTAssertNil(Plate.issuingRegion(forStateName: "Ontario"))
     }
 }
+
+final class WordPlateTests: XCTestCase {
+    func testMinnesotaWordOnlyPolicePlateIsLogged() {
+        // Minneapolis Police Explorer: MN plate reads just "POLICE"
+        // ("10,000 Lakes" slogan below). The state anchors the line.
+        let r = Plate.officialRegistration(from: "MINNESOTA POLICE")
+        XCTAssertEqual(r?.registration, "POLICE")
+        XCTAssertEqual(r?.jurisdiction, "MINNESOTA")
+        XCTAssertEqual(Plate.issuingRegion(forStateName: "MINNESOTA"), "US-MN")
+        // Slogan must not become the registration: OCR reads lines
+        // separately ("MINNESOTA" / "POLICE" / "10,000 LAKES"), and the
+        // unknown word "LAKES" must never be swallowed into a plate.
+        XCTAssertNil(Plate.officialRegistration(from: "MINNESOTA POLICE 10,000 LAKES"))
+        let sloganLine = Plate.officialRegistration(from: "10,000 LAKES", allowWordRegistration: true)
+        XCTAssertNil(sloganLine)
+        let wordLine = Plate.officialRegistration(from: "POLICE", allowWordRegistration: true)
+        XCTAssertEqual(wordLine?.registration, "POLICE")
+        // Inside a trusted plate crop even the bare word is the plate.
+        XCTAssertEqual(Plate.officialRegistration(from: "POLICE", allowWordRegistration: true)?.registration, "POLICE")
+        // "10,000 LAKES" alone is never a plate.
+        XCTAssertNil(Plate.officialRegistration(from: "10,000 LAKES", allowWordRegistration: true))
+    }
+    func testDoorTextStillIsNotAPlate() {
+        // A bare "POLICE" door decal (no state, no crop context) stays text.
+        XCTAssertNil(Plate.officialRegistration(from: "POLICE"))
+        XCTAssertNil(Plate.officialRegistration(from: "MINNEAPOLIS POLICE"))
+        XCTAssertNil(Plate.officialRegistration(from: "POLICE DEPARTMENT"))
+    }
+}
