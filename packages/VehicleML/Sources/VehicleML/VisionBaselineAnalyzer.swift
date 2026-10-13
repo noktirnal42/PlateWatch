@@ -156,7 +156,9 @@ enum PlateRectangleReader {
             if let official = Plate.officialRegistration(from: joined), seen.insert(official.registration).inserted {
                 found.append(PlateObservation(
                     boundingBox: NormalizedBox(visionRect: box),
-                    candidates: [Plate(text: official.registration, plateDesign: official.design, confidence: 0.9)]))
+                    candidates: [Plate(text: official.registration,
+                                       issuingRegion: official.jurisdiction.flatMap(Plate.issuingRegion(forStateName:)),
+                                       plateDesign: official.design, confidence: 0.9)]))
                 continue
             }
             for hit in hits {
@@ -226,7 +228,9 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
             if let official = Plate.officialRegistration(from: text) {
                 officialPlates.append(PlateObservation(
                     boundingBox: NormalizedBox(visionRect: hit.box),
-                    candidates: [Plate(text: official.registration, plateDesign: official.design,
+                    candidates: [Plate(text: official.registration,
+                                       issuingRegion: official.jurisdiction.flatMap(Plate.issuingRegion(forStateName:)),
+                                       plateDesign: official.design,
                                        confidence: 0.9)]))
                 continue
             }

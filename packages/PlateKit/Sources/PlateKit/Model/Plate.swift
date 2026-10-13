@@ -38,6 +38,36 @@ public struct Plate: Sendable, Hashable, Codable {
         raw.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
     }
 
+    /// ISO 3166-2 region code for a US state name as printed on plate headers
+    /// ("Massachusetts" → "US-MA"). Unknown names return nil. Jurisdiction
+    /// from the plate is metadata logged with the sighting — never evidence
+    /// of a fleet role on its own.
+    public static func issuingRegion(forStateName stateName: String) -> String? {
+        let codes = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI",
+                     "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI",
+                     "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC",
+                     "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT",
+                     "VT", "VA", "WA", "WV", "WI", "WY", "DC"]
+        let names = ["ALABAMA", "ALASKA", "ARIZONA", "ARKANSAS", "CALIFORNIA", "COLORADO",
+                     "CONNECTICUT", "DELAWARE", "FLORIDA", "GEORGIA", "HAWAII", "IDAHO",
+                     "ILLINOIS", "INDIANA", "IOWA", "KANSAS", "KENTUCKY", "LOUISIANA",
+                     "MAINE", "MARYLAND", "MASSACHUSETTS", "MICHIGAN", "MINNESOTA",
+                     "MISSISSIPPI", "MISSOURI", "MONTANA", "NEBRASKA", "NEVADA",
+                     "NEW HAMPSHIRE", "NEW JERSEY", "NEW MEXICO", "NEW YORK",
+                     "NORTH CAROLINA", "NORTH DAKOTA", "OHIO", "OKLAHOMA", "OREGON",
+                     "PENNSYLVANIA", "RHODE ISLAND", "SOUTH CAROLINA", "SOUTH DAKOTA",
+                     "TENNESSEE", "TEXAS", "UTAH", "VERMONT", "VIRGINIA", "WASHINGTON",
+                     "WEST VIRGINIA", "WISCONSIN", "WYOMING", "DISTRICT OF COLUMBIA"]
+        // Single-token match first ("TEXAS"), then collapsed two-word names
+        // ("NEW YORK" → "NEWYORK") for lines split across OCR tokens.
+        let upper = stateName.uppercased()
+        if let i = names.firstIndex(of: upper) { return "US-\(codes[i])" }
+        if let i = names.firstIndex(of: upper.replacingOccurrences(of: " ", with: "")) {
+            return "US-\(codes[i])"
+        }
+        return nil
+    }
+
     /// Could this normalized text plausibly be a US license plate reading?
     /// Rejects what Vision text recognition finds on vehicles that is *not* a
     /// plate: words and slogans ("NEWYORK", "COMPANY7", "DRIVEU"), pure digit
@@ -65,11 +95,28 @@ public struct Plate: Sendable, Hashable, Codable {
         "POLICE", "OFFICIAL", "GOVERNMENT", "GOVT", "EXEMPT", "STATE OWNED", "MUNICIPAL", "SHERIFF",
     ]
 
+    /// US state names as printed on plate headers ("Massachusetts" above the
+    /// registration). Detected jurisdiction is logged on the plate — it is
+    /// metadata about where the vehicle is registered, never evidence of a
+    /// fleet role on its own.
+    static let usaStateNames: Set<String> = [
+        "ALABAMA", "ALASKA", "ARIZONA", "ARKANSAS", "CALIFORNIA", "COLORADO", "CONNECTICUT",
+        "DELAWARE", "FLORIDA", "GEORGIA", "HAWAII", "IDAHO", "ILLINOIS", "INDIANA", "IOWA",
+        "KANSAS", "KENTUCKY", "LOUISIANA", "MAINE", "MARYLAND", "MASSACHUSETTS", "MICHIGAN",
+        "MINNESOTA", "MISSISSIPPI", "MISSOURI", "MONTANA", "NEBRASKA", "NEVADA", "NEW HAMPSHIRE",
+        "NEW JERSEY", "NEW MEXICO", "NEW YORK", "NORTH CAROLINA", "NORTH DAKOTA", "OHIO",
+        "OKLAHOMA", "OREGON", "PENNSYLVANIA", "RHODE ISLAND", "SOUTH CAROLINA", "SOUTH DAKOTA",
+        "TENNESSEE", "TEXAS", "UTAH", "VERMONT", "VIRGINIA", "WASHINGTON", "WEST VIRGINIA",
+        "WISCONSIN", "WYOMING", "DISTRICT OF COLUMBIA",
+    ]
+
     /// If `raw` is an official/government plate line, returns the registration
     /// with the official words removed ("POLICE D756" → "D756"). Registrations on
     /// these plates are short (3–8 characters), so the usual 5-character floor
     /// does not apply — but at least one digit and one letter/digit run is required.
-    public static func officialRegistration(from raw: String) -> (registration: String, design: String)? {
+    /// A leading state name ("Massachusetts POLICE D756") is returned as
+    /// `jurisdiction`, never as part of the registration.
+    public static func officialRegistration(from raw: String) -> (registration: String, design: String, jurisdiction: String?)? {
         var upper = " " + raw.uppercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
             .reduce(into: "") { $0.append($1) } + " "
         var matched: [String] = []
@@ -78,19 +125,26 @@ public struct Plate: Sendable, Hashable, Codable {
             upper = upper.replacingOccurrences(of: " \(word) ", with: " ")
         }
         guard !matched.isEmpty else { return nil }
-        // Registration = what is left, minus a leading state name token.
+        // Registration = what is left, minus a leading state name token
+        // ("Massachusetts POLICE D756" → registration "D756", jurisdiction
+        // "MASSACHUSETTS" for the caller to log as the issuing region).
+        var jurisdiction: String?
         let leftover = upper.split(separator: " ").map(String.init)
-            .filter { !stateNames.contains($0) }
+            .filter { token in
+                if jurisdiction == nil, Plate.usaStateNames.contains(token) {
+                    jurisdiction = token
+                    return false
+                }
+                return true
+            }
             .joined()
         guard (3...8).contains(leftover.count), leftover.contains(where: \.isNumber) else { return nil }
         var run = 0
         for ch in leftover { run = ch.isLetter ? run + 1 : 0; if run >= 5 { return nil } }
-        return (leftover, "government-official")
+        return (leftover, "government-official", jurisdiction)
     }
 
-    private static let stateNames: Set<String> = [
-        "MASSACHUSETTS", "CALIFORNIA", "TEXAS", "FLORIDA", "NEWYORK", "OHIO", "GEORGIA", "MICHIGAN",
-    ]
+    /// (State names moved to `usaStateNames` — used for jurisdiction logging.)
 
     /// Government-exempt style hints from the normalized text/design.
     /// This never asserts a fleet identity on its own — it is one signal for

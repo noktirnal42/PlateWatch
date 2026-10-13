@@ -322,3 +322,15 @@ final class OfficialPlateTests: XCTestCase {
         XCTAssertTrue(plate.exemptDesignHint)
     }
 }
+
+final class JurisdictionTests: XCTestCase {
+    func testOfficialPlateLineLogsItsIssuingRegion() {
+        // Plate crop joined lines: state header + registration.
+        let r = Plate.officialRegistration(from: "Massachusetts POLICE D756 OFFICIAL")
+        XCTAssertEqual(r?.registration, "D756")
+        XCTAssertEqual(r?.jurisdiction, "MASSACHUSETTS")
+        XCTAssertEqual(Plate.issuingRegion(forStateName: "Massachusetts"), "US-MA")
+        XCTAssertEqual(Plate.issuingRegion(forStateName: "new york"), "US-NY")
+        XCTAssertNil(Plate.issuingRegion(forStateName: "Ontario"))
+    }
+}
