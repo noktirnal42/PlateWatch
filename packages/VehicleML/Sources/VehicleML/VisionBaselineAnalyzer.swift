@@ -152,6 +152,32 @@ enum PlateRectangleReader {
         var cg: CGImage?
         VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cg)
         guard let image = cg else { return [] }
+        return await read(image, detectorBoxes: detectorBoxes)
+    }
+
+    /// Reads plates only inside `region` (Vision space, bottom-left origin). A whole-frame
+    /// rectangle pass is swamped by windows, signs and body panels; on a crop the plate
+    /// stands out. Results are mapped back to full-frame coordinates.
+    static func read(_ pixelBuffer: CVPixelBuffer, inRegion region: CGRect) async -> [PlateObservation] {
+        var cg: CGImage?
+        VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cg)
+        guard let full = cg else { return [] }
+        let r = region.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard r.width > 0.02, r.height > 0.02,
+              let sub = full.cropping(to: CGRect(x: r.minX * Double(full.width),
+                                                 y: (1 - r.maxY) * Double(full.height),
+                                                 width: r.width * Double(full.width),
+                                                 height: r.height * Double(full.height))) else { return [] }
+        return await read(sub, detectorBoxes: []).map { obs in
+            var mapped = obs
+            let b = obs.boundingBox
+            mapped.boundingBox = NormalizedBox(x: r.minX + b.x * r.width, y: (1 - r.maxY) + b.y * r.height,
+                                               width: b.width * r.width, height: b.height * r.height)
+            return mapped
+        }
+    }
+
+    private static func read(_ image: CGImage, detectorBoxes: [CGRect]) async -> [PlateObservation] {
         let w = Double(image.width), h = Double(image.height)
 
         let request = VNDetectRectanglesRequest()
@@ -303,6 +329,11 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
                 plates.append(extra)
             }
         }
+        // Tailgate plates sit just below the fleet lettering; when the frame-wide passes found
+        // none, look there (a crop makes the plate rectangle stand out).
+        if context.thorough, plates.isEmpty, let area = Self.belowMarkingsRegion(in: sceneText) {
+            plates.append(contentsOf: await PlateRectangleReader.read(pixelBuffer, inRegion: area))
+        }
         for official in officialPlates
         where !plates.contains(where: { Plate.normalize($0.best?.text ?? "") == official.best?.text }) {
             plates.append(official)
@@ -428,6 +459,21 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
 
     /// A vehicle-sized box around the fleet-keyword text lines. Door text
     /// sits on the side panel, so the box is grown well beyond the text.
+    /// Vision-space (bottom-left) search area just below the fleet lettering, where a tailgate
+    /// plate sits. Nil without fleet text.
+    static func belowMarkingsRegion(in text: [SceneTextObservation]) -> CGRect? {
+        let relevant = text.filter { SceneTextHeuristics.parse([$0]).hasFleetKeyword }
+        guard !relevant.isEmpty else { return nil }
+        let minX = relevant.map { $0.boundingBox.x }.min()!
+        let maxX = relevant.map { $0.boundingBox.x + $0.boundingBox.width }.max()!
+        let minY = relevant.map { $0.boundingBox.y }.min()!   // top-left origin
+        let width = min(1, max(0.12, (maxX - minX) * 1.3))
+        let height = min(0.4, max(0.12, width * 0.7))
+        let left = max(0, min(1 - width, (minX + maxX) / 2 - width / 2))
+        let top = max(0, min(1 - height, minY))
+        return CGRect(x: left, y: 1 - (top + height), width: width, height: height)
+    }
+
     static func markingsRegion(in text: [SceneTextObservation]) -> NormalizedBox? {
         let relevant = text.filter { SceneTextHeuristics.parse([$0]).hasFleetKeyword }
         guard !relevant.isEmpty else { return nil }
