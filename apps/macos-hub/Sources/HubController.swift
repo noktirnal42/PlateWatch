@@ -141,7 +141,8 @@ final class HubController: ObservableObject {
     /// Confirms terms for all cameras on a host.
     /// Loads the catalogue, applies the confirmation, writes it back, and restarts feeds.
     func confirmFeedTerms(host: String, licenseClass: FeedTerms.LicenseClass, termsURL: URL, attribution: String) throws {
-        guard let catalogue = try? FeedCatalogue.load(from: feedsFile) else { return }
+        // A catalogue that cannot be read must surface as an error, not as a silent no-op the person takes for success.
+        let catalogue = try FeedCatalogue.load(from: feedsFile)
         let updated = try catalogue.confirmingTerms(
             forHost: host,
             licenseClass: licenseClass,
@@ -154,10 +155,9 @@ final class HubController: ObservableObject {
     }
 
     /// Revokes terms confirmation for all cameras on a host.
-    func revokeFeedTerms(host: String) {
-        guard let catalogue = try? FeedCatalogue.load(from: feedsFile) else { return }
-        let updated = catalogue.revokingConfirmation(forHost: host)
-        try? updated.write(to: feedsFile)
+    func revokeFeedTerms(host: String) throws {
+        let catalogue = try FeedCatalogue.load(from: feedsFile)
+        try catalogue.revokingConfirmation(forHost: host).write(to: feedsFile)
         startFeeds()
     }
 

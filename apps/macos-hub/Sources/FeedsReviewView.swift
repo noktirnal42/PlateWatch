@@ -137,7 +137,18 @@ struct FeedsReviewView: View {
             }
         }
         .onAppear { loadHosts() }
+        // A confirmation belongs to ONE host and the terms page that person read for it: never carry the ticked box,
+        // URL or attribution over to another host (otherwise host B could be confirmed with host A's terms).
+        .onChange(of: selectedHost?.host) { _, _ in resetForm() }
         .frame(minWidth: 700, minHeight: 500)
+    }
+
+    private func resetForm() {
+        termsURL = ""
+        attribution = ""
+        licenseClass = .publicDomain
+        iHaveReadTerms = false
+        errorMessage = nil
     }
 
     private func loadHosts() {
@@ -192,7 +203,11 @@ struct FeedsReviewView: View {
         isLoading = true
         errorMessage = nil
 
-        hub.revokeFeedTerms(host: host.host)
+        do {
+            try hub.revokeFeedTerms(host: host.host)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         loadHosts()
         selectedHost = hosts.first { $0.host == host.host }
 
