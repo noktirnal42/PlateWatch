@@ -90,6 +90,10 @@ final class HubController: ObservableObject {
     /// New cameras arrive **unconfirmed** and are not polled until a person reads the image host's terms and records
     /// them; existing confirmations are preserved (`FeedCatalogue.merged`). One catalogue request, identifying User-Agent.
     @Published private(set) var importStatus = ""
+    private static let maxFeedAnalyses = 2
+    private var feedAnalysesInFlight = 0
+    /// Frames skipped because analysis was already at capacity.
+    @Published private(set) var framesDropped = 0
 
     func importAustinCameras() async {
         importStatus = "Importing…"
@@ -247,6 +251,12 @@ final class HubController: ObservableObject {
     /// and the plate-recognition jurisdiction gate), and the frame's real size (analysis tier). The frame lives in
     /// memory only.
     func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async {
+        // Analysis blocks threads (Vision OCR). With hundreds of cameras, unbounded concurrency starves the whole app
+        // (even unrelated network requests never get scheduled), so at most `maxFeedAnalyses` frames are analysed at once and
+        // the surplus is dropped — a camera is simply looked at again on its next refresh.
+        guard feedAnalysesInFlight < Self.maxFeedAnalyses else { framesDropped += 1; return }
+        feedAnalysesInFlight += 1
+        defer { feedAnalysesInFlight -= 1 }
         guard let buffer = FileFrameSource.pixelBuffer(from: data) else { return }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)

@@ -75,6 +75,7 @@ struct DashboardPane: View {
                 HStack(spacing: 12) {
                     Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)")
                     Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)")
+                    Stat(title: "Frames skipped (busy)", value: "\(hub.framesDropped)")
                     Stat(title: "Outbox pending", value: "\(hub.pendingCount)")
                 }
                 GroupBox("Sources") {

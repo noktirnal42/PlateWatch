@@ -10,6 +10,7 @@ struct ModerationPane: View {
     @State private var selection: ModerationClient.Item.ID?
 
     private let client = ModerationClient()
+    @State private var note = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -19,6 +20,7 @@ struct ModerationPane: View {
                 Button("Refresh") { Task { await load() } }.disabled(busy)
             }
             if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            if !note.isEmpty { Text(note).font(.caption).foregroundStyle(.secondary) }
             Table(items, selection: $selection) {
                 TableColumn("Unit") { Text($0.unitNumber ?? "—") }
                 TableColumn("Area (geohash6)") { Text($0.geohash6).monospaced() }
@@ -40,8 +42,10 @@ struct ModerationPane: View {
 
     private func load() async {
         guard let client else { error = ModerationClient.ClientError.notEnrolled.localizedDescription; return }
-        busy = true; defer { busy = false }
-        do { items = try await client.queue(); error = nil } catch { self.error = error.localizedDescription }
+        busy = true; note = "Loading from \(client.baseURL.host ?? "server")…"
+        defer { busy = false }
+        do { items = try await client.queue(); error = nil; note = "Loaded \(items.count) at \(Date().formatted(date: .omitted, time: .standard))" }
+        catch { self.error = error.localizedDescription; note = "" }
     }
 
     private func decide(_ d: ModerationClient.Decision) async {

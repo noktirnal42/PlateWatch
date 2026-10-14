@@ -74,6 +74,7 @@ struct ModerationClient: Sendable {
     private func request(_ path: String, method: String, body: Data? = nil) -> URLRequest {
         var r = URLRequest(url: baseURL.appending(path: path))
         r.httpMethod = method
+        r.timeoutInterval = 15
         r.httpBody = body
         r.setValue("Basic " + Data("moderator:\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
         r.setValue("1", forHTTPHeaderField: "X-PlateWatch-Moderator")
