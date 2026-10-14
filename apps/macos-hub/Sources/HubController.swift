@@ -703,12 +703,11 @@ final class HubController: ObservableObject {
                 let frame = try? await pipeline.analyze(
                     .init(pixelBuffer: buffer),
                     context: frameContext(contextBox, for: buffer, readPlates: platesAllowed))
-                filesProcessed += 1
-                framesAnalyzed = filesProcessed
                 guard let frame else {
                     try? fm.removeItem(at: url) // undecodable input, discard
                     continue
                 }
+                framesAnalyzed += 1
                 recordFleetHits(in: frame, tier: AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))))
                 // Rolling source media: hub keeps only fleet-hit crops,
                 // never the raw camera flow (LEGAL-ETHICS).
@@ -718,7 +717,6 @@ final class HubController: ObservableObject {
     }
 
     private var inFlight = Set<String>()
-    private var filesProcessed = 0
 }
 
 struct LiveFrameResult: Sendable {
