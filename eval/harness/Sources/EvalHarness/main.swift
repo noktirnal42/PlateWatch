@@ -60,6 +60,18 @@ if let i = args.firstIndex(of: "--models"), i + 1 < args.count {
         }
     }
 }
+
+// Optional: `--plate-model <file.mlmodel|.mlpackage>` loads one arbitrary model (e.g. a Create ML
+// export) as the plate detector, replacing any plate-detector loaded from `--models`.
+if let i = args.firstIndex(of: "--plate-model"), i + 1 < args.count {
+    let url = URL(fileURLWithPath: args[i + 1])
+    if let compiled = try? await MLModel.compileModel(at: url), let model = try? MLModel(contentsOf: compiled) {
+        loadedModels["plate-detection"] = model
+        print("loaded plate model \(url.lastPathComponent)")
+    } else {
+        print("FAILED to load plate model \(url.path)")
+    }
+}
 let gate = RedactionGate(config: .standard)
 let pipeline = PlateAnalysisPipeline()
 let resolver = IdentityResolver()
