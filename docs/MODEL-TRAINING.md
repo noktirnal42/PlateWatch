@@ -17,9 +17,18 @@ model is committed or published. **Do not commit weights or training images.**
    Train from a **separate** crawl (`training/…`, gitignored) and keep a filename/hash
    blocklist of every eval image so the two can never overlap.
 2. **Only train on licences we can honour.** CC0 / public domain / CC BY (attribution
-   file shipped with the model) are fine. CC BY-**SA** (share-alike) is *used for eval only*
-   unless the owner decides a model trained on SA images is acceptable. **NC / ND are never
-   used** (the project is AGPL and publishes derived models).
+   file shipped with the model) are fine. **NC / ND are never used** (the project is AGPL and
+   publishes derived models). CC BY-**SA** (share-alike) is *eval-only* by default, with **one owner-approved
+   exception (2026-10-13, Jeremy McVay): the plate-state classifier may train on CC BY-SA plate images**
+   (`scripts/crawl_commons_plates.py --allow-sa`) because the CC0/PD/BY plate data alone is too thin
+   (≈ 890 images, 12 for Minnesota). Conditions for that exception:
+   - it applies **only** to the plate-state classifier — the fleet classifier and the plate detector stay on CC0/PD/BY;
+   - the dataset's `ATTRIBUTION.md` (author, licence, source page per image) ships with the model and the
+     model's `models/registry.json` entry says `trained on CC BY-SA 4.0 and CC BY images — see attribution`;
+   - the share-alike obligations for a *model* trained on SA images are legally unsettled (is a model an
+     "adaptation"?). This is a documented risk accepted by the owner, **not legal advice** — revisit before any
+     public model release, and if in doubt retrain without the SA images (the manifest records each file's
+     licence, so the SA files can be filtered out and the model rebuilt).
 
 ## 1. What Create ML can and cannot train
 
