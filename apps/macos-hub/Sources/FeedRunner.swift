@@ -35,14 +35,19 @@ final class FeedRunner: ObservableObject {
     enum SourceState: Equatable { case polling, blockedByRobots, suspended }
     @Published private(set) var sourceStates: [UUID: SourceState] = [:]
 
-    struct Display { let text: String; let icon: String; let color: Color }
+    enum StatusKind: String, CaseIterable, Identifiable {
+        case polling = "Polling", confirmed = "Confirmed (idle)", awaiting = "Awaiting terms"
+        case blocked = "Blocked / refused", suspended = "Suspended"
+        var id: String { rawValue }
+    }
+    struct Display { let text: String; let icon: String; let color: Color; let kind: StatusKind }
     func state(of source: PublicFeedSource) -> Display {
-        guard source.mayBeAnalysed else { return .init(text: "Awaiting terms", icon: "hourglass", color: .orange) }
+        guard source.mayBeAnalysed else { return .init(text: "Awaiting terms", icon: "hourglass", color: .orange, kind: .awaiting) }
         switch sourceStates[source.id] {
-        case .polling: return .init(text: "Polling", icon: "checkmark.circle.fill", color: .green)
-        case .blockedByRobots: return .init(text: "Blocked by robots.txt / refused", icon: "hand.raised.fill", color: .red)
-        case .suspended: return .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .yellow)
-        case nil: return .init(text: "Confirmed", icon: "checkmark.circle", color: .secondary)
+        case .polling: return .init(text: "Polling", icon: "checkmark.circle.fill", color: .green, kind: .polling)
+        case .blockedByRobots: return .init(text: "Blocked by robots.txt / refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
+        case .suspended: return .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .yellow, kind: .suspended)
+        case nil: return .init(text: "Confirmed", icon: "checkmark.circle", color: .secondary, kind: .confirmed)
         }
     }
 
@@ -51,7 +56,7 @@ final class FeedRunner: ObservableObject {
     /// robots.txt per host (24 h cache; 401/403/429/5xx/network error ⇒ treated as "do not fetch" for 10 minutes).
     private let robots: RobotsCache
     private let throttle = HostThrottle()
-    private var lastPreviewAt: Date?
+    private let previewThrottle = HostThrottle(interval: 1.0)
 
     init() {
         let config = URLSessionConfiguration.ephemeral          // no cookies, no cache: nothing is retained
@@ -108,10 +113,9 @@ final class FeedRunner: ObservableObject {
     /// first, our identifying User-Agent. The image is returned to the caller and not stored.
     func fetchPreview(of source: PublicFeedSource) async throws -> Data {
         guard source.mayBeAnalysed else { throw PreviewError.notConfirmed }
-        // A person is looking at this camera: it does not wait behind the polling queue, but is still rate-limited
-        // (at most one preview request per 5 s, shared across hosts) so it can never become a second poller.
-        if let last = lastPreviewAt, Date().timeIntervalSince(last) < 5 { try await Task.sleep(for: .seconds(5 - Date().timeIntervalSince(last))) }
-        lastPreviewAt = Date()
+        // A person is looking at this camera: it does not wait behind the polling queue, but is still paced (one preview
+        // request per host per second, its own queue) so previews can never become a second poller.
+        await previewThrottle.acquire(host: source.url.host ?? "")
         guard await robots.isAllowed(source.url) else { throw PreviewError.blocked }
         let (data, response) = try await session.data(from: source.url)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0

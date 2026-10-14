@@ -32,6 +32,7 @@ final class HubController: ObservableObject {
     private var deduper = SightingDeduper()
     /// Public camera feeds (docs/FEED-SOURCES.md). Only sources a person confirmed the terms of are polled.
     let feedRunner = FeedRunner()
+    let favorites = FeedFavorites()
     var feedsFile: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appending(path: "PlateWatchHub/feeds.json")

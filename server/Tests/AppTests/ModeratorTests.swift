@@ -197,3 +197,17 @@ final class PublicationPolicyTests: XCTestCase {
         }
     }
 }
+
+final class ModeratorAuditAuthTests: XCTestCase {
+    func testAuditAPIIsModeratorOnly() async throws {
+        try await withApp { app in
+            let token = String(repeating: "x", count: 32)
+            try app.register(collection: ModeratorController(token: token))
+            let basic = "Basic " + Data("m:\(token)".utf8).base64EncodedString()
+            let noHeader = try await app.sendRequest(.GET, "moderator/api/audit", headers: ["Authorization": basic])
+            XCTAssertEqual(noHeader.status, .forbidden)
+            let noAuth = try await app.sendRequest(.GET, "moderator/api/audit", headers: [ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(noAuth.status, .unauthorized)
+        }
+    }
+}

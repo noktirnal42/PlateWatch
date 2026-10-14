@@ -13,6 +13,7 @@ struct ModerationPane: View {
     @State private var note = ""
     @State private var tab = 0
     @State private var takedowns: [ModerationClient.Takedown] = []
+    @State private var audit: [ModerationClient.AuditEntry] = []
     @State private var takedownSelection: ModerationClient.Takedown.ID?
 
     var body: some View {
@@ -20,13 +21,28 @@ struct ModerationPane: View {
             Picker("", selection: $tab) {
                 Text("Sightings (\(items.count))").tag(0)
                 Text("Takedown requests (\(takedowns.count))").tag(1)
-            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 420)
-            if tab == 1 { takedownView } else { sightingsView }
+                Text("Audit log").tag(2)
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
+            if tab == 2 { auditView } else if tab == 1 { takedownView } else { sightingsView }
         }
         .padding()
         .task {
             client = await Task.detached { ModerationClient() }.value     // Keychain read, off the main thread
             await load()
+        }
+    }
+
+    private var auditView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            Table(audit) {
+                TableColumn("When") { Text($0.createdAt ?? .distantPast, format: .dateTime) }
+                TableColumn("Action") { Text($0.action).monospaced() }
+                TableColumn("Target") { Text($0.target?.prefix(8).lowercased() ?? "—").monospaced() }
+                TableColumn("Detail") { Text($0.detail ?? "") }
+            }
+            Text("Append-only record of moderator decisions, takedown requests and retention purges. It stores action and ID only, never sighting content.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -79,6 +95,7 @@ struct ModerationPane: View {
         busy = true; note = "Loading from \(client.baseURL.host ?? "server")…"
         defer { busy = false }
         if let t = try? await client.takedowns() { takedowns = t }
+        if let a = try? await client.audit() { audit = a }
         do { items = try await client.queue(); error = nil; note = "Loaded \(items.count) at \(Date().formatted(date: .omitted, time: .standard))" }
         catch { self.error = error.localizedDescription; note = "" }
     }

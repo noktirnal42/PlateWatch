@@ -126,6 +126,20 @@ struct ModerationClient: Sendable {
         return try Self.decoder().decode([Takedown].self, from: data)
     }
 
+    struct AuditEntry: Decodable, Identifiable, Sendable {
+        let createdAt: Date?
+        let action: String
+        let target: String?
+        let detail: String?
+        var id: String { "\(createdAt?.timeIntervalSince1970 ?? 0)|\(action)|\(target ?? "")|\(detail ?? "")" }
+    }
+
+    func audit() async throws -> [AuditEntry] {
+        let (data, response) = try await session.data(for: request("moderator/api/audit", method: "GET"))
+        if let code = (response as? HTTPURLResponse)?.statusCode, code != 200 { throw ClientError.http(code) }
+        return try Self.decoder().decode([AuditEntry].self, from: data)
+    }
+
     /// `hide` removes the sighting from every public surface for good; `dismiss` closes the request.
     func resolve(_ id: UUID, hide: Bool) async throws {
         let body = try JSONEncoder().encode(["action": hide ? "hide" : "dismiss"])

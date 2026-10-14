@@ -42,6 +42,7 @@ struct ModeratorController: RouteCollection {
         let api = mod.grouped("api")
         api.get("queue", use: apiQueue)
         api.post("sightings", ":sightingID", "decision", use: apiDecide)
+        api.get("audit", use: apiAudit)
         api.get("takedowns", use: apiTakedowns)
         api.post("takedowns", ":takedownID", "resolve", use: apiResolveTakedown)
     }
@@ -80,6 +81,22 @@ struct ModeratorController: RouteCollection {
             await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString, on: req.db)
         }
         return .noContent
+    }
+
+    struct APIAudit: Content, Equatable {
+        var createdAt: Date?
+        var action: String
+        var target: String?
+        var detail: String?
+    }
+
+    /// Newest first, capped. Action + target ID only — the log never holds sighting content.
+    @Sendable
+    func apiAudit(req: Request) async throws -> [APIAudit] {
+        _ = try authorizedAPI(req)
+        let limit = min(max(req.query["limit"] ?? 200, 1), 500)
+        return try await AuditEntry.query(on: req.db).sort(\.$createdAt, .descending).limit(limit).all()
+            .map { APIAudit(createdAt: $0.createdAt, action: $0.action, target: $0.target, detail: $0.detail) }
     }
 
     struct APITakedown: Content, Equatable {
