@@ -233,6 +233,9 @@ final class FeedRunner: ObservableObject {
     enum PreviewError: Error, LocalizedError {
         case notConfirmed, blockedLocally, badResponse(Int), notAnImage
         case policyUnavailable(String), policyRefused(String)
+        var policyRetryDelay: TimeInterval? {
+            if case .policyUnavailable = self { 60 } else { nil }
+        }
         var errorDescription: String? {
             switch self {
             case .policyUnavailable(let reason): return "\(reason) Retrying automatically within a minute. Refresh now retries immediately."

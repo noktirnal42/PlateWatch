@@ -267,13 +267,18 @@ final class HubController: ObservableObject {
     /// An immediate, rate-limited first frame; subsequent frames come from the existing background poller.
     func loadLiveFeed() async {
         guard let source = liveFeed else { return }
-        do {
-            let data = try await feedRunner.fetchPreview(of: source)
-            guard !Task.isCancelled, liveFeed?.id == source.id else { return }
-            await analyseFeedFrame(data, from: source)
-        } catch {
-            guard !Task.isCancelled, liveFeed?.id == source.id else { return }
-            liveFeedStatus = error.localizedDescription
+        while !Task.isCancelled, liveFeed?.id == source.id {
+            do {
+                let data = try await feedRunner.fetchPreview(of: source)
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                await analyseFeedFrame(data, from: source)
+                return
+            } catch {
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                liveFeedStatus = error.localizedDescription
+                guard let delay = (error as? FeedRunner.PreviewError)?.policyRetryDelay else { return }
+                do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            }
         }
     }
 

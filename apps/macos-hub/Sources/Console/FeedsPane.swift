@@ -234,6 +234,7 @@ struct FavoriteTile: View {
     var onOpenLive: () -> Void
     @State private var image: NSImage?
     @State private var message = ""
+    @State private var policyRetryDelay: TimeInterval?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -258,13 +259,17 @@ struct FavoriteTile: View {
         }
         .task(id: source.id) {
             while !Task.isCancelled {
+                policyRetryDelay = nil
                 do {
                     let data = try await hub.feedRunner.fetchPreview(of: source)
                     guard !Task.isCancelled, !favorites.isBlocked(source.id) else { return }
                     if let img = NSImage(data: data) { image = img; message = "" }
                     else { image = nil; message = "Image unavailable. Use ⦸ to block this camera." }
-                } catch { image = nil; message = error.localizedDescription }
-                try? await Task.sleep(for: .seconds(max(source.refreshInterval, 30)))
+                } catch {
+                    image = nil; message = error.localizedDescription
+                    policyRetryDelay = (error as? FeedRunner.PreviewError)?.policyRetryDelay
+                }
+                try? await Task.sleep(for: .seconds(policyRetryDelay ?? max(source.refreshInterval, 30)))
             }
         }
     }
@@ -279,6 +284,7 @@ struct CameraPreviewPanel: View {
     @State private var image: NSImage?
     @State private var fetchedAt: Date?
     @State private var message = ""
+    @State private var policyRetryDelay: TimeInterval?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -329,12 +335,13 @@ struct CameraPreviewPanel: View {
             guard !favorites.isBlocked(source.id) else { message = "Blocked on this Mac. Unblock this camera to view it again."; return }
             while !Task.isCancelled {
                 await load(source)
-                try? await Task.sleep(for: .seconds(max(source.refreshInterval, 10)))
+                try? await Task.sleep(for: .seconds(policyRetryDelay ?? max(source.refreshInterval, 10)))
             }
         }
     }
 
     private func load(_ source: PublicFeedSource, retryFailedPolicy: Bool = false) async {
+        policyRetryDelay = nil
         do {
             let data = try await hub.feedRunner.fetchPreview(of: source, retryFailedPolicy: retryFailedPolicy)
             guard !Task.isCancelled, !favorites.isBlocked(source.id), self.source?.id == source.id else { return }
@@ -343,6 +350,7 @@ struct CameraPreviewPanel: View {
         } catch {
             guard !Task.isCancelled, self.source?.id == source.id else { return }
             message = error.localizedDescription; image = nil
+            policyRetryDelay = (error as? FeedRunner.PreviewError)?.policyRetryDelay
         }
     }
 }
