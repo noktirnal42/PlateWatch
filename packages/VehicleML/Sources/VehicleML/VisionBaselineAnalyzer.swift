@@ -315,14 +315,14 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         // candidates per frame are few, and contention on the ANE would
         // dominate any parallelism win.
         var plates: [PlateObservation] = []
-        for hypothesis in hypotheses {
+        for hypothesis in hypotheses where context.readPlates {
             // One unreadable crop must not discard the rest of the frame.
             if let plate = try? await accuratePlateRead(hypothesis.box, in: pixelBuffer) {
                 plates.append(plate)
             }
         }
-        let detectorBoxes = await Self.plateDetectorBoxes(context, pixelBuffer)
-        if context.thorough || !detectorBoxes.isEmpty {
+        let detectorBoxes = context.readPlates ? await Self.plateDetectorBoxes(context, pixelBuffer) : []
+        if context.readPlates, context.thorough || !detectorBoxes.isEmpty {
             let known = Set(plates.compactMap { $0.best.map { Plate.normalize($0.text) } })
             for extra in await PlateRectangleReader.read(pixelBuffer, detectorBoxes: detectorBoxes)
             where !known.contains(Plate.normalize(extra.best?.text ?? "")) {
@@ -331,11 +331,11 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         }
         // Tailgate plates sit just below the fleet lettering; when the frame-wide passes found
         // none, look there (a crop makes the plate rectangle stand out).
-        if context.thorough, plates.isEmpty, let area = Self.belowMarkingsRegion(in: sceneText) {
+        if context.readPlates, context.thorough, plates.isEmpty, let area = Self.belowMarkingsRegion(in: sceneText) {
             plates.append(contentsOf: await PlateRectangleReader.read(pixelBuffer, inRegion: area))
         }
         for official in officialPlates
-        where !plates.contains(where: { Plate.normalize($0.best?.text ?? "") == official.best?.text }) {
+        where context.readPlates && !plates.contains(where: { Plate.normalize($0.best?.text ?? "") == official.best?.text }) {
             plates.append(official)
         }
         plates.sort { ($0.best?.confidence ?? 0) > ($1.best?.confidence ?? 0) }

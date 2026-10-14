@@ -66,6 +66,9 @@ public struct Gazetteer: Sendable {
 
     public var count: Int { places.count }
 
+    /// All catalogued places (read-only), for spatial queries.
+    public var allPlaces: [GazetteerPlace] { places }
+
     /// The bundled Census gazetteer (loaded once).
     public static let shared: Gazetteer = {
         guard let url = Bundle.module.url(forResource: "gazetteer", withExtension: "tsv"),

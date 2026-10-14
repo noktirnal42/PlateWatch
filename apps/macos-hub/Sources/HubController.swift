@@ -37,7 +37,15 @@ final class HubController: ObservableObject {
     private var modelContext: ModelContext?
     /// Hub operator-set location bucket (these are fixed installations —
     /// the geohash-6 of the camera's own location).
-    var homeGeohash6 = ""
+    var homeGeohash6 = "" { didSet { platesAllowed = Self.platesAllowed(forGeohash6: homeGeohash6) } }
+
+    /// Plate recognition runs only where it is permitted for this camera's location (PlateKit.JurisdictionPolicy):
+    /// off in/near restricted states and when the location is unknown (fail closed).
+    private(set) var platesAllowed = false
+
+    static func platesAllowed(forGeohash6 geohash: String) -> Bool {
+        JurisdictionPolicy.mayReadPlates(near: .init(geohash6: geohash))
+    }
 
     // Bonjour snapshot server
     private var snapshotListener: NWListener?
@@ -55,6 +63,7 @@ final class HubController: ObservableObject {
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
         self.modelContext = context
         self.homeGeohash6 = UserDefaults.standard.string(forKey: "hubGeohash6") ?? ""   // not only once the menu opens
+        self.platesAllowed = Self.platesAllowed(forGeohash6: homeGeohash6)
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appending(path: "PlateWatchHub/Models", directoryHint: .isDirectory)
         self.modelManager = ModelManager(config: .init(
@@ -279,13 +288,13 @@ final class HubController: ObservableObject {
             return
         }
         do {
-            let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: frameContext(contextBox, for: buffer))
+            let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: frameContext(contextBox, for: buffer, readPlates: platesAllowed))
             framesAnalyzed += 1
             let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
             let recorded = recordFleetHits(in: frame, tier: tier)
             let keys = recorded.agencyKeys.isEmpty ? "" : "; " + recorded.agencyKeys.joined(separator: ", ")
             sendHTTPResponse(on: connection, status: 200,
-                             body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(recorded.hits)\(keys); tier: \(tier.rawValue))")
+                             body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(recorded.hits)\(keys); tier: \(tier.rawValue); plates read: \(frame.vehicles.flatMap(\.plates).count))")
         } catch {
             sendHTTPResponse(on: connection, status: 500, body: "Processing error")
         }
@@ -373,7 +382,7 @@ final class HubController: ObservableObject {
                 guard let buffer = FileFrameSource.pixelBuffer(from: url) else { continue }
                 let frame = try? await pipeline.analyze(
                     .init(pixelBuffer: buffer),
-                    context: frameContext(contextBox, for: buffer))
+                    context: frameContext(contextBox, for: buffer, readPlates: platesAllowed))
                 filesProcessed += 1
                 framesAnalyzed = filesProcessed
                 guard let frame else {
@@ -394,8 +403,9 @@ final class HubController: ObservableObject {
 
 /// The analysis context for one frame: the shared models plus the thorough text path only where the frame has
 /// enough pixels to read lettering (docs/FEED-SOURCES.md §1 — recall collapses below ~480 px).
-func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer) -> AnalysisContext {
+func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer, readPlates: Bool) -> AnalysisContext {
     var context = box.current
+    context.readPlates = readPlates
     let longSide = max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))
     context.thorough = AnalysisTier.tier(forLongSide: longSide).thorough
     return context
@@ -576,7 +586,8 @@ final class RTSPStreamHandler: @unchecked Sendable {
                         do {
                             let frame = try await pipeline.analyze(
                                 FramePacketLike(pixelBuffer: packet.pixelBuffer),
-                                context: frameContext(contextBox, for: packet.pixelBuffer))
+                                context: frameContext(contextBox, for: packet.pixelBuffer,
+                                                      readPlates: HubController.platesAllowed(forGeohash6: homeGeohash6)))
                             
                             await MainActor.run {
                                 self.handleFrame(frame, timestamp: timestamp)

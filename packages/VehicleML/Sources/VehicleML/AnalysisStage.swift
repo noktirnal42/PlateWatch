@@ -12,11 +12,17 @@ public struct AnalysisContext: @unchecked Sendable {
     /// Stills (photo import, shutter) can afford `.accurate` text recognition;
     /// live frames stay on `.fast` to keep the camera responsive and cool.
     public var thorough: Bool
+    /// False where plate recognition must not run at all (jurisdictions that regulate ALPR use —
+    /// `PlateKit.JurisdictionPolicy`). Plate detection, plate OCR and plate-shaped text are all skipped; fleet
+    /// detection from lettering and appearance is unaffected.
+    public var readPlates: Bool
 
-    public init(models: [String: MLModel] = [:], timestamp: Date = Date(), thorough: Bool = false) {
+    public init(models: [String: MLModel] = [:], timestamp: Date = Date(), thorough: Bool = false,
+                readPlates: Bool = true) {
         self.models = models
         self.timestamp = timestamp
         self.thorough = thorough
+        self.readPlates = readPlates
     }
 }
 

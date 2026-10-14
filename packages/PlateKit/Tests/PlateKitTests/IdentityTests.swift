@@ -298,4 +298,33 @@ final class RealWorldRegressionTests: XCTestCase {
     func testBadGeohashGivesNoHint() {
         XCTAssertNil(IdentityResolver.LocationHint(geohash6: "!!!"))
     }
+
+    // MARK: - Jurisdiction policy (plate recognition)
+
+    private func hint(_ lat: Double, _ lon: Double) -> IdentityResolver.LocationHint { .init(latitude: lat, longitude: lon) }
+
+    func testPlateRecognitionIsDisabledInRestrictedStatesAndNearTheirBorders() {
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26)), "Portland, ME")
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(43.21, -71.54)), "Concord, NH")
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(42.70, -71.16)), "Lawrence MA is ~10 km from NH: fail closed")
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(34.75, -92.29)), "Little Rock, AR (pending counsel)")
+    }
+
+    func testPlateRecognitionIsAllowedAwayFromRestrictedStates() {
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(44.98, -93.27)), "Minneapolis")
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(42.36, -71.06)), "Boston is ~60 km from NH")
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(34.05, -118.24)), "Los Angeles")
+    }
+
+    /// No location, or nowhere near any catalogued place, means no plate recognition.
+    func testUnknownLocationFailsClosed() {
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: nil))
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(0, -30)), "mid-Atlantic: nothing to reason from")
+    }
+
+    func testPolicyListsAreExplicit() {
+        XCTAssertEqual(JurisdictionPolicy.platesRestricted, ["ME", "NH"])
+        XCTAssertTrue(JurisdictionPolicy.platesDisabledByDefault.isSuperset(of: ["ME", "NH", "AR", "ID", "KY", "CT"]))
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26), disabledStates: []), "counsel can clear a state")
+    }
 }

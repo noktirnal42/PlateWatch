@@ -82,6 +82,21 @@ final class DoorTextPipelineTests: XCTestCase {
         XCTAssertTrue(plates.contains { $0.text == "D756" && $0.isOfficialPlate }, "plates: \(plates.map(\.text))")
     }
 
+    /// Jurisdictions that regulate plate recognition: with `readPlates` off NO plate is read, official or not,
+    /// while fleet lettering still works — the restriction is on recognising plates, not on seeing the vehicle.
+    func testReadPlatesOffReadsNoPlatesButStillSeesFleetLettering() async throws {
+        let off = AnalysisContext(models: [:], thorough: true, readPlates: false)
+        let ordinary = try await PlateAnalysisPipeline().analyze(
+            FramePacketLike(pixelBuffer: try panel(lines: [], plate: "7ABC123")), context: off)
+        XCTAssertTrue(ordinary.vehicles.flatMap(\.plates).isEmpty, "no plate may be read when disabled")
+        let official = try await PlateAnalysisPipeline().analyze(
+            FramePacketLike(pixelBuffer: try panel(lines: [], plate: "POLICE D756", plateSize: 52)), context: off)
+        XCTAssertTrue(official.vehicles.flatMap(\.plates).isEmpty, "official plates are plates too")
+        let door = try await PlateAnalysisPipeline().analyze(
+            FramePacketLike(pixelBuffer: try panel(lines: ["CITY OF AUSTIN", "POLICE", "UNIT 4421"])), context: off)
+        XCTAssertFalse(door.vehicles.isEmpty, "fleet lettering is unaffected")
+    }
+
     func testRenderedPlateIsRead() async throws {
         let frame = try await PlateAnalysisPipeline().analyze(
             FramePacketLike(pixelBuffer: try panel(lines: [], plate: "7ABC123")),

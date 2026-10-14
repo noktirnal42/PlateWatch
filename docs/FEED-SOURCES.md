@@ -136,6 +136,30 @@ exponential back-off; cache catalogues (daily at most); re-read catalogues inste
   licence in the manifest (as `scripts/crawl_commons_*.py` do). Frames from `askFirst`/platform sources never enter training sets.
 - Cross-reference keys: `agencyKey` (`US-MA/waltham/police`), camera id, geohash, time bucket — never a person.
 
+## 6b. Legal constraints found in research (not legal advice) and what the Hub implements
+Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](research/FEED-LEGAL-RESEARCH.md). Headlines:
+- **Several states regulate ALPR use by *any person*.** Maine (29-A MRSA §2117-A, Class E crime, verified) and New Hampshire
+  (RSA 261:75-b, law enforcement only, verified) are the highest risk; Arkansas, Idaho, Kentucky, Connecticut reported (unverified).
+  Whether plate OCR on a third-party DOT feed is "use" is **an open question for counsel**.
+- Some DOTs say they **do not record** (Iowa, Arkansas, Houston TranStar): a project that stores frames creates a record the agency
+  says it does not hold. Iowa bans bots/framing; Arkansas bans embedding and requires the owner's logo; PennDOT limits use to
+  showing current traffic. CFAA risk for polling public pages looks low (Van Buren, hiQ — 9th Cir. only) but contract/state-law claims remain.
+- No statute found banning publication of police-vehicle locations; confidential/undercover plates are protected; doxxing laws target home addresses.
+- No face/person/biometric processing anywhere keeps the project outside BIPA/CUBI/RCW 19.375.
+
+| Guardrail | Status |
+|---|---|
+| **Jurisdiction gate: plate recognition off in/near ME, NH (verified) and AR, ID, KY, CT (pending counsel), and when the location is unknown** | ✅ `PlateKit.JurisdictionPolicy` + `AnalysisContext.readPlates`; the Hub skips plate detection/OCR entirely (not just hides it); 30 km border margin; verified: Maine camera → fleet hit from lettering, 0 plates |
+| No raw-frame retention | ✅ Hub analyses in memory / deletes folder drops after analysis; HTTP bodies never written. Pollers must keep this |
+| Plate text persisted only for fleet-gate sightings, registration redacted below the bar | ✅ (RedactionGate / `syncIdentity`) |
+| Terms recorded and human-confirmed before any poll | ✅ `FeedTerms` + pollers refuse unconfirmed sources |
+| Resolution-tiered identity (low-res frames never assert identity) | ✅ `AnalysisTier` |
+| Handheld iPhone capture under the same jurisdiction policy | ⬜ not applied yet — open question for counsel (the *user* operates it) |
+| Aggregation delay (24–72 h), ~1 km coarsening, k-suppression, no live police map | ⬜ server/publishing side, not built |
+| Exclude unmarked/undercover, SWAT/protective, school buses with children, ambulances with patients | ⬜ classifier/moderation work; unmarked vehicles are already undetectable from text |
+| TTL: 21 days full precision then aggregates; access audit log; takedown channel + tombstones | ⬜ server |
+| robots.txt, identifying User-Agent with contact URL, stop-and-flag on 403/429 (no IP rotation) | ⬜ pollers (back-off exists; robots/UA not yet) |
+
 ## 7. Open items / next research
 1. **Verify the Caltrans CWWP2 JSON and one keyless snapshot URL from the Hub's own network** (our dev machine could not reach it), then build the first end-to-end pilot (catalogue → poll → analyse → aggregate) with 5–10 cameras.
 2. Confirm **Austin** image URLs are keyless and read its terms page; confirm **Iowa** CSV fields; check **TripCheck** registration.
