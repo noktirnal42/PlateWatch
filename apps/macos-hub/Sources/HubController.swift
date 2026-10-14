@@ -28,6 +28,7 @@ final class HubController: ObservableObject {
     /// Detector models (plate / vehicle) hot-swap in here as they install; empty = baseline Vision.
     private let contextBox = AnalysisContextBox()
     private let modelManager: ModelManager
+    private let identityResolver = IdentityResolver()
     @Published private(set) var modelStatus = "baseline vision"
     private let fileSource = FileFrameSource()
     private let gate = RedactionGate(config: .standard)
@@ -53,6 +54,7 @@ final class HubController: ObservableObject {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
         self.modelContext = context
+        self.homeGeohash6 = UserDefaults.standard.string(forKey: "hubGeohash6") ?? ""   // not only once the menu opens
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appending(path: "PlateWatchHub/Models", directoryHint: .isDirectory)
         self.modelManager = ModelManager(config: .init(
@@ -279,9 +281,11 @@ final class HubController: ObservableObject {
         do {
             let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: frameContext(contextBox, for: buffer))
             framesAnalyzed += 1
-            let hits = recordFleetHits(in: frame)
+            let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
+            let recorded = recordFleetHits(in: frame, tier: tier)
+            let keys = recorded.agencyKeys.isEmpty ? "" : "; " + recorded.agencyKeys.joined(separator: ", ")
             sendHTTPResponse(on: connection, status: 200,
-                             body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(hits))")
+                             body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(recorded.hits)\(keys); tier: \(tier.rawValue))")
         } catch {
             sendHTTPResponse(on: connection, status: 500, body: "Processing error")
         }
@@ -290,13 +294,16 @@ final class HubController: ObservableObject {
     /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
     /// endpoint so both apply identical rules. Returns the number of fleet hits.
     @discardableResult
-    private func recordFleetHits(in frame: DetectionFrame) -> Int {
+    private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier) -> (hits: Int, agencyKeys: [String]) {
         var hits = 0
+        var agencyKeys: [String] = []
         for vehicle in frame.vehicles {
             let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             guard gate.verdict(fleetConfidence: confidence) == .persistAndSync else { continue }
             hits += 1
             fleetHitsToday += 1
+            let identity = feedIdentity(vehicle: vehicle, markings: markings, confidence: confidence, tier: tier)
+            if let key = identity?.agency?.agencyKey { agencyKeys.append(key) }
             guard let context = modelContext else { continue }
             let dto = SightingSubmissionDTO(
                 capturedAt: frame.timestamp,
@@ -305,7 +312,8 @@ final class HubController: ObservableObject {
                 fleetConfidence: confidence,
                 plate: vehicle.plates.first?.best.map(PlateDTO.init),
                 vehicle: VehicleObservationDTO(vehicle),
-                markings: FleetMarkingsDTO(markings))
+                markings: FleetMarkingsDTO(markings),
+                identity: identity)
             if let payload = try? JSONEncoder.withISODates.encode(dto) {
                 context.insert(PendingSubmission(
                     idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
@@ -314,7 +322,18 @@ final class HubController: ObservableObject {
                 pendingCount += 1
             }
         }
-        return hits
+        return (hits, agencyKeys)
+    }
+
+    /// Identity for a sighting from a fixed camera: the camera's operator-set position is the location hint
+    /// (never this Mac's), review is forced below full resolution, and the smallest frames assert no identity at
+    /// all (docs/FEED-SOURCES.md §1-2).
+    private func feedIdentity(vehicle: VehicleObservation, markings: FleetMarkings, confidence: Double,
+                              tier: AnalysisTier) -> VehicleIdentity? {
+        guard tier != .appearanceOnly else { return nil }
+        return identityResolver.syncIdentity(vehicle: vehicle, markings: markings, confidence: confidence,
+                                             location: .init(geohash6: homeGeohash6),
+                                             forceReview: !tier.identityMayBeConfirmed)
     }
 
     private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
@@ -361,7 +380,7 @@ final class HubController: ObservableObject {
                     try? fm.removeItem(at: url) // undecodable input, discard
                     continue
                 }
-                recordFleetHits(in: frame)
+                recordFleetHits(in: frame, tier: AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))))
                 // Rolling source media: hub keeps only fleet-hit crops,
                 // never the raw camera flow (LEGAL-ETHICS).
                 try? fm.removeItem(at: url)

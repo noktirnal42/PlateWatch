@@ -35,7 +35,15 @@ Consequences for the Hub:
 ## 2. Location comes from the source (see IDENTITY.md)
 Feed frames have **no phone GPS and no EXIF**. The camera's catalogued position is the location hint for the identity
 resolver (`PublicFeedSource.geohash6`, already mandatory). A source without a trustworthy position must not be enabled for
-identity (only for aggregate counts). Today the Hub/feed pipelines do not run the resolver — wiring this is follow-up work.
+identity (only for aggregate counts).
+
+**Implemented (PR #11):** `IdentityResolver.syncIdentity(vehicle:markings:confidence:location:forceReview:)` is the one
+rule for what identity may leave the device; the Hub uses it with the operator-set camera geohash (`hubGeohash6`, now loaded at
+launch) and the frame's `AnalysisTier`: **full** (≥ 960 px) may confirm an identity; **reduced** (480–959 px) is forced to review with
+the registration withheld; **appearanceOnly** (< 480 px) asserts no identity. Verified on the Minneapolis photo: no camera location →
+`US-??/minneapolis/police`; camera geohash in Minneapolis → `US-MN/minneapolis/police`; the same photo at 704 px → no hit (the recall
+cliff). Still to do: per-source location for the feed *pollers* (the Hub's single `homeGeohash6` is for folder/HTTP ingest) and
+enforcing `PublicFeedSource.mayBeAnalysed` before any poll.
 
 ## 3. Camera / live-feed sources
 
