@@ -1,4 +1,6 @@
 import XCTest
+import ImageIO
+import UniformTypeIdentifiers
 @testable import PlateKit
 
 final class GazetteerTests: XCTestCase {
@@ -326,5 +328,38 @@ final class RealWorldRegressionTests: XCTestCase {
         XCTAssertEqual(JurisdictionPolicy.platesRestricted, ["ME", "NH"])
         XCTAssertTrue(JurisdictionPolicy.platesDisabledByDefault.isSuperset(of: ["ME", "NH", "AR", "ID", "KY", "CT"]))
         XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26), disabledStates: []), "counsel can clear a state")
+    }
+
+    // MARK: - Photo location (EXIF GPS)
+
+    private func jpeg(gps: [CFString: Any]?) -> Data {
+        let ctx = CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        let out = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil)!
+        var props: [CFString: Any] = [:]
+        if let gps { props[kCGImagePropertyGPSDictionary] = gps }
+        CGImageDestinationAddImage(dest, ctx.makeImage()!, props as CFDictionary)
+        CGImageDestinationFinalize(dest)
+        return out as Data
+    }
+
+    /// Minneapolis is 44.98 N, 93.27 W: EXIF stores magnitudes and N/S, E/W references.
+    func testPhotoGPSIsReadWithHemispheres() {
+        let data = jpeg(gps: [kCGImagePropertyGPSLatitude: 44.98, kCGImagePropertyGPSLatitudeRef: "N",
+                              kCGImagePropertyGPSLongitude: 93.27, kCGImagePropertyGPSLongitudeRef: "W"])
+        let c = ImageLocation.coordinate(in: data)
+        XCTAssertEqual(c?.latitude ?? 0, 44.98, accuracy: 0.001)
+        XCTAssertEqual(c?.longitude ?? 0, -93.27, accuracy: 0.001)
+        let south = jpeg(gps: [kCGImagePropertyGPSLatitude: 33.9, kCGImagePropertyGPSLatitudeRef: "S",
+                               kCGImagePropertyGPSLongitude: 18.4, kCGImagePropertyGPSLongitudeRef: "E"])
+        XCTAssertEqual(ImageLocation.coordinate(in: south)?.latitude ?? 0, -33.9, accuracy: 0.001)
+    }
+
+    func testNoGPSOrNoFixGivesNoLocation() {
+        XCTAssertNil(ImageLocation.coordinate(in: jpeg(gps: nil)))
+        XCTAssertNil(ImageLocation.coordinate(in: jpeg(gps: [kCGImagePropertyGPSLatitude: 0.0, kCGImagePropertyGPSLongitude: 0.0])))
+        XCTAssertNil(ImageLocation.coordinate(in: Data("not an image".utf8)))
     }
 }

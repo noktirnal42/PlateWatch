@@ -77,3 +77,19 @@ treatment tried (3–8× scale, levels stretch gain 2–4, banner and strip crop
 unresolved ("Minneapolis, state unknown — which one?"; MN is offered first). The fix is the
 plate-design classifier (MODEL-TRAINING §4c, Create ML Image Classification on plate crops, one
 class per state) — not more OCR. Case is eval id 902 (`eval/user/`, gitignored).
+
+## Where the location hint comes from (it is a property of the frame's *source*)
+The identity resolver uses a coarse location only to settle ambiguous place names ("Minneapolis" is in MN, NC and KS).
+It must come from where the **frame** was captured, never from the device that happens to be running the analysis:
+
+| Source | Location hint |
+|---|---|
+| Live capture (iPhone) | the phone's current ~1 km bucket |
+| Imported photo | the photo's own EXIF GPS (`PlateKit.ImageLocation`); **none** if the photo has no GPS |
+| Public camera feed (511/DOT, transit, port cams) | the camera's catalogued fixed position — `PublicFeedSource.geohash6` is mandatory |
+| Hub (IP cameras, folder drops) | the operator-set `homeGeohash6` for that camera |
+
+Not yet wired: the Hub and feed pipelines do not run `IdentityResolver` at all today (their submissions carry no `identity`),
+so feed frames currently get no benefit. When they do, pass the source's geohash centre as the `LocationHint`. Feed frames
+have **no phone GPS and no EXIF** — fixed-camera metadata is the only reliable location there. A source with no known
+location falls back to "state unknown — which one?" (and, later, to plate-state evidence).
