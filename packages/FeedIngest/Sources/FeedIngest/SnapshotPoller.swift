@@ -10,10 +10,18 @@ public struct SnapshotPoller: Sendable {
     public let source: PublicFeedSource
     private let session: URLSession
     private let sink: FeedFrameSink
+    /// When true (the default) nothing is fetched unless `source.mayBeAnalysed` — a person confirmed the feed's
+    /// terms (docs/FEED-SOURCES.md §5). Public *viewing* is not a licence to analyse.
+    public let enforceTerms: Bool
 
-    public init(source: PublicFeedSource, sink: FeedFrameSink, session: URLSession? = nil) {
+    /// True when this poller is allowed to contact the source at all.
+    public var isPermitted: Bool { !enforceTerms || source.mayBeAnalysed }
+
+    public init(source: PublicFeedSource, sink: FeedFrameSink, session: URLSession? = nil,
+                enforceTerms: Bool = true) {
         self.source = source
         self.sink = sink
+        self.enforceTerms = enforceTerms
         self.session = session ?? {
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = 10
@@ -26,6 +34,7 @@ public struct SnapshotPoller: Sendable {
     /// One fetch cycle: due-check → fetch → sink → schedule update.
     /// Returns the updated schedule so a driver loop can persist it.
     public func pollOnce(schedule: inout FeedSchedule, now: Date = Date()) async -> FeedSchedule {
+        guard isPermitted else { return schedule }          // no request is made for an unconfirmed source
         guard !schedule.isSuspended, schedule.isDue(now) else { return schedule }
         do {
             let (data, response) = try await session.data(from: source.url)
@@ -53,6 +62,7 @@ public struct SnapshotPoller: Sendable {
     /// `Task cancellation` stops at the next cycle boundary — no dangling
     /// requests beyond the session timeouts.
     public func run(sink: FeedFrameSink) async {
+        guard isPermitted else { return }
         var schedule = FeedSchedule(refreshInterval: source.refreshInterval)
         while !Task.isCancelled {
             schedule = await pollOnce(schedule: &schedule)

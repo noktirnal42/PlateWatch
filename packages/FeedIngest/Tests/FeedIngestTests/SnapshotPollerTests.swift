@@ -49,7 +49,28 @@ final class SnapshotPollerTests: XCTestCase {
     private func makeSource() -> PublicFeedSource {
         try! PublicFeedSource(
             name: "test cam", url: URL(string: "https://example.gov/cam.jpg")!,
-            kind: .snapshotJPEG, refreshInterval: 1, geohash6: "drt2zq", citation: citation)
+            kind: .snapshotJPEG, refreshInterval: 1, geohash6: "drt2zq", citation: citation,
+            terms: .init(licenseClass: .publicDomain, termsURL: URL(string: "https://example.gov/terms")!,
+                         termsReadOn: Date(timeIntervalSince1970: 1_800_000_000), automatedUseAllowed: true))
+    }
+
+    /// A source nobody confirmed the terms of must cause **no network request at all**.
+    func testUnconfirmedSourceIsNeverContacted() async {
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let unconfirmed = try! PublicFeedSource(
+            name: "unconfirmed", url: URL(string: "https://example.gov/cam.jpg")!, kind: .snapshotJPEG,
+            refreshInterval: 1, geohash6: "drt2zq", citation: citation)
+        let sink = CollectingSink()
+        let poller = SnapshotPoller(source: unconfirmed, sink: sink, session: makeSession())
+        XCTAssertFalse(poller.isPermitted)
+        var schedule = FeedSchedule(refreshInterval: 1)
+        _ = await poller.pollOnce(schedule: &schedule, now: Date(timeIntervalSince1970: 5_000))
+        XCTAssertEqual(StubProtocol.requestCount, 0)
+        let frames = await sink.actor.frames.count
+        XCTAssertEqual(frames, 0)
+        // Opting out (tests, the owner's own camera) is explicit.
+        let own = SnapshotPoller(source: unconfirmed, sink: sink, session: makeSession(), enforceTerms: false)
+        XCTAssertTrue(own.isPermitted)
     }
 
     private func makeSession() -> URLSession {
