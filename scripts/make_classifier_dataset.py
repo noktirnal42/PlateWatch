@@ -6,7 +6,9 @@ Input : <crawl dir>/<Class>/*.jpg|png  and <crawl dir>/manifest.json (source/lic
 Output: <out>/{train,validation,test}/<Class>/..., <out>/ATTRIBUTION.md, <out>/summary.json
 
 * Classes with fewer than --min usable images are dropped (Create ML needs ~10+ per class).
-* The split is a stable hash of the file name, so re-running never moves an image between splits.
+* The split is a stable hash, so re-running never moves an image between splits. With --group-by-author the hash is
+  of the photographer, so every photo by one author lands in the SAME split — Commons categories hold many shots of
+  the same vehicles by the same person, and a per-file split leaks near-duplicates into the test set (inflated scores).
 * Images under 128 px on the short side are skipped. Anything listed in eval/manifest.json is skipped.
 """
 import hashlib, json, os, shutil, sys
@@ -39,10 +41,26 @@ for cls in sorted(os.listdir(src)):
 
 counts = {"train": {}, "validation": {}, "test": {}}
 credits = []
+by_author = "--group-by-author" in sys.argv
+assign = {}
+if by_author:
+    # Balanced, deterministic grouped split per class: whole authors go to one split; largest authors are
+    # placed first into whichever split is furthest below its target share.
+    for cls, files in classes.items():
+        groups = {}
+        for f in files:
+            a = (manifest.get(f"{cls}/{f}", {}).get("author") or "").strip().lower() or f
+            groups.setdefault(a, []).append(f)
+        target = {"train": 1 - val_f - test_f, "validation": val_f, "test": test_f}
+        have = {k: 0 for k in target}
+        for a, fs in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            split = max(target, key=lambda k: target[k] * len(files) - have[k])
+            have[split] += len(fs)
+            for f in fs: assign[(cls, f)] = split
 for cls, files in classes.items():
     for f in files:
         h = int(hashlib.sha256(f.encode()).hexdigest(), 16) % 1000 / 1000
-        split = "test" if h < test_f else "validation" if h < test_f + val_f else "train"
+        split = assign.get((cls, f)) or ("test" if h < test_f else "validation" if h < test_f + val_f else "train")
         os.makedirs(os.path.join(out, split, cls), exist_ok=True)
         shutil.copy2(os.path.join(src, cls, f), os.path.join(out, split, cls, f))
         counts[split][cls] = counts[split].get(cls, 0) + 1
