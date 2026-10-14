@@ -89,7 +89,7 @@ struct DashboardPane: View {
                 GroupBox("Plate reading") {
                     Text(hub.platesAllowed
                          ? "Enabled for this Hub's location."
-                         : "Off: no home location set, or a jurisdiction that restricts plate recognition. Set the home geohash in Settings.")
+                         : "Off: no home location set, or a jurisdiction that restricts plate recognition. Set the home location in Settings.")
                         .padding(4)
                 }
             }.padding()
@@ -133,7 +133,10 @@ struct FeedsPane: View {
                 FeedStatusRow(runner: hub.feedRunner)
                 Spacer()
                 Menu("Add cameras") {
-                    Button("Import Austin traffic cameras") { Task { await hub.importAustinCameras(); reload() } }
+                    Button("Texas — Austin traffic cameras (about 820)") { Task { await hub.importAustinCameras(); reload() } }
+                    ForEach(HubController.OpenCatalogue.allCases) { c in
+                        Button(c.rawValue) { Task { await hub.importCatalogue(c); reload() } }
+                    }
                 }
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
@@ -246,8 +249,8 @@ struct SettingsPane: View {
 
     var body: some View {
         Form {
+            HomeLocationSection(hub: hub, geohash: $geohash)
             Section("Hub") {
-                TextField("Home geohash (6)", text: $geohash).onChange(of: geohash) { _, v in hub.homeGeohash6 = v }
                 TextField("Preferred snapshot port", value: $port, format: .number.grouping(.never))
                     .onSubmit { Task { await hub.restartSnapshotServer(port: UInt16(clamping: port)) } }
             }

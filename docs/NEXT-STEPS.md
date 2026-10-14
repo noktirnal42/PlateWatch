@@ -299,3 +299,8 @@ terms status), Cameras & ingest (snapshot endpoint, watched folder, RTSP start/s
 Next slices: live capture from local/Continuity cameras into the pipeline; video-file ingest; live frame viewer with detection overlays;
 per-source status (robots-blocked/403/429); detections/outbox review pane; CloudKit moderation source (needs server-to-server key);
 LLM/MLX assistants (on-device only; no frame uploads, AGENTS.md rule 3).
+
+Also shipped 2026-10-14: Settings → **Home location** (Use my location, latitude/longitude, Plus Code; Plus Code decoder in
+`PlateKit.PlusCode`), the plate-reading jurisdiction list ([PLATE-READING-JURISDICTIONS.md](PLATE-READING-JURISDICTIONS.md)),
+five more camera catalogues (`CameraCatalogueImporters`), camera preview, per-host request pacing, and the S3 `robots.txt` fix.
+Open: Location Services needs a signed build (unsigned dev builds get no prompt — use coordinates or a Plus Code).

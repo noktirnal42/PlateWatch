@@ -204,3 +204,22 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
 - Federal: USGS HVO webcam API — https://volcanoes.usgs.gov/vsc/api/hvoWebcamsApi ; USGS webcams — https://www.usgs.gov/mission-areas/natural-hazards/multimedia/webcams ; FAA weather cameras — https://www.faa.gov/about/office_org/headquarters_offices/ato/service_units/systemops/fs/alaskan/weather_cams ; NOAA GLERL disclaimer — https://www.glerl.noaa.gov/metdata/docs/webcam_disclaimer.html
 - Business livestreams: Windy webcam terms — https://account.windy.com/agreements/webcams-terms-of-use ; EarthCam ToS summary — https://tostracker.app/document/earthcam
 - Reference data: NHTSA vPIC — https://vpic.nhtsa.dot.gov/api/ ; USAspending — https://api.usaspending.gov/docs/endpoints ; SAM.gov entity API — https://open.gsa.gov/api/entity-api ; HIFLD law enforcement (OSM wiki) — https://wiki.openstreetmap.org/wiki/HIFLD/Law_Enforcement ; fleet datasets — https://catalog.data.gov/dataset/city-and-county-vehicle-inventories-f07a0 and https://catalog-beta.data.gov/dataset/new-york-city-fleet-daily-service-report
+
+## 8. More catalogues importable from the Hub (2026-10-14)
+
+Hub → Public feeds → **Add cameras** imports these (each camera arrives *unconfirmed*; review the image host's terms before anything
+is polled). Verified by live requests; full notes and the sources that did **not** qualify (key required, video-only, robots
+`Disallow: /`, unclear terms) are in [research/FEED-RESEARCH-MORE-SOURCES.md](research/FEED-RESEARCH-MORE-SOURCES.md).
+
+| Source | Cameras | Licence (as published) | Note |
+|---|---|---|---|
+| City of Austin (Socrata) | ~820 | Public domain | Image host is S3/CloudFront: a missing `robots.txt` answers 403 `AccessDenied` and is treated as "no robots.txt" |
+| Caltrans CWWP2 (CA) | ~3,400 | Public domain (Caltrans Conditions of Use) | `robots.txt` answers HTTP 500 → our rule treats that as **do not fetch** until it recovers |
+| WSDOT (WA, ArcGIS) | ~1,700 | **No open licence**: "low volume" use only | Review carefully; many images are served from tripcheck.com |
+| Iowa DOT (ArcGIS) | ~1,300 | CC BY 4.0; site terms cap automated request rates | Per-host pacing is 1 request/s |
+| Newfoundland & Labrador (ArcGIS) | ~50 | Open Government Licence | |
+| DriveBC (BC) | ~1,000 | Open Government Licence – BC | |
+
+Not imported yet (open data but outside the US fleet focus or needing a decision): Toronto, Calgary (licence text unreadable),
+Singapore, Hong Kong, Finland Digitraffic. Do **not** poll: Illinois Gateway images (robots `Disallow: /`), Michigan, Kentucky,
+Tennessee (robots disallow), NYC DOT (cease-and-desist history; ask first), Houston TranStar (no redistribution).

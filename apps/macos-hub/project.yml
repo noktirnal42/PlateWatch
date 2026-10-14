@@ -27,6 +27,8 @@ targets:
       path: Support/Info.plist
       properties:
         LSUIElement: false   # full desktop app (the menu-bar item stays as a status shortcut)
+        NSLocationUsageDescription: "Optional: set this Hub's home area from your location. Only a ~1 km area is stored, and only when you press Use my location."
+        NSLocationWhenInUseUsageDescription: "Optional: set this Hub's home area from your location. Only a ~1 km area is stored, and only when you press Use my location."
         NSCameraUsageDescription: "The Hub can analyze cameras (including iPhones via Continuity Camera) for fleet vehicle identification, on-device."
         NSBonjourServices: [_platewatch-snapshot._tcp]   # advertises the snapshot ingest endpoint to IP cameras on the LAN
         CFBundleDisplayName: PlateWatch Hub

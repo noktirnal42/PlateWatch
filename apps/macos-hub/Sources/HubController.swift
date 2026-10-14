@@ -114,6 +114,88 @@ final class HubController: ObservableObject {
         }
     }
 
+    enum OpenCatalogue: String, CaseIterable, Identifiable {
+        case caltrans = "California — Caltrans (about 3,400 cameras)"
+        case wsdot = "Washington — WSDOT (about 1,700; low-volume use only)"
+        case iowa = "Iowa DOT (about 1,300)"
+        case newfoundland = "Newfoundland & Labrador (about 50)"
+        case driveBC = "British Columbia — DriveBC (about 1,000)"
+        var id: String { rawValue }
+    }
+
+    /// Imports a public camera catalogue into `feeds.json`. Like Austin, every camera arrives **unconfirmed**: nothing is fetched
+    /// from an image host until a person reviews and confirms that host's terms. Catalogue requests are spaced 1 s apart.
+    func importCatalogue(_ choice: OpenCatalogue) async {
+        importStatus = "Importing \(choice.rawValue)…"
+        typealias Importers = CameraCatalogueImporters
+        func fetch(_ url: URL) async throws -> Data {
+            var request = URLRequest(url: url)
+            request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+            request.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+            request.timeoutInterval = 60
+            let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            return data
+        }
+        func arcGIS(_ base: String, _ fields: Importers.ArcGISFields, _ op: Importers.Operator) async throws -> SocrataImportResult {
+            var all: [PublicFeedSource] = [], skipped: [SkipReason] = []
+            var offset = 0
+            for _ in 0..<20 {
+                let url = URL(string: "\(base)/query?where=1%3D1&outFields=*&outSR=4326&f=json&resultOffset=\(offset)&resultRecordCount=1000")!
+                let (page, more) = try Importers.arcGIS(try await fetch(url), fields: fields, operator: op)
+                all += page.sources; skipped += page.skipReasons
+                guard more else { break }
+                offset += 1000
+                try await Task.sleep(for: .seconds(1))
+            }
+            return SocrataImportResult(sources: all, skippedCount: skipped.count, skipReasons: skipped)
+        }
+        do {
+            let result: SocrataImportResult
+            switch choice {
+            case .caltrans:
+                let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
+                                            attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300)
+                var sources: [PublicFeedSource] = [], skipped: [SkipReason] = []
+                for d in 1...12 {
+                    let n = String(format: "%02d", d)
+                    let data = try await fetch(URL(string: "https://cwwp2.dot.ca.gov/data/d\(d)/cctv/cctvStatusD\(n).json")!)
+                    let r = try Importers.caltrans(data, district: d, operator: op)
+                    sources += r.sources; skipped += r.skipReasons
+                    try await Task.sleep(for: .seconds(1))
+                }
+                result = SocrataImportResult(sources: sources, skippedCount: skipped.count, skipReasons: skipped)
+            case .wsdot:
+                result = try await arcGIS("https://data.wsdot.wa.gov/arcgis/rest/services/TravelInformation/TravelInfoCamerasWeather/FeatureServer/0",
+                    .init(name: "CameraTitle", image: "ImageURL", id: "OBJECTID"),
+                    .init(datasetURL: URL(string: "https://data.wsdot.wa.gov/arcgis/rest/services/TravelInformation/TravelInfoCamerasWeather/FeatureServer/0")!,
+                          attribution: "Washington State DOT", licenseClass: .unknown, refreshInterval: 600))
+            case .iowa:
+                result = try await arcGIS("https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0",
+                    .init(name: "Desc_", image: "ImageURL", id: "device_id", latitude: "latitude", longitude: "longitude"),
+                    .init(datasetURL: URL(string: "https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0")!,
+                          attribution: "Iowa DOT (CC BY 4.0)", licenseClass: .openLicence, refreshInterval: 300))
+            case .newfoundland:
+                result = try await arcGIS("https://services8.arcgis.com/aCyQID5qQcyrJMm2/arcgis/rest/services/TI_HighwayCamera/FeatureServer/0",
+                    .init(name: "location", image: "url", id: "objectid"),
+                    .init(datasetURL: URL(string: "https://services8.arcgis.com/aCyQID5qQcyrJMm2/arcgis/rest/services/TI_HighwayCamera/FeatureServer/0")!,
+                          attribution: "Government of Newfoundland and Labrador (Open Government Licence)", licenseClass: .openLicence, refreshInterval: 300))
+            case .driveBC:
+                let op = Importers.Operator(datasetURL: URL(string: "https://www.drivebc.ca/api/webcams/")!,
+                                            attribution: "DriveBC, BC Ministry of Transportation (Open Government Licence – BC)",
+                                            licenseClass: .openLicence, refreshInterval: 900)
+                result = try Importers.driveBC(try await fetch(op.datasetURL), operator: op)
+            }
+            let existing = (try? FeedCatalogue.load(from: feedsFile)) ?? FeedCatalogue()
+            let merged = existing.merged(with: result.sources)
+            try merged.write(to: feedsFile)
+            startFeeds()
+            importStatus = "Imported \(result.sources.count) cameras (\(result.skippedCount) skipped); \(merged.awaitingTerms.count) awaiting terms"
+        } catch {
+            importStatus = "Import failed: \(error.localizedDescription)"
+        }
+    }
+
     /// Shows `feeds.json` in Finder, where a person records each source's terms (termsURL, termsReadOn, automatedUseAllowed).
     func revealFeedsFile() {
         if !FileManager.default.fileExists(atPath: feedsFile.path) { try? FeedCatalogue().write(to: feedsFile) }
