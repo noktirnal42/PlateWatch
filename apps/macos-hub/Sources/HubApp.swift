@@ -37,6 +37,18 @@ struct PlateWatchHubApp: App {
 /// snapshots from IP cameras (they FTP/POST images on motion) plus a local
 /// Continuity Camera source, runs the shared pipeline, and keeps the local
 /// archive + outbox.
+/// Observes the feed runner directly (a nested ObservableObject is not observed through its owner).
+struct FeedStatusRow: View {
+    @ObservedObject var runner: FeedRunner
+    var body: some View {
+        HStack {
+            Text("Public feeds").foregroundStyle(.secondary)
+            Spacer()
+            Text(runner.status).font(.caption).multilineTextAlignment(.trailing)
+        }
+    }
+}
+
 struct HubStatusView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject var hub: HubController
@@ -53,6 +65,7 @@ struct HubStatusView: View {
             row("Fleet hits today", "\(hub.fleetHitsToday)")
             row("Outbox", "\(hub.pendingCount) pending")
             row("Snapshot server", hub.snapshotServerStatus)
+            FeedStatusRow(runner: hub.feedRunner)
             HStack {
                 Text("Preferred port").foregroundStyle(.secondary)
                 Spacer()

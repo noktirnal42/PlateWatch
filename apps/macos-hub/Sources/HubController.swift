@@ -29,6 +29,13 @@ final class HubController: ObservableObject {
     private let contextBox = AnalysisContextBox()
     private let modelManager: ModelManager
     private let identityResolver = IdentityResolver()
+    private var deduper = SightingDeduper()
+    /// Public camera feeds (docs/FEED-SOURCES.md). Only sources a person confirmed the terms of are polled.
+    let feedRunner = FeedRunner()
+    var feedsFile: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appending(path: "PlateWatchHub/feeds.json")
+    }
     @Published private(set) var modelStatus = "baseline vision"
     private let fileSource = FileFrameSource()
     private let gate = RedactionGate(config: .standard)
@@ -72,7 +79,33 @@ final class HubController: ObservableObject {
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
         Task { await refreshModels() }
+        startFeeds()
         processNewFiles()   // pick up anything dropped while the Hub was not running
+    }
+
+    /// Loads `feeds.json` and starts polling the confirmed sources. Missing/corrupt file = no feeds (never a crash).
+    func startFeeds() {
+        guard let catalogue = try? FeedCatalogue.load(from: feedsFile) else {
+            feedRunner.stop()
+            return
+        }
+        feedRunner.start(catalogue: catalogue) { [weak self] data, source in
+            await self?.analyseFeedFrame(data, from: source)
+        }
+    }
+
+    /// One frame from a public feed. Everything is decided from *that source*: its catalogued position (identity hint
+    /// and the plate-recognition jurisdiction gate), and the frame's real size (analysis tier). The frame lives in
+    /// memory only.
+    func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async {
+        guard let buffer = FileFrameSource.pixelBuffer(from: data) else { return }
+        let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
+        let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
+        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+        framesAnalyzed += 1
+        recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6, mayResolveIdentity: source.mayResolveIdentity,
+                        sourceID: source.id.uuidString)
     }
 
     /// Installs the detector models (registry, or a developer override `Local/<task>.mlmodel`). Best-effort:
@@ -273,7 +306,8 @@ final class HubController: ObservableObject {
         case ("POST", "/snapshot"):
             await processSnapshotBody(request.body, on: connection)
         case ("GET", "/health"):
-            sendHTTPResponse(on: connection, status: 200, body: "PlateWatch Hub")
+            sendHTTPResponse(on: connection, status: 200,
+                             body: "PlateWatch Hub | models: \(modelStatus) | feeds: \(feedRunner.status) | frames analysed: \(framesAnalyzed) | fleet hits today: \(fleetHitsToday) | outbox: \(pendingCount)")
         case (_, "/snapshot"), (_, "/health"):
             sendHTTPResponse(on: connection, status: 405, body: "Method Not Allowed")
         default:
@@ -303,20 +337,32 @@ final class HubController: ObservableObject {
     /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
     /// endpoint so both apply identical rules. Returns the number of fleet hits.
     @discardableResult
-    private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier) -> (hits: Int, agencyKeys: [String]) {
+    private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier,
+                                 geohash6: String? = nil, mayResolveIdentity: Bool = true,
+                                 sourceID: String = "home") -> (hits: Int, agencyKeys: [String]) {
+        let geohash6 = geohash6 ?? homeGeohash6
         var hits = 0
         var agencyKeys: [String] = []
         for vehicle in frame.vehicles {
             let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             guard gate.verdict(fleetConfidence: confidence) == .persistAndSync else { continue }
+            let identity = mayResolveIdentity
+                ? feedIdentity(vehicle: vehicle, markings: markings, confidence: confidence, tier: tier, geohash6: geohash6)
+                : nil
+            // A fixed camera sees the same parked vehicle in every frame: one sighting per vehicle per window.
+            let dedupeKey = SightingDeduper.key(
+                source: sourceID, agencyKey: identity?.agency?.agencyKey,
+                unit: markings.unitNumber ?? identity?.unitNumbers.first,
+                plate: vehicle.plates.first?.best.map { Plate.normalize($0.text) },
+                vehicleClass: vehicle.vehicleClass.rawValue)
+            guard deduper.shouldRecord(key: dedupeKey) else { continue }
             hits += 1
             fleetHitsToday += 1
-            let identity = feedIdentity(vehicle: vehicle, markings: markings, confidence: confidence, tier: tier)
             if let key = identity?.agency?.agencyKey { agencyKeys.append(key) }
             guard let context = modelContext else { continue }
             let dto = SightingSubmissionDTO(
                 capturedAt: frame.timestamp,
-                geohash6: homeGeohash6,
+                geohash6: geohash6,
                 deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
                 fleetConfidence: confidence,
                 plate: vehicle.plates.first?.best.map(PlateDTO.init),
@@ -338,10 +384,10 @@ final class HubController: ObservableObject {
     /// (never this Mac's), review is forced below full resolution, and the smallest frames assert no identity at
     /// all (docs/FEED-SOURCES.md §1-2).
     private func feedIdentity(vehicle: VehicleObservation, markings: FleetMarkings, confidence: Double,
-                              tier: AnalysisTier) -> VehicleIdentity? {
+                              tier: AnalysisTier, geohash6: String) -> VehicleIdentity? {
         guard tier != .appearanceOnly else { return nil }
         return identityResolver.syncIdentity(vehicle: vehicle, markings: markings, confidence: confidence,
-                                             location: .init(geohash6: homeGeohash6),
+                                             location: .init(geohash6: geohash6),
                                              forceReview: !tier.identityMayBeConfirmed)
     }
 
