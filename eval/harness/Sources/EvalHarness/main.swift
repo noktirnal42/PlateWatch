@@ -84,6 +84,30 @@ func describe(_ m: FleetMarkings) -> [String] {
     return out
 }
 
+// Survey mode: `--survey <dir>` analyses every image in a folder of UNLABELLED frames (e.g. saved public-feed stills under the
+// gitignored eval/feeds/) and reports vehicles and fleet scores. Plate reading is off in this mode — it is a coverage check,
+// not an accuracy score (there is no ground truth).
+if let i = args.firstIndex(of: "--survey"), i + 1 < args.count {
+    let dir = URL(fileURLWithPath: args[i + 1])
+    let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+        .filter { ["jpg", "jpeg", "png"].contains($0.pathExtension.lowercased()) }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+    var frames = 0, withVehicles = 0, vehicleTotal = 0, fleetHits = 0, reviewable = 0
+    for url in files {
+        guard let buffer = FileFrameSource.pixelBuffer(from: url) else { continue }
+        let frame = try await pipeline.analyze(FramePacketLike(pixelBuffer: buffer),
+                                               context: AnalysisContext(models: loadedModels, thorough: false, readPlates: false))
+        let outcome = FleetScoring.frameGateOutcome(gate: gate, frame: frame)
+        frames += 1; vehicleTotal += frame.vehicles.count
+        if !frame.vehicles.isEmpty { withVehicles += 1 }
+        if outcome.anyApproved { fleetHits += 1 } else if outcome.anyReviewable { reviewable += 1 }
+        print(String(format: "%@ %5dx%-5d vehicles=%2d fleet=%.2f %@", url.lastPathComponent.padding(toLength: 12, withPad: " ", startingAt: 0),
+                     CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer), frame.vehicles.count, outcome.bestConfidence,
+                     outcome.anyApproved ? "FLEET" : (outcome.anyReviewable ? "review" : "")))
+    }
+    print("survey: \(frames) frames, \(withVehicles) with vehicles (\(vehicleTotal) total), \(fleetHits) fleet hit(s), \(reviewable) for review")
+    exit(0)
+}
+
 var outcomes: [Outcome] = []
 for entry in entries {
     let url = evalDir.appendingPathComponent(entry.file)

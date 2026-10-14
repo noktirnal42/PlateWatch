@@ -223,3 +223,22 @@ is polled). Verified by live requests; full notes and the sources that did **not
 Not imported yet (open data but outside the US fleet focus or needing a decision): Toronto, Calgary (licence text unreadable),
 Singapore, Hong Kong, Finland Digitraffic. Do **not** poll: Illinois Gateway images (robots `Disallow: /`), Michigan, Kentucky,
 Tennessee (robots disallow), NYC DOT (cease-and-desist history; ask first), Houston TranStar (no redistribution).
+
+## 9. Austin pilot result (2026-10-14)
+
+39 frames sampled evenly across the 822 confirmed Austin cameras (one request per second, identifying User-Agent, saved only to the
+gitignored `eval/feeds/austin/`), analysed with `EvalHarness --survey` (YOLOv8n vehicle detector, plate reading off):
+
+| | |
+|---|---|
+| Frames | 39 (33 at 1920×1080, 6 at 320×176) |
+| Frames with at least one vehicle | 33 |
+| Vehicles detected | 250 |
+| Fleet hits / review candidates | **0 / 0** |
+
+Consistent with §1: these are wide intersection views with small vehicles, so door lettering is unreadable and nothing reaches the fleet
+gate. Austin is useful for traffic-volume and appearance-level work, not for agency identification; expect real fleet hits only from
+cameras with close, low-angle views of one lane. Without the vehicle detector loaded the baseline finds **no** vehicles at all in these
+frames (it grows vehicles from text regions), so the Hub's "CoreML active (N models)" status matters.
+
+Rerun: `eval/harness/.build/release/EvalHarness eval --survey eval/feeds/austin --models models/cache --tasks vehicle-detection`.
