@@ -30,6 +30,11 @@ struct PlateWatchHubApp: App {
         }
         .menuBarExtraStyle(.window)
         .modelContainer(modelContainer)
+
+        // Feed terms review window
+        Window("Feed terms", id: "feeds-review") {
+            FeedsReviewView(hub: hub)
+        }
     }
 }
 
@@ -51,6 +56,7 @@ struct FeedStatusRow: View {
 
 struct HubStatusView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var hub: HubController
     @AppStorage("hubGeohash6") private var hubGeohash6 = ""
     @AppStorage("hubSnapshotPort") private var snapshotPortSetting = 8088
@@ -69,6 +75,10 @@ struct HubStatusView: View {
             HStack {
                 Button("Import Austin cameras") { Task { await hub.importAustinCameras() } }
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
+            }
+            HStack {
+                Button("Review feed terms…") { openWindow(id: "feeds-review") }
+                Spacer()
             }
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
             HStack {
