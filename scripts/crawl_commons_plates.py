@@ -1,7 +1,9 @@
 #!/usr/bin/env python3 -I
 """Crawl a TRAINING set of US licence-plate images, labelled by issuing state, from Wikimedia Commons.
 
-Usage: python3 -I scripts/crawl_commons_plates.py <out dir> [--cap 120]
+Usage: python3 -I scripts/crawl_commons_plates.py <out dir> [--cap 120] [--allow-sa]
+  --allow-sa  also keep CC BY-SA files (owner decision 2026-10-13, for the plate-state classifier ONLY).
+              Resumes: files already in <out dir> are kept and not downloaded again.
 Writes <out>/<State>/*.jpg|png and <out>/manifest.json (source page, licence, author per file).
 
 Purpose: a plate-DESIGN classifier (Create ML Image Classification, one class per state) — Apple Vision
@@ -15,7 +17,8 @@ import json, os, re, sys, time, html, urllib.parse, urllib.request
 UA = "PlateWatch-training-crawl/0.1 (https://github.com/noktirnal42/PlateWatch; CC-licensed training data)"
 API = "https://commons.wikimedia.org/w/api.php"
 ROOT = "Category:License plates of the United States by state"
-OK_LICENSE = re.compile(r"^(cc0|pd\b|public domain|cc[- ]by[- ]\d)", re.I)       # BY only; -SA excluded
+ALLOW_SA = "--allow-sa" in sys.argv
+OK_LICENSE = re.compile(r"^(cc0|pd\b|public domain|cc[- ]by[- ]\d" + (r"|cc[- ]by[- ]sa[- ]\d" if ALLOW_SA else "") + ")", re.I)
 OLD_YEAR = re.compile(r"\b(1[0-8]\d\d|19[0-8]\d)\b")
 SKIP_TITLE = re.compile(r"trailer|motorcycle|temporary|dealer|sample|specimen", re.I)
 args = sys.argv
@@ -50,7 +53,9 @@ states = [c for c in members(ROOT, "subcat")
           if re.match(r"Category:(License plates|Vehicle registration plates) of ", c)
           and not re.search(r"Samoa|Canal Zone|Guam|Mariana|Puerto Rico|Virgin Islands", c)]
 os.makedirs(out, exist_ok=True)
-manifest = []
+mpath = os.path.join(out, "manifest.json")
+manifest = json.load(open(mpath)) if os.path.exists(mpath) else []
+have = {m["file"] for m in manifest}
 for cat in states:
     state = state_name(cat)
     os.makedirs(os.path.join(out, state), exist_ok=True)
@@ -60,7 +65,7 @@ for cat in states:
         time.sleep(0.3)
     titles = [t for t in dict.fromkeys(titles)
               if re.search(r"\.(jpe?g|png)$", t, re.I) and not OLD_YEAR.search(t) and not SKIP_TITLE.search(t)]
-    kept = 0
+    kept = sum(1 for m in manifest if m["class"] == state)
     for i in range(0, len(titles), 40):
         if kept >= cap: break
         d = get({"action": "query", "titles": "|".join(titles[i:i + 40]), "prop": "imageinfo",
@@ -74,6 +79,7 @@ for cat in states:
                     or not OK_LICENSE.match(lic.replace("CC BY", "CC-BY")): continue
             fname = re.sub(r"[^A-Za-z0-9._-]+", "_", page["title"].replace("File:", ""))[:90]
             dest = os.path.join(out, state, fname)
+            if f"{state}/{fname}" in have: continue
             try:
                 with urllib.request.urlopen(urllib.request.Request(ii.get("thumburl") or ii["url"], headers={"User-Agent": UA}), timeout=90) as r:
                     open(dest, "wb").write(r.read())

@@ -17,9 +17,18 @@ model is committed or published. **Do not commit weights or training images.**
    Train from a **separate** crawl (`training/…`, gitignored) and keep a filename/hash
    blocklist of every eval image so the two can never overlap.
 2. **Only train on licences we can honour.** CC0 / public domain / CC BY (attribution
-   file shipped with the model) are fine. CC BY-**SA** (share-alike) is *used for eval only*
-   unless the owner decides a model trained on SA images is acceptable. **NC / ND are never
-   used** (the project is AGPL and publishes derived models).
+   file shipped with the model) are fine. **NC / ND are never used** (the project is AGPL and
+   publishes derived models). CC BY-**SA** (share-alike) is *eval-only* by default, with **one owner-approved
+   exception (2026-10-13, Jeremy McVay): the plate-state classifier may train on CC BY-SA plate images**
+   (`scripts/crawl_commons_plates.py --allow-sa`) because the CC0/PD/BY plate data alone is too thin
+   (≈ 890 images, 12 for Minnesota). Conditions for that exception:
+   - it applies **only** to the plate-state classifier — the fleet classifier and the plate detector stay on CC0/PD/BY;
+   - the dataset's `ATTRIBUTION.md` (author, licence, source page per image) ships with the model and the
+     model's `models/registry.json` entry says `trained on CC BY-SA 4.0 and CC BY images — see attribution`;
+   - the share-alike obligations for a *model* trained on SA images are legally unsettled (is a model an
+     "adaptation"?). This is a documented risk accepted by the owner, **not legal advice** — revisit before any
+     public model release, and if in doubt retrain without the SA images (the manifest records each file's
+     licence, so the SA files can be filtered out and the model rebuilt).
 
 ## 1. What Create ML can and cannot train
 
@@ -142,3 +151,32 @@ Per NEXT-STEPS §4: Apple Archive each model (`aa archive … -a lzfse`), sha256
 `models/registry.json` (licence mandatory), publish a release (the owner runs `gh release create`),
 and surface the model in About. Never ship a model that scores worse than the current one on the
 same corpus.
+
+## 7. Training log (Create ML, GUI) — 2026-10-13
+
+Short runs first; long runs (16,000 iterations ≈ 6.5 h for the detector) only after every model works end to end.
+
+### Plate detector — Object Detection, Full Network, 2,000 iterations (~48 min)
+Data: Open Images V7 plate boxes, 2,167 / 259 / 279 images (CC BY 2.0). Create ML test set: precision 81 %, recall ≈ 67 %
+(230 found, 111 missed, 55 false alarms). **Eval-harness corpus (62 images): plate reads 19/62 vs 17/62 for YOLOv8n and 12/62
+with no detector; fleet recall 63 % vs 61 %; precision 100 %, 0 civilian false positives.** Finds both US police plates in `eval/user/`.
+The training photos are mostly UK (double-decker buses, UK plates), yet plate *shape* transferred to US plates. Loads in
+`CoreMLDetectorStage` unchanged (`VNRecognizedObjectObservation`); `EvalHarness --plate-model <file>` compares any model.
+Not yet registered or bundled: neither the app nor the Hub runs a CoreML model today.
+
+### Fleet classifier — Image Classification, Feature Print V1 → V2, 25 iterations (minutes)
+| run | data | split | test acc | your photos (Waltham / Minneapolis) |
+|---|---|---|---|---|
+| v1 | 1,331 train, raw crawl | random | 70 % | ems 55 % / transit 52 % |
+| v2 | 537 train, cleaned (Apple classifier filter) | random | 82 % | transit 97 % / transit 94 % |
+| v2g | 541 train, cleaned | **by photographer** | 71 % | public 81 % / transit 74 % |
+| v2g again | same | by photographer | 73 % (police 4/8) | transit 100 % / civilian 99 % |
+
+Lessons: (1) the raw `police` class was mostly noise (~6 of 30 sampled were police cars; the rest motorcycles, bicycle patrols,
+boats, vintage photos) — filter crawls with `VNClassifyImageRequest` (keep car/truck, drop motorcycle/bicycle/boat). (2) A random
+split leaks near-duplicates (one Akron photographer supplies 65 images): **split by author** (`make_classifier_dataset.py
+--group-by-author`); the honest score is ≈ 71–73 %, not 82 %. (3) Training data is front/side views of white-and-black
+cruisers; the owner's photos are **rear views of dark SUVs** and are confidently misclassified. **Not safe as evidence — do not
+wire in** until it has rear-view police data. It is not needed for the two reference photos (text + official plate identify them).
+
+### Plate-state classifier — see the dataset notes in §4c; results appended below when trained.
