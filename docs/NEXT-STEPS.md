@@ -283,3 +283,4 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 7. Server/publishing guardrails: aggregation delay (24–72 h), ~1 km coarsening, k-suppression, 21-day TTL, access audit log, takedown channel.
 8. Counsel questions (FEED-LEGAL-RESEARCH.md): does plate OCR on a third-party feed count as ALPR "use"? Does the handheld iPhone app fall under
    the same state rules? (The jurisdiction gate is not applied to handheld capture yet.)
+9. **Model release follow-ups (from PR #16 review):** (a) wire `.aar` into `ModelManager`/`ModelRegistry` (`artifactExtension` handles `"aar"`, extract via `ModelArchive`); (b) harden `ModelArchive` extraction against symlink entries and `../` path escape, with tests; (c) package the missing `vehicle-make-model-classifier.aar` or drop its registry entry; (d) owner publishes `models-v0.1.0`, then flip the ROADMAP line back to ✅.
