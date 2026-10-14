@@ -27,7 +27,7 @@ print(f"{len(missing)} of {len(manifest)} images missing")
 restored = failed = 0
 for e in missing:
     data = get_json({"action": "query", "titles": e["title"], "prop": "imageinfo", "iiprop": "url|mime",
-                     "iiurlwidth": 1600, "format": "json"})
+                     "iiurlwidth": 1600, "redirects": 1, "format": "json"})
     page = next(iter((data.get("query", {}).get("pages") or {}).values()), {})
     info = (page.get("imageinfo") or [{}])[0]
     url = info.get("thumburl") or info.get("url")
