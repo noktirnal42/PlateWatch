@@ -20,7 +20,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
 - ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; **needs the Apple-account step** (import schema, deploy to production) and a moderator publish tool (P0-5)
-- ⏳ `models-v0.1.0` release drafted (not yet published; owner publishes): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned; `.aar` packaging + `ModelArchive` extraction (P0-3). **Open:** `ModelManager` does not yet install `.aar` models; the `vehicle-make-model-classifier` asset is not yet packaged
+- ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
 - ⬜ Full visual redesign of Sightings/Watchlist/Capture (current screens are functional + branded, not final)
 
