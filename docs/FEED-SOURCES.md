@@ -22,6 +22,19 @@ that on the 62-image eval corpus (`scripts/degrade_corpus.py`; profiles are roug
 | ~480p, q40, blur, noise | **35 %** | 59 % | 100 % / 0 | 10/62 | 1/15 |
 | ~240p, q30, blur, noise | **7 %** | 41 % | 100 % / 0 | 1/62 | 0/15 |
 
+**By the vehicle's own pixel size** (what actually matters — a 1080p frame can hold a 50 px vehicle). Fleet detection pooled over the four
+quality levels, n = 192 fleet vehicles, grouped by the main vehicle's long side in the frame:
+
+| Main-vehicle long side | Fleet detected |
+|---|---|
+| < 400 px | 3/55 (**5 %**) |
+| 400–899 px | 17/49 (**35 %**) |
+| 900–1399 px | 27/46 (**59 %**) |
+| 1400+ px | 27/42 (**64 %**) |
+
+So `AnalysisTier.tier(forVehicleLongSide:)` uses 900 / 400 px, and the Hub takes the **worse of frame tier and vehicle tier** whenever the
+vehicle detector supplies real boxes (without it the "vehicles" are pseudo-boxes grown from text regions, so their size is meaningless).
+
 Consequences for the Hub:
 1. **Lettering and plates stop being readable below ~480p.** The text-first pipeline that works on phone photos mostly
    fails on far-field traffic cameras. Precision stays 100 % (the gate is conservative), but recall collapses.

@@ -275,7 +275,7 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 1. Merge PR #11 (feed quality) and GLM's model-release PR; owner runs `gh release create models-v…` and registers the Create ML detector.
 2. **Read the Austin image host's terms** (`cctv.austinmobility.io`), record them in the catalogue entry, then run a slow real pilot and save
    frames under `eval/feeds/` (gitignored) so the harness can score real feed stills instead of a degraded proxy.
-3. Decide analysis tier from the **vehicle's pixel size**, not the frame size (1080p frames can still hold 40-px vehicles).
+3. ~~Decide analysis tier from the vehicle's pixel size~~ — **done** (900 / 400 px thresholds from measured detection rates; FEED-SOURCES.md §1).
 4. Feed politeness: `robots.txt` check, per-host rate limit, stop-and-flag on 403/429 (guardrail table in FEED-SOURCES.md §6b).
 5. Skip source-masked regions (some cameras blank vehicles with grey blobs at source).
 6. Retrain the fleet crop classifier on `training/fleet2` with `scripts/build_fleet_crop_dataset.sh`; wire it in only if rear-view police

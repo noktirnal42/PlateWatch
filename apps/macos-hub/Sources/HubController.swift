@@ -346,8 +346,17 @@ final class HubController: ObservableObject {
         for vehicle in frame.vehicles {
             let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             guard gate.verdict(fleetConfidence: confidence) == .persistAndSync else { continue }
+            // The frame's tier is the ceiling; with the vehicle detector loaded the vehicle's own pixel size can only
+            // lower it (a 1080p frame can hold a 50 px vehicle). Without the detector the "vehicle" boxes are pseudo-boxes
+            // grown from text regions, so their size means nothing and the frame tier stands.
+            var vehicleTier = tier
+            if contextBox.current.models["vehicle-detection"] != nil {
+                let longSide = max(vehicle.boundingBox.width * frame.imageSize.width,
+                                   vehicle.boundingBox.height * frame.imageSize.height)
+                vehicleTier = AnalysisTier.combined(frame: tier, vehicle: AnalysisTier.tier(forVehicleLongSide: Int(longSide)))
+            }
             let identity = mayResolveIdentity
-                ? feedIdentity(vehicle: vehicle, markings: markings, confidence: confidence, tier: tier, geohash6: geohash6)
+                ? feedIdentity(vehicle: vehicle, markings: markings, confidence: confidence, tier: vehicleTier, geohash6: geohash6)
                 : nil
             // A fixed camera sees the same parked vehicle in every frame: one sighting per vehicle per window.
             let dedupeKey = SightingDeduper.key(

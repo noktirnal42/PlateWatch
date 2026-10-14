@@ -73,4 +73,23 @@ final class FeedPolicyTests: XCTestCase {
         let data = try JSONEncoder().encode(original)
         XCTAssertEqual(try JSONDecoder().decode(PublicFeedSource.self, from: data), original)
     }
+
+    /// Thresholds come from the measured detection rate by vehicle size, not from frame size.
+    func testVehicleTierFollowsVehiclePixelSize() {
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 1500), .full)
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 900), .full)
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 899), .reduced)
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 400), .reduced)
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 399), .appearanceOnly)
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 60), .appearanceOnly, "a distant car in a 1080p frame")
+        XCTAssertEqual(AnalysisTier.tier(forVehicleLongSide: 0), .appearanceOnly)
+    }
+
+    /// A big frame does not make a tiny vehicle readable, and a small frame cannot make a vehicle better.
+    func testCombinedTierIsTheWorseOfFrameAndVehicle() {
+        XCTAssertEqual(AnalysisTier.combined(frame: .full, vehicle: .appearanceOnly), .appearanceOnly)
+        XCTAssertEqual(AnalysisTier.combined(frame: .reduced, vehicle: .full), .reduced)
+        XCTAssertEqual(AnalysisTier.combined(frame: .full, vehicle: .full), .full)
+        XCTAssertEqual(AnalysisTier.combined(frame: .appearanceOnly, vehicle: .full), .appearanceOnly)
+    }
 }

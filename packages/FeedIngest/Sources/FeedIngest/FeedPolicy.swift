@@ -60,6 +60,22 @@ public enum AnalysisTier: String, Sendable, Codable, Comparable {
         }
     }
 
+    /// The tier for one **vehicle**, from its pixel size (long side of its detected box). This is the measure that matters:
+    /// a 1080p frame can hold a 50 px vehicle. Measured on the 62-image corpus at four quality levels (n = 192 fleet
+    /// vehicles, docs/FEED-SOURCES.md §1): fleet detection is 5 % below 400 px, 35 % at 400–899 px, 59 % at 900–1399 px
+    /// and 64 % at 1400+ px.
+    public static func tier(forVehicleLongSide pixels: Int) -> AnalysisTier {
+        switch pixels {
+        case 900...: return .full
+        case 400..<900: return .reduced
+        default: return .appearanceOnly
+        }
+    }
+
+    /// The cautious combination of the frame's tier and a vehicle's tier: a vehicle is only as readable as the worse of
+    /// the two.
+    public static func combined(frame: AnalysisTier, vehicle: AnalysisTier) -> AnalysisTier { max(frame, vehicle) }
+
     /// Run the slower, more accurate text recognition path.
     public var thorough: Bool { self != .appearanceOnly }
     /// May an identity be asserted without review?
