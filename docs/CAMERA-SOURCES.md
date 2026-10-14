@@ -12,8 +12,8 @@ Status legend: ✅ working · ⚠️ code exists but not working · ⬜ planned
 |---|--------|-------|--------|
 | 1 | iPhone live camera (`AVCaptureSession`) | `apps/ios` + `CaptureKit` | ⚠️ implemented and unit-tested; **never run on a live feed** (iPhone Mirroring cannot expose the camera) — handheld field test pending, NEXT-STEPS §2 |
 | 2 | Photo / video import (EXIF-correct) | `apps/ios` | ✅ |
-| 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ⚠️ builds and launches, but the controller (and the watch) only starts **when the menu-bar window is first opened** — verified 2026-10-13: after minutes of running, `~/Documents/PlateWatch-Ingest` did not exist |
-| 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ⚠️ **dead code**: `startSnapshotServer` is never called. Also: the handler decodes the request body as a UTF-8 *string* (corrupts JPEG bytes) and reads a single 64 KB chunk ("assume small images"); default port 8088 collides with common dev servers (it was already taken by an `mlx_lm.server` on the owner's machine) |
+| 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ✅ starts at launch (fixed 2026-10-13; it only ran after the menu was first opened before) — verified: files dropped in `~/Documents/PlateWatch-Ingest` are analysed and removed |
+| 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ✅ starts at launch, binary-safe request handling, falls back to a free port when 8088 is taken (fixed 2026-10-13; before: never started, corrupted JPEG bodies, one 64 KB read). Verified with `curl` |
 | 5 | Hub RTSP ingest | `apps/macos-hub/Sources/HubController.swift:409` | ⚠️ does not compile + wrong API — see §Network cameras |
 | 6 | Continuity Camera (iPhone as webcam) | `apps/macos-hub` | ⬜ M6 |
 | 7 | UVC webcams (any USB camera) | `apps/macos-hub` | ⬜ M6 |
@@ -151,20 +151,26 @@ sources 5–8 get a recorded-sample fixture (a short saved clip/snapshot set in
 `eval/corpus/` or a fixtures dir) so CI never depends on a live camera. The
 RedactionGate assertions in `PlateKitTests` remain the pass/fail authority.
 
-## Hub verification (2026-10-13)
+## Hub verification (2026-10-13) — items 1–4 fixed, 2026-10-13 (`fix/hub-defects`)
 
 Built with `xcodegen` + `xcodebuild -scheme PlateWatchHub` (macOS, unsandboxed Debug): **builds**, **launches**
-as a menu-bar process (no Dock icon). Findings, in order of impact:
+as a menu-bar process (no Dock icon). Original findings and their status:
 
-1. **Nothing runs until the menu icon is clicked.** `HubController` is a `@StateObject` of `HubStatusView`, which
-   SwiftUI builds only when the `MenuBarExtra` window first opens, so the folder watch (started in `init`) is idle
-   at launch. A "resident" hub needs the controller owned by the `App`, not the popover view.
-2. **The snapshot/Bonjour server and the RTSP handler are never started** (`grep` finds no caller).
-3. **Snapshot POST handling cannot work for real photos:** binary body decoded as a String; one 64 KB read; no
-   Content-Length accumulation.
-4. **Port 8088 is a poor default** — configurable or auto-assigned (`port: 0`) with the chosen port advertised.
-5. The Hub's UI could not be driven with the computer-use tool (the app is not registered as installed), so the
-   popover itself was **not** exercised visually.
+1. ✅ **Nothing ran until the menu icon was clicked.** `HubController` was a `@StateObject` of the popover view.
+   It is now owned by `PlateWatchHubApp`, so the folder watch starts at launch (and a start-up scan picks up files
+   dropped while the Hub was not running). Verified: the ingest folder exists right after launch with the menu unopened.
+2. ✅ (snapshot server) **`startSnapshotServer` was never called.** It starts at launch. ❌ The **RTSP handler is
+   still never started** and, per the AVFoundation limits above, `AVAssetReader` cannot open `rtsp://` — unchanged.
+3. ✅ **Snapshot POST handling.** New `FeedIngest.HTTPRequestBuffer` accumulates socket reads to `Content-Length`
+   and keeps the body as `Data` (limits: 16 KB headers, 25 MB body; 400/411/413/431 rejections; `Expect: 100-continue`
+   answered; CRLF response framing; `GET /health`, 404/405). Unit-tested (7 tests, incl. byte-exact binary and
+   a 300 KB body split over many reads). Verified with `curl`: a 1.09 MB JPEG → `200`, bad body → `400`.
+4. ✅ **Port 8088.** Preferred port is a menu setting (`hubSnapshotPort`, default 8088); if it is taken the Hub falls
+   back to an OS-assigned port, shows it in the menu and advertises it over Bonjour (verified: 8088 was held by
+   another local server and the Hub took a free port).
+5. The popover UI itself has still **not** been exercised visually (the app is not registered as installed, so the
+   computer-use tool cannot drive it).
 
-Suggested fix order (WS2): own the controller in `PlateWatchHubApp`; start the folder watch and the snapshot
-server at launch; rewrite the HTTP read loop (accumulate to Content-Length, keep bytes as `Data`); then the RTSP/HLS rework.
+Still open for WS2: the Hub runs `AnalysisContext(models: [:])` (baseline Vision, not thorough), so it neither uses CoreML
+detectors nor the identity resolver (its submissions carry no `identity`); RTSP/HLS rework; first-request warm-up
+was ~37 s in the test (later requests 0.2–0.3 s).

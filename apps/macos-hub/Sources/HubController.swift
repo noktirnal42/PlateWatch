@@ -1,4 +1,5 @@
 import CaptureKit
+import FeedIngest
 import Network
 import PlateSync
 import Foundation
@@ -42,11 +43,15 @@ final class HubController: ObservableObject {
     private var rtspStreamsMap: [String: RTSPStreamHandler] = [:]
     private let rtspQueue = DispatchQueue(label: "org.platewatch.hub.rtsp", qos: .userInitiated)
 
-    init() {
+    /// Owned by the App (not a view), so ingest runs from launch — the menu-bar popover only
+    /// exists once someone opens it.
+    init(context: ModelContext? = nil) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
+        self.modelContext = context
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
+        processNewFiles()   // pick up anything dropped while the Hub was not running
     }
 
     func attach(context: ModelContext) {
@@ -64,16 +69,17 @@ final class HubController: ObservableObject {
     }
 
     /// Start the Bonjour-advertised snapshot HTTP server.
-    /// - Parameter port: Port to listen on (0 = auto-assign). Default 8088.
+    /// - Parameter port: Preferred port (default 8088). If it is taken — another local server often
+    ///   holds 8088 — the Hub falls back to an OS-assigned port; Bonjour advertises whichever it got,
+    ///   and the menu shows it.
     func startSnapshotServer(port: UInt16 = 8088) async {
         guard snapshotListener == nil else { return }
 
         let params = NWParameters.tcp
-        params.allowLocalEndpointReuse = true
         params.includePeerToPeer = true
 
         do {
-            let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+            let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port) ?? .any)
             self.snapshotListener = listener
 
             listener.newConnectionHandler = { [weak self] connection in
@@ -92,8 +98,14 @@ final class HubController: ObservableObject {
                             self?.advertiseBonjour(port: port.rawValue)
                         }
                     case .failed(let error):
-                        self?.snapshotServerStatus = "Failed: \(error.localizedDescription)"
                         self?.snapshotListener = nil
+                        if port != 0 {
+                            // Port busy (or refused): take any free one instead of staying dark.
+                            self?.snapshotServerStatus = "Port \(port) unavailable (\(error.localizedDescription)); trying another"
+                            await self?.startSnapshotServer(port: 0)
+                        } else {
+                            self?.snapshotServerStatus = "Failed: \(error.localizedDescription)"
+                        }
                     case .cancelled:
                         self?.snapshotServerStatus = "Stopped"
                         self?.snapshotListener = nil
@@ -107,6 +119,12 @@ final class HubController: ObservableObject {
         } catch {
             snapshotServerStatus = "Failed to start: \(error.localizedDescription)"
         }
+    }
+
+    /// Restart on a new preferred port (the menu's port field).
+    func restartSnapshotServer(port: UInt16) async {
+        stopSnapshotServer()
+        await startSnapshotServer(port: port)
     }
 
     func stopSnapshotServer() {
@@ -187,127 +205,99 @@ final class HubController: ObservableObject {
                 print("Snapshot connection failed: \(error)")
             }
         }
-
         connection.start(queue: snapshotQueue)
-        receiveHTTPRequest(on: connection)
+        receiveHTTPRequest(on: connection, buffer: HTTPRequestBuffer())
     }
 
-    @MainActor
-    private func receiveHTTPRequest(on connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self, let data, !data.isEmpty else {
+    /// Reads until one whole request has arrived (by Content-Length), then answers it.
+    /// The buffer is a value passed along the read chain, so nothing is shared across connections.
+    private func receiveHTTPRequest(on connection: NWConnection, buffer: HTTPRequestBuffer) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 256 * 1024) { [weak self] data, _, isComplete, error in
+            guard let self else { connection.cancel(); return }
+            var buffer = buffer
+            guard let data, !data.isEmpty else {
                 if error != nil || isComplete { connection.cancel() }
                 return
             }
-
-            let requestString = String(decoding: data, as: UTF8.self)
-            Task { @MainActor [weak self] in
-                self?.parseAndHandleHTTPRequest(requestString, on: connection)
-            }
-
-            if !isComplete {
+            switch buffer.append(data) {
+            case .needMore:
+                if buffer.takeContinueRequest() {
+                    connection.send(content: HTTPResponses.continue100, completion: .contentProcessed { _ in })
+                }
+                if isComplete { connection.cancel() } else { self.receiveHTTPRequest(on: connection, buffer: buffer) }
+            case .reject(let status, let reason):
+                self.sendHTTPResponse(on: connection, status: status, body: reason)
+            case .complete(let request):
                 Task { @MainActor [weak self] in
-                    self?.receiveHTTPRequest(on: connection)
+                    await self?.handle(request, on: connection)
                 }
-            } else {
-                connection.cancel()
             }
         }
     }
 
     @MainActor
-    private func parseAndHandleHTTPRequest(_ request: String, on connection: NWConnection) {
-        let lines = request.components(separatedBy: "\r\n")
-        guard let firstLine = lines.first,
-              firstLine.hasPrefix("POST /snapshot") else {
+    private func handle(_ request: HTTPRequest, on connection: NWConnection) async {
+        switch (request.method, request.path.split(separator: "?").first.map(String.init) ?? request.path) {
+        case ("POST", "/snapshot"):
+            await processSnapshotBody(request.body, on: connection)
+        case ("GET", "/health"):
+            sendHTTPResponse(on: connection, status: 200, body: "PlateWatch Hub")
+        case (_, "/snapshot"), (_, "/health"):
+            sendHTTPResponse(on: connection, status: 405, body: "Method Not Allowed")
+        default:
             sendHTTPResponse(on: connection, status: 404, body: "Not Found")
-            return
-        }
-
-        // Find content length
-        var contentLength = 0
-        for line in lines {
-            if line.lowercased().hasPrefix("content-length:") {
-                let parts = line.split(separator: ":")
-                if parts.count > 1, let len = Int(parts[1].trimmingCharacters(in: .whitespaces)) {
-                    contentLength = len
-                }
-            }
-        }
-
-        // For simplicity, assume body is in the same buffer (small images)
-        // In production, you'd accumulate until contentLength is reached
-        let bodyStart = request.range(of: "\r\n\r\n")?.upperBound
-        let body = bodyStart.map { String(request[$0...]) } ?? ""
-
-        Task { @MainActor in
-            await self.processSnapshotBody(body, contentLength: contentLength, on: connection)
         }
     }
 
     @MainActor
-    private func processSnapshotBody(_ body: String, contentLength: Int, on connection: NWConnection) async {
-        guard let data = body.data(using: .utf8),
-              let buffer = FileFrameSource.pixelBuffer(from: data) else {
+    private func processSnapshotBody(_ data: Data, on connection: NWConnection) async {
+        guard !data.isEmpty, let buffer = FileFrameSource.pixelBuffer(from: data) else {
             sendHTTPResponse(on: connection, status: 400, body: "Invalid image data")
             return
         }
-
         do {
-            let frame = try await pipeline.analyze(
-                .init(pixelBuffer: buffer),
-                context: AnalysisContext(models: [:]))
+            let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: AnalysisContext(models: [:]))
             framesAnalyzed += 1
-
-            // frame is non-optional DetectionFrame; check if vehicles array is empty
-            guard !frame.vehicles.isEmpty else {
-                sendHTTPResponse(on: connection, status: 200, body: "OK (no vehicles)")
-                return
-            }
-
-            var fleetHits = 0
-            for vehicle in frame.vehicles {
-                let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
-                if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
-                    fleetHits += 1
-                    fleetHitsToday += 1
-                    if let context = modelContext {
-                        let dto = SightingSubmissionDTO(
-                            capturedAt: frame.timestamp,
-                            geohash6: homeGeohash6,
-                            deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
-                            fleetConfidence: confidence,
-                            plate: vehicle.plates.first?.best.map(PlateDTO.init),
-                            vehicle: VehicleObservationDTO(vehicle),
-                            markings: FleetMarkingsDTO(markings))
-                        if let payload = try? JSONEncoder.withISODates.encode(dto) {
-                            context.insert(PendingSubmission(
-                                idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
-                                payloadJSON: payload))
-                            try? context.save()
-                            pendingCount += 1
-                        }
-                    }
-                }
-            }
-
-            sendHTTPResponse(on: connection, status: 200, body: "OK (fleet hits: \(fleetHits))")
+            let hits = recordFleetHits(in: frame)
+            sendHTTPResponse(on: connection, status: 200,
+                             body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(hits))")
         } catch {
             sendHTTPResponse(on: connection, status: 500, body: "Processing error")
         }
     }
 
-    private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
-        let response = """
-        HTTP/1.1 \(status) \(HTTPURLResponse.localizedString(forStatusCode: status))
-        Content-Type: text/plain
-        Content-Length: \(body.utf8.count)
-        Connection: close
+    /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
+    /// endpoint so both apply identical rules. Returns the number of fleet hits.
+    @discardableResult
+    private func recordFleetHits(in frame: DetectionFrame) -> Int {
+        var hits = 0
+        for vehicle in frame.vehicles {
+            let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
+            guard gate.verdict(fleetConfidence: confidence) == .persistAndSync else { continue }
+            hits += 1
+            fleetHitsToday += 1
+            guard let context = modelContext else { continue }
+            let dto = SightingSubmissionDTO(
+                capturedAt: frame.timestamp,
+                geohash6: homeGeohash6,
+                deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
+                fleetConfidence: confidence,
+                plate: vehicle.plates.first?.best.map(PlateDTO.init),
+                vehicle: VehicleObservationDTO(vehicle),
+                markings: FleetMarkingsDTO(markings))
+            if let payload = try? JSONEncoder.withISODates.encode(dto) {
+                context.insert(PendingSubmission(
+                    idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
+                    payloadJSON: payload))
+                try? context.save()
+                pendingCount += 1
+            }
+        }
+        return hits
+    }
 
-        \(body)
-        """
-        let data = response.data(using: .utf8)!
-        connection.send(content: data, completion: .contentProcessed { _ in
+    private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
+        connection.send(content: HTTPResponses.text(status: status, body), completion: .contentProcessed { _ in
             connection.cancel()
         })
     }
@@ -331,10 +321,15 @@ final class HubController: ObservableObject {
         guard let all = try? fm.contentsOfDirectory(
             at: ingestFolder, includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]) else { return }
-        let images = all.filter { ["jpg", "jpeg", "png"].contains($0.pathExtension.lowercased()) }
+        // A directory write event fires per file; skip files a previous pass is already handling.
+        let images = all.filter {
+            ["jpg", "jpeg", "png"].contains($0.pathExtension.lowercased()) && !inFlight.contains($0.path)
+        }
+        inFlight.formUnion(images.map(\.path))
 
         Task {
             for url in images {
+                defer { inFlight.remove(url.path) }
                 guard let buffer = FileFrameSource.pixelBuffer(from: url) else { continue }
                 let frame = try? await pipeline.analyze(
                     .init(pixelBuffer: buffer),
@@ -345,30 +340,7 @@ final class HubController: ObservableObject {
                     try? fm.removeItem(at: url) // undecodable input, discard
                     continue
                 }
-
-                for vehicle in frame.vehicles {
-                    let (confidence, markings) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
-                    if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
-                        fleetHitsToday += 1
-                        if let context = modelContext {
-                            let dto = SightingSubmissionDTO(
-                                capturedAt: frame.timestamp,
-                                geohash6: homeGeohash6,
-                                deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
-                                fleetConfidence: confidence,
-                                plate: vehicle.plates.first?.best.map(PlateDTO.init),
-                                vehicle: VehicleObservationDTO(vehicle),
-                                markings: FleetMarkingsDTO(markings))
-                            if let payload = try? JSONEncoder.withISODates.encode(dto) {
-                                context.insert(PendingSubmission(
-                                    idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
-                                    payloadJSON: payload))
-                                try? context.save()
-                                pendingCount += 1
-                            }
-                        }
-                    }
-                }
+                recordFleetHits(in: frame)
                 // Rolling source media: hub keeps only fleet-hit crops,
                 // never the raw camera flow (LEGAL-ETHICS).
                 try? fm.removeItem(at: url)
@@ -376,6 +348,7 @@ final class HubController: ObservableObject {
         }
     }
 
+    private var inFlight = Set<String>()
     private var filesProcessed = 0
 }
 
