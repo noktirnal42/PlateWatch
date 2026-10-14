@@ -102,6 +102,7 @@ struct FeedsPane: View {
     @State private var catalogue: FeedCatalogue?
     @State private var query = ""
     @State private var reviewing: FeedHostSummary?
+    @State private var selected: Set<UUID> = []
 
     private var hosts: [FeedHostSummary] { catalogue?.hosts() ?? [] }
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
@@ -137,7 +138,8 @@ struct FeedsPane: View {
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
-            Table(rows) {
+            HSplitView {
+            Table(rows, selection: $selected) {
                 TableColumn("Camera") { Text($0.name) }
                 TableColumn("Host") { Text($0.url.host ?? "") }
                 TableColumn("Location") { Text($0.geohash6.isEmpty ? "unknown" : $0.geohash6).monospaced() }
@@ -145,6 +147,10 @@ struct FeedsPane: View {
                     let state = hub.feedRunner.state(of: s)
                     Label(state.text, systemImage: state.icon).foregroundStyle(state.color)
                 }
+            }
+            .frame(minWidth: 420)
+            CameraPreviewPanel(hub: hub, source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } })
+                .frame(minWidth: 300, idealWidth: 380)
             }
             .searchable(text: $query, prompt: "Filter cameras")
             Text("\(rows.count) of \(catalogue?.sources.count ?? 0) sources. robots.txt is honoured; one request per camera per refresh interval.")
@@ -265,5 +271,57 @@ struct SettingsPane: View {
             }
         }
         .formStyle(.grouped).padding()
+    }
+}
+
+
+/// Shows the selected camera's current frame, refreshed no faster than the source's own interval.
+struct CameraPreviewPanel: View {
+    @ObservedObject var hub: HubController
+    let source: PublicFeedSource?
+    @State private var image: NSImage?
+    @State private var fetchedAt: Date?
+    @State private var message = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let source {
+                Text(source.name).font(.headline)
+                Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
+                ZStack {
+                    Rectangle().fill(.black.opacity(0.85))
+                    if let image { Image(nsImage: image).resizable().scaledToFit() }
+                    else { Text(message.isEmpty ? "Loading…" : message).foregroundStyle(.secondary).padding() }
+                }
+                .frame(maxWidth: .infinity, minHeight: 200)
+                HStack {
+                    if let fetchedAt { Text("Updated \(fetchedAt, format: .dateTime.hour().minute().second())").font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                    Button("Refresh now") { Task { await load(source) } }
+                }
+                if !source.mayBeAnalysed {
+                    Text("Confirm this host's terms (Review terms…) to view and poll its cameras.").font(.caption).foregroundStyle(.orange)
+                }
+            } else {
+                Text("Select a camera to see its current frame.").foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .padding()
+        .task(id: source?.id) {
+            image = nil; fetchedAt = nil; message = ""
+            guard let source else { return }
+            while !Task.isCancelled {
+                await load(source)
+                try? await Task.sleep(for: .seconds(max(source.refreshInterval, 10)))
+            }
+        }
+    }
+
+    private func load(_ source: PublicFeedSource) async {
+        do {
+            let data = try await hub.feedRunner.fetchPreview(of: source)
+            if let img = NSImage(data: data) { image = img; fetchedAt = Date(); message = "" }
+        } catch { message = error.localizedDescription; image = nil }
     }
 }

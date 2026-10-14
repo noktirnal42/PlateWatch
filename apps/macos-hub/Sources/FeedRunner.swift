@@ -6,6 +6,22 @@ import SwiftUI
 /// `FeedIngest.SnapshotPoller`, which honours the refresh-interval floor, single-flight, exponential back-off and
 /// suspension after repeated failures, and **refuses to contact a source whose terms no person confirmed**
 /// (`PublicFeedSource.mayBeAnalysed`). Frames are handed straight to the analysis closure and never written to disk.
+/// One shared pacing queue per host: however many cameras a host serves, we send it at most one request per `interval`.
+/// (822 Austin cameras on one image host must not become 822 simultaneous requests.)
+actor HostThrottle {
+    private let interval: TimeInterval
+    private var nextSlot: [String: Date] = [:]
+    init(interval: TimeInterval = 1.0) { self.interval = interval }
+
+    func acquire(host: String) async {
+        let now = Date()
+        let slot = max(now, nextSlot[host] ?? now)
+        nextSlot[host] = slot.addingTimeInterval(interval)
+        let wait = slot.timeIntervalSince(now)
+        if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+    }
+}
+
 @MainActor
 final class FeedRunner: ObservableObject {
     @Published private(set) var status = "No feeds configured"
@@ -34,6 +50,8 @@ final class FeedRunner: ObservableObject {
     private let session: URLSession
     /// robots.txt per host (24 h cache; 401/403/429/5xx/network error ⇒ treated as "do not fetch" for 10 minutes).
     private let robots: RobotsCache
+    private let throttle = HostThrottle()
+    private var lastPreviewAt: Date?
 
     init() {
         let config = URLSessionConfiguration.ephemeral          // no cookies, no cache: nothing is retained
@@ -52,10 +70,12 @@ final class FeedRunner: ObservableObject {
         let sink = ClosureSink(analyse)
         for source in catalogue.runnable {
             let robots = self.robots
+            let throttle = self.throttle
             let id = source.id
             sourceStates[id] = .polling
             let poller = SnapshotPoller(source: source, sink: sink, session: session,
                                         gate: { url in
+                                            await throttle.acquire(host: url.host ?? "")
                                             let allowed = await robots.isAllowed(url)
                                             if !allowed { await MainActor.run { self.sourceStates[id] = .blockedByRobots } }
                                             return allowed
@@ -70,6 +90,34 @@ final class FeedRunner: ObservableObject {
         }
         runningCount = tasks.count
         status = Self.describe(running: runningCount, awaiting: awaitingTermsCount, total: catalogue.sources.count)
+    }
+
+    enum PreviewError: Error, LocalizedError {
+        case notConfirmed, blocked, badResponse(Int), notAnImage
+        var errorDescription: String? {
+            switch self {
+            case .notConfirmed: return "Terms for this host are not confirmed yet."
+            case .blocked: return "The host's robots.txt (or a 401/403/429 on it) says not to fetch."
+            case .badResponse(let c): return "The camera answered HTTP \(c)."
+            case .notAnImage: return "The camera did not return an image."
+            }
+        }
+    }
+
+    /// One on-demand look at a camera for the console viewer. Same rules as polling: only confirmed sources, robots.txt
+    /// first, our identifying User-Agent. The image is returned to the caller and not stored.
+    func fetchPreview(of source: PublicFeedSource) async throws -> Data {
+        guard source.mayBeAnalysed else { throw PreviewError.notConfirmed }
+        // A person is looking at this camera: it does not wait behind the polling queue, but is still rate-limited
+        // (at most one preview request per 5 s, shared across hosts) so it can never become a second poller.
+        if let last = lastPreviewAt, Date().timeIntervalSince(last) < 5 { try await Task.sleep(for: .seconds(5 - Date().timeIntervalSince(last))) }
+        lastPreviewAt = Date()
+        guard await robots.isAllowed(source.url) else { throw PreviewError.blocked }
+        let (data, response) = try await session.data(from: source.url)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else { throw PreviewError.badResponse(code) }
+        guard data.starts(with: [0xFF, 0xD8]) || data.starts(with: [0x89, 0x50]) else { throw PreviewError.notAnImage }
+        return data
     }
 
     func stop() {

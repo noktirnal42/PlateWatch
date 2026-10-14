@@ -92,6 +92,12 @@ public actor RobotsCache {
                     // Parse robots.txt
                     let policy = RobotsPolicy(parsing: body, userAgent: userAgent)
                     return CachedPolicy(policy: policy, isFailure: false)
+                case 403 where Self.isObjectStoreMissingKey(httpResponse, body: body):
+                    // An S3-backed host (CloudFront/S3) answers a request for a file that does not exist with
+                    // 403 AccessDenied (the bucket denies listing, so "missing" and "forbidden" look the same).
+                    // That is "no robots.txt", not a refusal. Deliberately narrow: only an AmazonS3 server with the
+                    // S3 AccessDenied error document; every other 401/403/429 still stops us.
+                    return CachedPolicy(policy: .allowAll, isFailure: false)
                 case 401, 403, 429:
                     // RFC 9309 treats any 4xx as "no robots.txt" (allow), but for these three the host is telling us it is
                     // refusing or rate-limiting us: our politeness rule is to stop and flag, not to carry on
@@ -126,6 +132,11 @@ public actor RobotsCache {
             inFlight[cacheKey] = nil
             return false
         }
+    }
+
+    static func isObjectStoreMissingKey(_ response: HTTPURLResponse, body: String) -> Bool {
+        (response.value(forHTTPHeaderField: "Server") ?? "").localizedCaseInsensitiveContains("AmazonS3")
+            && body.contains("<Code>AccessDenied</Code>")
     }
 
     private func pathAndQuery(from url: URL) -> String {

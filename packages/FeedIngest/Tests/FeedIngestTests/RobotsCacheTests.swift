@@ -6,6 +6,8 @@ import XCTest
 final class RobotsStubProtocol: URLProtocol {
     nonisolated(unsafe) static var responder: ((URLRequest) -> (Int, String, Data))? = nil
     nonisolated(unsafe) static var requestCount = 0
+    /// Extra response headers (e.g. `Server`), reset by tests that set them.
+    nonisolated(unsafe) static var extraHeaders: [String: String] = [:]
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -19,7 +21,7 @@ final class RobotsStubProtocol: URLProtocol {
         let (status, type, body) = respond(request)
         let http = HTTPURLResponse(url: request.url!, statusCode: status,
                                    httpVersion: "HTTP/1.1",
-                                   headerFields: ["Content-Type": type])!
+                                   headerFields: ["Content-Type": type].merging(Self.extraHeaders) { $1 })!
         client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
@@ -309,5 +311,30 @@ final class RobotsCacheTests: XCTestCase {
         let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
         let allowed = await cache.isAllowed(makeURL())
         XCTAssertTrue(allowed)
+    }
+
+    /// An S3/CloudFront host answers a missing robots.txt with 403 AccessDenied — that is "no robots.txt", not a refusal.
+    func testS3AccessDeniedForMissingRobotsMeansAllowAll() async {
+        RobotsStubProtocol.extraHeaders = ["Server": "AmazonS3"]
+        defer { RobotsStubProtocol.extraHeaders = [:] }
+        RobotsStubProtocol.responder = { _ in
+            (403, "application/xml", Data("<?xml version=\"1.0\"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>".utf8))
+        }
+        let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+        let allowed = await cache.isAllowed(makeURL())
+        XCTAssertTrue(allowed)
+    }
+
+    /// The exception is narrow: a plain 403, or a 403 from a non-S3 server with the same body, still stops us.
+    func testOtherForbiddenResponsesStillDisallow() async {
+        let s3Body = Data("<Error><Code>AccessDenied</Code></Error>".utf8)
+        for (headers, body) in [([String: String](), Data()), ([:], s3Body), (["Server": "AmazonS3"], Data("<Error><Code>SignatureDoesNotMatch</Code></Error>".utf8))] {
+            RobotsStubProtocol.extraHeaders = headers
+            RobotsStubProtocol.responder = { _ in (403, "application/xml", body) }
+            let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+            let allowed = await cache.isAllowed(makeURL())
+            XCTAssertFalse(allowed)
+        }
+        RobotsStubProtocol.extraHeaders = [:]
     }
 }
