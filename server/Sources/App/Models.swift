@@ -73,6 +73,8 @@ final class Sighting: Model, @unchecked Sendable {
     @Field(key: "device_id_hash") var deviceIDHash: String
     @Field(key: "fleet_confidence") var fleetConfidence: Double
     @Field(key: "moderation_state") var moderationState: String
+    /// Set when a takedown request was upheld: never published again.
+    @Field(key: "taken_down") var takenDown: Bool
     /// Cross-reference identity (docs/DATA-MODEL.md): which agency the vehicle belongs to, where its
     /// plate was issued. `agency_needs_review` rows are never surfaced publicly as fact.
     @OptionalField(key: "agency_key") var agencyKey: String?
@@ -84,7 +86,7 @@ final class Sighting: Model, @unchecked Sendable {
     /// When the server accepted the row — the receipt's serverReceivedAt.
     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
 
-    init() {}
+    init() { self.takenDown = false }
 }
 
 /// Rate-limit / abuse scores keyed by ed25519 device key hash.

@@ -133,8 +133,7 @@ struct ExportController: RouteCollection {
     }
 
     private func fleetConfirmedRows(on db: any Database) async throws -> [ExportRenderer.Row] {
-        try await Sighting.query(on: db)
-            .filter(\.$moderationState == "fleetConfirmed")
+        try await Sighting.publicQuery(on: db)
             .sort(\.$capturedAt, .descending)
             .limit(50_000)
             .all()

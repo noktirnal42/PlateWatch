@@ -42,6 +42,8 @@ struct ModeratorController: RouteCollection {
         let api = mod.grouped("api")
         api.get("queue", use: apiQueue)
         api.post("sightings", ":sightingID", "decision", use: apiDecide)
+        api.get("takedowns", use: apiTakedowns)
+        api.post("takedowns", ":takedownID", "resolve", use: apiResolveTakedown)
     }
 
     static let apiHeader = "X-PlateWatch-Moderator"
@@ -75,6 +77,45 @@ struct ModeratorController: RouteCollection {
             row.moderationState = decision.resultingState.rawValue
             try await row.save(on: req.db)
             req.logger.info("moderation: \(decision.rawValue) sighting \(id)")
+            await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString, on: req.db)
+        }
+        return .noContent
+    }
+
+    struct APITakedown: Content, Equatable {
+        var id: UUID
+        var createdAt: Date?
+        var sightingID: UUID?
+        var reason: String
+        var contact: String?
+    }
+    struct APITakedownResolution: Content { var action: String }
+
+    @Sendable
+    func apiTakedowns(req: Request) async throws -> [APITakedown] {
+        _ = try authorizedAPI(req)
+        return try await TakedownRequest.query(on: req.db).filter(\.$status == "open")
+            .sort(\.$createdAt, .ascending).limit(200).all().compactMap { r in
+                r.id.map { APITakedown(id: $0, createdAt: r.createdAt, sightingID: r.sightingID, reason: r.reason, contact: r.contact) }
+            }
+    }
+
+    /// `hide` removes the sighting from every public surface for good; `dismiss` closes the request.
+    @Sendable
+    func apiResolveTakedown(req: Request) async throws -> HTTPStatus {
+        _ = try authorizedAPI(req)
+        guard let id = req.parameters.get("takedownID", as: UUID.self),
+              let request = try await TakedownRequest.find(id, on: req.db) else { throw Abort(.notFound) }
+        let body = try req.content.decode(APITakedownResolution.self)
+        guard body.action == "hide" || body.action == "dismiss" else { throw Abort(.badRequest, reason: "action must be hide or dismiss") }
+        if request.status == "open" {
+            if body.action == "hide", let sid = request.sightingID, let sighting = try await Sighting.find(sid, on: req.db) {
+                sighting.takenDown = true
+                try await sighting.save(on: req.db)
+            }
+            request.status = body.action == "hide" ? "hidden" : "dismissed"
+            try await request.save(on: req.db)
+            await AuditEntry.record("takedown.\(body.action)", target: id.uuidString, on: req.db)
         }
         return .noContent
     }

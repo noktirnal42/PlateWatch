@@ -101,8 +101,7 @@ struct AggregatesController: RouteCollection {
             return id
         }
 
-        let rows = try await Sighting.query(on: req.db)
-            .filter(\.$moderationState == RedactionGateService.ModerationState.fleetConfirmed.rawValue)
+        let rows = try await Sighting.publicQuery(on: req.db)
             .filter(\.$capturedAt >= since)
             .filter(\.$capturedAt <= until)
             .with(\.$vehicle)

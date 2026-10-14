@@ -105,6 +105,14 @@ strict CSP, and contain no third-party assets. Authentication is HTTP Basic
 (any username, password = `MODERATOR_TOKEN`); unset or short tokens return 404.
 Every decision is logged by sighting ID only.
 
+**Publication guardrails** (`PublicationPolicy`). Every public surface (feed, exports, aggregates, agency report) starts from
+`Sighting.publicQuery`: fleet-confirmed, not taken down, and captured at least `PUBLISH_DELAY_HOURS` ago (default 24, max 720), so
+the feed cannot track a vehicle in near-real time. Rows older than `RETENTION_DAYS` (default 21, 1–365) are deleted by a daily
+job, plate text included. `POST /v1/takedowns` (`sightingID?`, `reason`, `contact?`) lets anyone ask for a sighting to be removed;
+moderators list open requests and resolve them (`hide` = never published again, `dismiss`) through `/moderator/api/takedowns`.
+Moderator decisions, takedown requests/resolutions and retention purges are written to an append-only `audit_log`
+(action + target ID, never content).
+
 **Public aggregates.** `GET /v1/aggregates/heatmap?since=&until=&agencyID=`
 returns counts per geohash-6 cell and per UTC day for fleet-confirmed sightings.
 Any bucket with fewer than 5 sightings is withheld, and only the number of

@@ -282,7 +282,7 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 5. Skip source-masked regions (some cameras blank vehicles with grey blobs at source).
 6. Retrain the fleet crop classifier on `training/fleet2` with `scripts/build_fleet_crop_dataset.sh`; wire it in only if rear-view police
    recall is real and civilian false positives stay at zero.
-7. Server/publishing guardrails: aggregation delay (24–72 h), ~1 km coarsening, k-suppression, 21-day TTL, access audit log, takedown channel.
+7. ~~Server/publishing guardrails~~ — **done** (BACKEND.md): 24 h publication delay, ~1 km geohash6, k-suppression (≥5), 21-day retention purge, audit log, takedown intake + moderator resolution. Open: a takedown pane in the Hub console, and an audit-log viewer.
 8. Counsel questions (FEED-LEGAL-RESEARCH.md): does plate OCR on a third-party feed count as ALPR "use"? Does the handheld iPhone app fall under
    the same state rules? (The jurisdiction gate is not applied to handheld capture yet.)
 9. ~~Model release follow-ups~~ — **done**: `.aar` install wired and extraction hardened (symlinks / escape rejected); registry pins the published SHAs (`aa` output is not byte-reproducible, so always re-hash the uploaded asset).

@@ -32,6 +32,9 @@ func configure(_ app: Application) async throws {
     app.migrations.add(AddSightingCreatedAt())
     app.migrations.add(AddAgencyBudgetURL())
     app.migrations.add(AddSightingIdentity())
+    app.migrations.add(AddSightingTakedown())
+    app.migrations.add(CreateAuditLog())
+    app.migrations.add(CreateTakedownRequests())
     if app.environment != .testing {
         try await app.autoMigrate()
     }
@@ -43,6 +46,7 @@ func configure(_ app: Application) async throws {
     try app.register(collection: StatsController())
     try app.register(collection: ExportController())
     try app.register(collection: AggregatesController())
+    try app.register(collection: TakedownController())
     try app.register(collection: ModeratorController(token: Environment.get("MODERATOR_TOKEN")))
 
     app.get("health") { _ in ["status": "ok"] }
@@ -50,5 +54,6 @@ func configure(_ app: Application) async throws {
     // Nightly public dataset export (M4). Not scheduled under test.
     if app.environment != .testing {
         app.lifecycle.use(NightlyExportJob())
+        app.lifecycle.use(RetentionJob())
     }
 }
