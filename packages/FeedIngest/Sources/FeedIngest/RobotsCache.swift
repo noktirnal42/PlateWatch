@@ -92,8 +92,13 @@ public actor RobotsCache {
                     // Parse robots.txt
                     let policy = RobotsPolicy(parsing: body, userAgent: userAgent)
                     return CachedPolicy(policy: policy, isFailure: false)
+                case 401, 403, 429:
+                    // RFC 9309 treats any 4xx as "no robots.txt" (allow), but for these three the host is telling us it is
+                    // refusing or rate-limiting us: our politeness rule is to stop and flag, not to carry on
+                    // (docs/FEED-SOURCES.md §6b). Cached as a failure, so we retry in 10 minutes, not every poll.
+                    throw URLError(.userAuthenticationRequired)
                 case 400..<500:
-                    // 4xx means allow all
+                    // Other 4xx (404 and friends): no robots.txt, allow all
                     return CachedPolicy(policy: .allowAll, isFailure: false)
                 default:
                     // 5xx and other errors: disallow all

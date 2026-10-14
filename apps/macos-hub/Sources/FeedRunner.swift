@@ -16,6 +16,8 @@ final class FeedRunner: ObservableObject {
 
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private let session: URLSession
+    /// robots.txt per host (24 h cache; 401/403/429/5xx/network error ⇒ treated as "do not fetch" for 10 minutes).
+    private let robots: RobotsCache
 
     init() {
         let config = URLSessionConfiguration.ephemeral          // no cookies, no cache: nothing is retained
@@ -24,6 +26,7 @@ final class FeedRunner: ObservableObject {
         config.waitsForConnectivity = false
         config.httpAdditionalHeaders = ["User-Agent": Self.userAgent]
         self.session = URLSession(configuration: config)
+        self.robots = RobotsCache(session: session, userAgent: Self.userAgent)
     }
 
     func start(catalogue: FeedCatalogue,
@@ -32,7 +35,9 @@ final class FeedRunner: ObservableObject {
         awaitingTermsCount = catalogue.awaitingTerms.count
         let sink = ClosureSink(analyse)
         for source in catalogue.runnable {
-            let poller = SnapshotPoller(source: source, sink: sink, session: session)
+            let robots = self.robots
+            let poller = SnapshotPoller(source: source, sink: sink, session: session,
+                                        gate: { url in await robots.isAllowed(url) })
             tasks[source.id] = Task { await poller.run(sink: sink) }
         }
         runningCount = tasks.count

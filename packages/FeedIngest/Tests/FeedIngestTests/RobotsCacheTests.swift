@@ -283,4 +283,31 @@ final class RobotsCacheTests: XCTestCase {
         XCTAssertFalse(allowed1)
         XCTAssertTrue(allowed2)
     }
+
+    // MARK: - Stop and flag (stricter than RFC 9309's "any 4xx = allow")
+
+    /// The host refusing or rate-limiting us is a reason to stop, not a green light; and it is cached so we do not hammer.
+    func testRefusalAndRateLimitStatusesDisallowAndAreCached() async {
+        for status in [401, 403, 429] {
+            RobotsStubProtocol.requestCount = 0
+            RobotsStubProtocol.responder = { _ in (status, "text/plain", Data()) }
+            let clock = ClockBox(Date(timeIntervalSince1970: 1_000_000_000))
+            let cache = makeCache(clock: clock)
+            let first = await cache.isAllowed(makeURL())
+            let second = await cache.isAllowed(makeURL(path: "/other"))
+            XCTAssertFalse(first, "HTTP \(status) must disallow")
+            XCTAssertFalse(second)
+            XCTAssertEqual(RobotsStubProtocol.requestCount, 1, "HTTP \(status): failure is cached, no hammering")
+            clock.now = clock.now.addingTimeInterval(601)
+            _ = await cache.isAllowed(makeURL())
+            XCTAssertEqual(RobotsStubProtocol.requestCount, 2, "retried after the 10-minute failure cache")
+        }
+    }
+
+    func testOrdinary404StillMeansAllowAll() async {
+        RobotsStubProtocol.responder = { _ in (404, "text/plain", Data("nope".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+        let allowed = await cache.isAllowed(makeURL())
+        XCTAssertTrue(allowed)
+    }
 }

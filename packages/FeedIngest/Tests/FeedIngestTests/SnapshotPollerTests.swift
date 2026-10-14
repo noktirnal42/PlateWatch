@@ -139,4 +139,35 @@ final class SnapshotPollerTests: XCTestCase {
         let frames = await sink.actor.frames
         XCTAssertTrue(frames.isEmpty)
     }
+
+    /// A gate that says no stops the poller before any request is made (robots.txt disallow).
+    func testGateThatRefusesStopsThePollerWithoutAnyRequest() async {
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let source = makeSource()
+        let sink = CollectingSink()
+        let poller = SnapshotPoller(source: source, sink: sink, session: makeSession(), gate: { _ in false })
+        await poller.run(sink: sink)                       // returns immediately instead of looping forever
+        XCTAssertEqual(StubProtocol.requestCount, 0)
+    }
+
+    func testGateThatAllowsLetsTheFetchThrough() async {
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let source = makeSource()
+        let sink = CollectingSink()
+        let seen = GateRecorder()
+        let poller = SnapshotPoller(source: source, sink: sink, session: makeSession(),
+                                    gate: { url in await seen.record(url); return true })
+        let task = Task { await poller.run(sink: sink) }
+        try? await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+        let urls = await seen.urls
+        XCTAssertFalse(urls.isEmpty)
+        XCTAssertEqual(urls.first, source.url, "the gate is asked about the exact URL that would be fetched")
+        XCTAssertGreaterThanOrEqual(StubProtocol.requestCount, 1)
+    }
+}
+
+actor GateRecorder {
+    private(set) var urls: [URL] = []
+    func record(_ url: URL) { urls.append(url) }
 }

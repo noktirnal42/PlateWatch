@@ -187,7 +187,7 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
 | Aggregation delay (24–72 h), ~1 km coarsening, k-suppression, no live police map | ⬜ server/publishing side, not built |
 | Exclude unmarked/undercover, SWAT/protective, school buses with children, ambulances with patients | ⬜ classifier/moderation work; unmarked vehicles are already undetectable from text |
 | TTL: 21 days full precision then aggregates; access audit log; takedown channel + tombstones | ⬜ server |
-| robots.txt, identifying User-Agent with contact URL, stop-and-flag on 403/429 (no IP rotation) | ⬜ pollers (back-off exists; robots/UA not yet) |
+| robots.txt, identifying User-Agent with contact URL, stop-and-flag on 403/429 (no IP rotation) | ✅ `RobotsPolicy`/`RobotsCache` (RFC 9309; Nemotron 3 Ultra, reviewed) gate every poll; 401/403/429/5xx/network error on `robots.txt` ⇒ do not fetch (stricter than RFC's "4xx = allow"), cached 10 min; Hub UA names the project and repo; image-level 403/429 ⇒ existing back-off/suspension. Verified: blocked camera 0 requests, `robots.txt` fetched once |
 
 ## 7. Open items / next research
 1. **Verify the Caltrans CWWP2 JSON and one keyless snapshot URL from the Hub's own network** (our dev machine could not reach it), then build the first end-to-end pilot (catalogue → poll → analyse → aggregate) with 5–10 cameras.
