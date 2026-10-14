@@ -20,6 +20,9 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - Sources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Support/Info.plist
       properties:
