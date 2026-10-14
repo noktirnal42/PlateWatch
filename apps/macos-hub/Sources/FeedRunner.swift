@@ -51,12 +51,16 @@ final class FeedRunner: ObservableObject {
     @Published private(set) var status = "No feeds configured"
     @Published private(set) var runningCount = 0
     @Published private(set) var awaitingTermsCount = 0
-    static let userAgent = "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch; public-feed accountability research)"
+    static let userAgent = "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)"
 
-    enum SourceState: Equatable { case checking, polling, blockedByRobots, blockedByUser, suspended }
+    enum SourceState: Equatable {
+        case checking, polling, blockedByRobots, blockedByUser, suspended
+        case policyUnavailable(String)
+    }
     @Published private(set) var sourceStates: [UUID: SourceState] = [:]
     enum StatusKind: String, CaseIterable, Identifiable {
         case checking = "Checking robots.txt", polling = "Polling", confirmed = "Confirmed (idle)"
+        case unavailable = "Policy temporarily unavailable"
         case awaiting = "Awaiting terms", blocked = "Blocked / refused", userBlocked = "Blocked by you", suspended = "Suspended"
         var id: String { rawValue }
     }
@@ -67,7 +71,8 @@ final class FeedRunner: ObservableObject {
         switch sourceStates[source.id] {
         case .checking: return .init(text: "Checking robots.txt…", icon: "clock", color: .secondary, kind: .checking)
         case .polling: return .init(text: "Polling", icon: "checkmark.circle.fill", color: .green, kind: .polling)
-        case .blockedByRobots: return .init(text: "Blocked by robots.txt / refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
+        case .policyUnavailable: return .init(text: "Policy temporarily unavailable", icon: "arrow.clockwise", color: .orange, kind: .unavailable)
+        case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
         case .suspended: return .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .orange, kind: .suspended)
         case nil: return .init(text: "Confirmed (idle)", icon: "checkmark.circle", color: .secondary, kind: .confirmed)
@@ -86,7 +91,7 @@ final class FeedRunner: ObservableObject {
     private let throttle: HostThrottle
     private let retryInterval: Duration
 
-    init(session: URLSession? = nil, throttleInterval: TimeInterval = 1, retryInterval: Duration = .seconds(600), publicAPIPermissions: [PublicAPIPermission] = [.caltransCCTV]) {
+    init(session: URLSession? = nil, throttleInterval: TimeInterval = 1, retryInterval: Duration = .seconds(60), publicAPIPermissions: [PublicAPIPermission] = [.caltransCCTV]) {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 20
@@ -148,17 +153,20 @@ final class FeedRunner: ObservableObject {
             while !Task.isCancelled {
                 guard let self, self.generation == run else { return }
                 let pending = sources.filter { !self.blockedIDs.contains($0.id) && self.tasks[$0.id] == nil && self.sourceStates[$0.id] != .suspended }
-                var decisions: [UUID: Bool] = [:]
+                var decisions: [UUID: RobotsDecision] = [:]
                 for source in pending {
-                    decisions[source.id] = await self.robots.isAllowed(source.url)
+                    decisions[source.id] = await self.robots.decision(for: source.url)
                     guard !Task.isCancelled, self.generation == run else { return }
                 }
                 for source in pending where !self.blockedIDs.contains(source.id) {
-                    if decisions[source.id] == true { self.beginPolling(source, run: run) }
-                    else { self.sourceStates[source.id] = .blockedByRobots }
+                    switch decisions[source.id] {
+                    case .allowed: self.beginPolling(source, run: run)
+                    case .unavailable(let reason): self.sourceStates[source.id] = .policyUnavailable(reason)
+                    default: self.sourceStates[source.id] = .blockedByRobots
+                    }
                 }
                 self.updateStatus()
-                // Keep checking blocked paths; a transient 5xx policy failure expires after ten minutes.
+                // Keep checking blocked paths; a transient lookup failure expires after one minute.
                 do { try await Task.sleep(for: self.retryInterval) } catch { return }
             }
         }
@@ -193,9 +201,13 @@ final class FeedRunner: ObservableObject {
     }
 
     private func mayFetch(_ id: UUID, run: UUID) -> Bool { generation == run && !blockedIDs.contains(id) }
-    private func markRobotsBlocked(_ id: UUID, run: UUID) {
+    private func markRobotsBlocked(_ id: UUID, run: UUID) async {
+        guard generation == run, !blockedIDs.contains(id),
+              let source = catalogue?.sources.first(where: { $0.id == id }) else { return }
+        let decision = await robots.decision(for: source.url)
         guard generation == run, !blockedIDs.contains(id) else { return }
-        sourceStates[id] = .blockedByRobots
+        if case .unavailable(let reason) = decision { sourceStates[id] = .policyUnavailable(reason) }
+        else { sourceStates[id] = .blockedByRobots }
         updateStatus()
     }
     private static func origin(_ url: URL) -> String { "\(url.scheme ?? "https")://\(url.host ?? ""):\(url.port ?? (url.scheme == "https" ? 443 : 80))" }
@@ -205,10 +217,12 @@ final class FeedRunner: ObservableObject {
         let checking = sourceStates.values.filter { $0 == .checking }.count
         let refused = sourceStates.values.filter { $0 == .blockedByRobots }.count
         let suspended = sourceStates.values.filter { $0 == .suspended }.count
+        let unavailable = sourceStates.values.filter { if case .policyUnavailable = $0 { true } else { false } }.count
         var parts: [String] = []
         if runningCount > 0 { parts.append("Polling \(runningCount) feed(s)") }
         if checking > 0 { parts.append("\(checking) checking robots.txt") }
         if awaitingTermsCount > 0 { parts.append("\(awaitingTermsCount) awaiting terms") }
+        if unavailable > 0 { parts.append("\(unavailable) policy lookups retrying") }
         if refused > 0 { parts.append("\(refused) refused by robots.txt") }
         let locallyBlocked = sourceStates.values.filter { $0 == .blockedByUser }.count
         if locallyBlocked > 0 { parts.append("\(locallyBlocked) blocked locally") }
@@ -217,11 +231,13 @@ final class FeedRunner: ObservableObject {
     }
 
     enum PreviewError: Error, LocalizedError {
-        case notConfirmed, blocked, blockedLocally, badResponse(Int), notAnImage
+        case notConfirmed, blockedLocally, badResponse(Int), notAnImage
+        case policyUnavailable(String), policyRefused(String)
         var errorDescription: String? {
             switch self {
+            case .policyUnavailable(let reason): return "\(reason) Retrying automatically within a minute. Refresh now retries immediately."
+            case .policyRefused(let reason): return reason
             case .notConfirmed: return "Terms for this host are not confirmed yet."
-            case .blocked: return "The host's robots.txt is refusing requests or could not be reached."
             case .blockedLocally: return "Blocked on this Mac. Unblock this camera to view it again."
             case .badResponse(let code): return "The camera answered HTTP \(code). Use ⦸ to block an unavailable camera."
             case .notAnImage: return "The camera did not return an image. Use ⦸ to block this camera."
@@ -229,16 +245,28 @@ final class FeedRunner: ObservableObject {
         }
     }
 
-    func fetchPreview(of source: PublicFeedSource) async throws -> Data {
+    func fetchPreview(of source: PublicFeedSource, retryFailedPolicy: Bool = false) async throws -> Data {
         guard !blockedIDs.contains(source.id) else { throw PreviewError.blockedLocally }
         guard source.mayBeAnalysed else { throw PreviewError.notConfirmed }
         let requestID = UUID(), run = generation
         let task = Task { [weak self, robots, throttle, session] () throws -> Data in
-            guard await robots.isAllowed(source.url) else { throw PreviewError.blocked }
+            let decision = await robots.decision(for: source.url, retryFailure: retryFailedPolicy)
+            switch decision {
+            case .allowed: break
+            case .unavailable(let reason): throw PreviewError.policyUnavailable(reason)
+            case .disallowed(let reason): throw PreviewError.policyRefused(reason)
+            }
             guard await throttle.acquire(host: source.url.host ?? "", interactive: true) else { throw CancellationError() }
             try Task.checkCancellation()
             guard let self, self.mayFetch(source.id, run: run) else { throw PreviewError.blockedLocally }
-            guard await robots.isAllowed(source.url) else { throw PreviewError.blocked }
+            switch await robots.decision(for: source.url) {
+            case .allowed: break
+            case .unavailable(let reason): throw PreviewError.policyUnavailable(reason)
+            case .disallowed(let reason): throw PreviewError.policyRefused(reason)
+            }
+            if retryFailedPolicy {
+                self.checkPolicy(for: self.catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(source.url) } ?? [])
+            }
             try Task.checkCancellation()
             let (data, response) = try await session.data(from: source.url)
             try Task.checkCancellation()

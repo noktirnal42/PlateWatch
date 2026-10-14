@@ -57,7 +57,7 @@ final class HubRegressionTests: XCTestCase {
                                termsReadOn: Date(), automatedUseAllowed: true))
     }
     @MainActor private func eventually(_ predicate: () -> Bool) async -> Bool {
-        for _ in 0..<200 {
+        for _ in 0..<600 {
             if predicate() { return true }
             try? await Task.sleep(for: .milliseconds(10))
         }
@@ -71,12 +71,45 @@ final class HubRegressionTests: XCTestCase {
         defer { runner.stop() }
         runner.start(catalogue: .init(sources: sources)) { _, _ in XCTFail("Refused host must not reach analysis") }
         XCTAssertTrue(runner.sourceStates.values.allSatisfy { $0 == .checking })
-        let finished = await eventually { runner.sourceStates.values.allSatisfy { $0 == .blockedByRobots } }
+        let finished = await eventually { runner.sourceStates.values.allSatisfy { if case .policyUnavailable = $0 { true } else { false } } }
         XCTAssertTrue(finished)
         XCTAssertEqual(runner.runningCount, 0)
-        XCTAssertTrue(runner.status.contains("20 refused"))
-        XCTAssertEqual(HubStubProtocol.state.count(path: "/robots.txt"), 1)
+        XCTAssertTrue(runner.status.contains("20 policy lookups retrying"))
+        XCTAssertEqual(HubStubProtocol.state.count(path: "/robots.txt"), 3)
         for source in sources { XCTAssertEqual(HubStubProtocol.state.count(path: source.url.path), 0) }
+    }
+
+    @MainActor func testManualRefreshRecoversCachedPolicyFailureAndRestartsPolling() async throws {
+        HubStubProtocol.state.reset { _ in .init(status: 500) }
+        let camera = try source("/camera.jpg")
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: [camera])) { _, _ in }
+        let failed = await eventually { if case .policyUnavailable = runner.sourceStates[camera.id] { true } else { false } }
+        XCTAssertTrue(failed)
+        HubStubProtocol.state.reset { request in
+            .init(body: request.url?.path == "/robots.txt" ? Data("User-agent: *\nDisallow: /private/\n".utf8) : Data([0xFF, 0xD8, 0xFF]))
+        }
+        _ = try await runner.fetchPreview(of: camera, retryFailedPolicy: true)
+        let resumed = await eventually { runner.sourceStates[camera.id] == .polling }
+        XCTAssertTrue(resumed)
+        XCTAssertEqual(HubStubProtocol.state.count(path: "/robots.txt"), 1)
+    }
+
+    @MainActor func testCanonicalUserAgentWorksForPolicyAndImageRequests() async throws {
+        let expected = "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)"
+        XCTAssertEqual(FeedRunner.userAgent, expected)
+        HubStubProtocol.state.reset { request in
+            guard request.value(forHTTPHeaderField: "User-Agent") == expected else { return .init(status: 403) }
+            return .init(body: request.url?.path == "/robots.txt" ? Data() : Data([0xFF, 0xD8, 0xFF]))
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HubStubProtocol.self]
+        config.httpAdditionalHeaders = ["User-Agent": FeedRunner.userAgent]
+        let runner = FeedRunner(session: URLSession(configuration: config), throttleInterval: 0)
+        let camera = try source("/camera.jpg")
+        let data = try await runner.fetchPreview(of: camera)
+        XCTAssertEqual(data, Data([0xFF, 0xD8, 0xFF]))
     }
 
     @MainActor func testPathRefusalDoesNotBlockAllowedSibling() async throws {

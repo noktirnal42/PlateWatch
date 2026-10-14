@@ -43,7 +43,7 @@ final class RobotsCacheTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [RobotsStubProtocol.self]
         let sess = session ?? URLSession(configuration: config)
-        return RobotsCache(session: sess, userAgent: userAgent, ttl: ttl, now: { clock.now })
+        return RobotsCache(session: sess, userAgent: userAgent, ttl: ttl, maximumAttempts: 1, now: { clock.now })
     }
 
     private func makeURL(path: String = "/page") -> URL {
@@ -109,6 +109,46 @@ final class RobotsCacheTests: XCTestCase {
         let allowed = await cache.isAllowed(makeURL(path: "/anything"))
         XCTAssertFalse(allowed)
         XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
+    }
+
+    func testTransient503RetriesAndRecoversWithoutCachingARefusal() async {
+        var calls = 0
+        RobotsStubProtocol.responder = { _ in
+            calls += 1
+            return calls < 3 ? (503, "text/plain", Data()) : (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8))
+        }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [RobotsStubProtocol.self]
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: userAgent, retryDelay: .zero)
+        let decision = await cache.decision(for: makeURL())
+        XCTAssertEqual(decision, .allowed)
+        XCTAssertEqual(calls, 3)
+    }
+
+    func testManualRetryEvictsOnlyUnavailableFailure() async {
+        RobotsStubProtocol.responder = { _ in (503, "text/plain", Data()) }
+        let cache = makeCache(clock: ClockBox(Date()))
+        let failed = await cache.decision(for: makeURL())
+        guard case .unavailable(let reason) = failed else { return XCTFail("Expected lookup failure") }
+        XCTAssertTrue(reason.contains("503"))
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8)) }
+        let cached = await cache.decision(for: makeURL())
+        XCTAssertEqual(cached, failed)
+        let recovered = await cache.decision(for: makeURL(), retryFailure: true)
+        XCTAssertEqual(recovered, .allowed)
+        let refused = await cache.decision(for: makeURL(path: "/private/image.jpg"), retryFailure: true)
+        guard case .disallowed = refused else { return XCTFail("Real rule must remain enforced") }
+        XCTAssertEqual(RobotsStubProtocol.requestCount, 2)
+    }
+
+    func testTransientCacheExpiresAfterOneMinute() async {
+        let clock = ClockBox(Date())
+        RobotsStubProtocol.responder = { _ in (500, "text/plain", Data()) }
+        let cache = makeCache(clock: clock)
+        _ = await cache.decision(for: makeURL())
+        clock.now += 61
+        RobotsStubProtocol.responder = { _ in (404, "text/plain", Data()) }
+        let recovered = await cache.decision(for: makeURL())
+        XCTAssertEqual(recovered, .allowed)
     }
 
     // MARK: - Caching

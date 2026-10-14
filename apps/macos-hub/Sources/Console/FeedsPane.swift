@@ -305,7 +305,7 @@ struct CameraPreviewPanel: View {
                 HStack {
                     if let fetchedAt { Text("Fetched \(fetchedAt, format: .dateTime.hour().minute().second())").font(.caption).foregroundStyle(.secondary) }
                     Spacer()
-                    Button("Refresh now") { Task { await load(source) } }
+                    Button("Refresh now") { Task { await load(source, retryFailedPolicy: true) } }
                         .disabled(favorites.isBlocked(source.id))
                 }
                 Button("Open in Live", systemImage: "play.rectangle") {
@@ -334,9 +334,9 @@ struct CameraPreviewPanel: View {
         }
     }
 
-    private func load(_ source: PublicFeedSource) async {
+    private func load(_ source: PublicFeedSource, retryFailedPolicy: Bool = false) async {
         do {
-            let data = try await hub.feedRunner.fetchPreview(of: source)
+            let data = try await hub.feedRunner.fetchPreview(of: source, retryFailedPolicy: retryFailedPolicy)
             guard !Task.isCancelled, !favorites.isBlocked(source.id), self.source?.id == source.id else { return }
             if let img = NSImage(data: data) { image = img; fetchedAt = Date(); message = "" }
             else { image = nil; message = "The camera returned an unavailable or unreadable image. You can block it using ⦸ above." }
