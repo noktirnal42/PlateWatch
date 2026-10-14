@@ -180,3 +180,9 @@ cruisers; the owner's photos are **rear views of dark SUVs** and are confidently
 wire in** until it has rear-view police data. It is not needed for the two reference photos (text + official plate identify them).
 
 ### Plate-state classifier — see the dataset notes in §4c; results appended below when trained.
+
+### Reproducing the fleet crop dataset (one command)
+`scripts/build_fleet_crop_dataset.sh <crawl dir> <out dir> [models dir]` runs the whole recipe from the lessons above: tag with Apple's
+classifier and keep car/truck/bus-like images → cut the main vehicle with the vehicle detector → split **by photographer**
+(`make_classifier_dataset.py --group-by-author`). On the first crawl (1,635 tagged images) it keeps 675 and yields 457/57/56
+train/validation/test crops in ~35 s. Output is a Create ML Image Classification folder; train it in the GUI as in §4b.

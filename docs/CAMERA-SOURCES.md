@@ -34,6 +34,8 @@ analysis cadence (`CaptureConfiguration.analyzeEveryNthFrame`, 6 s escalation
 to the thorough pass). Simulators have no camera; the Hub covers desktop
 testing via sources 3–4.
 
+> **Public feeds (state/municipal/federal/business) — source catalogue, terms, measured image-quality limits and registry requirements: see [FEED-SOURCES.md](FEED-SOURCES.md).**
+
 ## Folder watch + Bonjour snapshot (shipped, Hub v1/v2)
 
 - v1: user picks a folder; cameras (or scripts) FTP/drop JPEGs in; a

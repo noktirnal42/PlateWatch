@@ -256,6 +256,80 @@ final class RealWorldRegressionTests: XCTestCase {
         XCTAssertEqual(a.state, "MA")
     }
 
+    // MARK: - Sync identity for feed-sourced sightings
+
+    private func minneapolisVehicle() -> (VehicleObservation, FleetMarkings) {
+        func line(_ t: String) -> SceneTextObservation {
+            SceneTextObservation(text: t, boundingBox: .init(x: 0.3, y: 0.5, width: 0.1, height: 0.02), confidence: 0.9)
+        }
+        let plate = PlateObservation(boundingBox: .init(x: 0.4, y: 0.55, width: 0.06, height: 0.03),
+                                     candidates: [Plate(text: "D756", plateDesign: "government-official",
+                                                        confidence: 0.9, officialWords: ["POLICE"])])
+        let text = [line("MINNEAPOLIS"), line("POLICE"), line("222")]
+        let v = VehicleObservation(boundingBox: .init(x: 0.2, y: 0.3, width: 0.5, height: 0.5),
+                                   vehicleClass: .patrol, classConfidence: 0, plates: [plate], sceneText: text)
+        return (v, SceneTextHeuristics.parse(text))
+    }
+
+    /// A feed camera's catalogued position settles "Minneapolis" (MN vs NC vs KS) exactly like phone GPS does.
+    func testFeedCameraLocationSettlesTheState() throws {
+        let (v, m) = minneapolisVehicle()
+        let resolver = IdentityResolver()
+        let none = resolver.syncIdentity(vehicle: v, markings: m, confidence: 0.95, location: nil)
+        XCTAssertNil(none?.agency?.state, "no location → state unknown")
+        let hint = try XCTUnwrap(IdentityResolver.LocationHint(geohash6: Geohash.encode(latitude: 44.9988, longitude: -93.2465)))
+        let located = resolver.syncIdentity(vehicle: v, markings: m, confidence: 0.95, location: hint)
+        XCTAssertEqual(located?.agency?.state, "MN")
+        XCTAssertEqual(located?.agency?.agencyKey, "US-MN/minneapolis/police")
+    }
+
+    /// A low-resolution frame is never asserted as fact: review flag set, registration withheld.
+    func testForcedReviewMarksAgencyAndStripsRegistration() throws {
+        let (v, m) = minneapolisVehicle()
+        let hint = IdentityResolver.LocationHint(geohash6: Geohash.encode(latitude: 44.9988, longitude: -93.2465))
+        let resolver = IdentityResolver()
+        let confident = try XCTUnwrap(resolver.syncIdentity(vehicle: v, markings: m, confidence: 0.95, location: hint))
+        XCTAssertNotNil(confident.plate?.registration, "a fleet-confirmed full-resolution read may carry the plate")
+        let forced = try XCTUnwrap(resolver.syncIdentity(vehicle: v, markings: m, confidence: 0.95, location: hint, forceReview: true))
+        XCTAssertEqual(forced.agency?.needsReview, true)
+        XCTAssertTrue(forced.plate?.registration.isEmpty ?? true, "registration stripped")
+        let weak = try XCTUnwrap(resolver.syncIdentity(vehicle: v, markings: m, confidence: 0.6, location: hint))
+        XCTAssertTrue(weak.plate?.registration.isEmpty ?? true, "below the plate bar the registration never leaves")
+    }
+
+    func testBadGeohashGivesNoHint() {
+        XCTAssertNil(IdentityResolver.LocationHint(geohash6: "!!!"))
+    }
+
+    // MARK: - Jurisdiction policy (plate recognition)
+
+    private func hint(_ lat: Double, _ lon: Double) -> IdentityResolver.LocationHint { .init(latitude: lat, longitude: lon) }
+
+    func testPlateRecognitionIsDisabledInRestrictedStatesAndNearTheirBorders() {
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26)), "Portland, ME")
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(43.21, -71.54)), "Concord, NH")
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(42.70, -71.16)), "Lawrence MA is ~10 km from NH: fail closed")
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(34.75, -92.29)), "Little Rock, AR (pending counsel)")
+    }
+
+    func testPlateRecognitionIsAllowedAwayFromRestrictedStates() {
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(44.98, -93.27)), "Minneapolis")
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(42.36, -71.06)), "Boston is ~60 km from NH")
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(34.05, -118.24)), "Los Angeles")
+    }
+
+    /// No location, or nowhere near any catalogued place, means no plate recognition.
+    func testUnknownLocationFailsClosed() {
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: nil))
+        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(0, -30)), "mid-Atlantic: nothing to reason from")
+    }
+
+    func testPolicyListsAreExplicit() {
+        XCTAssertEqual(JurisdictionPolicy.platesRestricted, ["ME", "NH"])
+        XCTAssertTrue(JurisdictionPolicy.platesDisabledByDefault.isSuperset(of: ["ME", "NH", "AR", "ID", "KY", "CT"]))
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26), disabledStates: []), "counsel can clear a state")
+    }
+
     // MARK: - Photo location (EXIF GPS)
 
     private func jpeg(gps: [CFString: Any]?) -> Data {

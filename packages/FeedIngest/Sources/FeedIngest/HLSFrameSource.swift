@@ -27,9 +27,14 @@ public final class HLSFrameSource: @unchecked Sendable {
     /// pipeline's job; this just avoids copying every decoder frame.
     public var tapInterval: TimeInterval = 1.0 / 15.0
 
-    public init(source: PublicFeedSource) {
+    /// See `SnapshotPoller.enforceTerms`.
+    public let enforceTerms: Bool
+    public var isPermitted: Bool { !enforceTerms || source.mayBeAnalysed }
+
+    public init(source: PublicFeedSource, enforceTerms: Bool = true) {
         precondition(source.kind == .hls, "HLSFrameSource is for .hls feeds")
         self.source = source
+        self.enforceTerms = enforceTerms
         let item = AVPlayerItem(url: source.url)
         self.output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -46,7 +51,7 @@ public final class HLSFrameSource: @unchecked Sendable {
 
     /// Begin decoding and delivering frames until `stop()`.
     public func start(sink: any LiveFrameSink) {
-        guard !running else { return }
+        guard isPermitted, !running else { return }
         running = true
         player.play()
         tapLoop(sink: sink)
