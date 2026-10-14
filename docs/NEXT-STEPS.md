@@ -284,3 +284,18 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 8. Counsel questions (FEED-LEGAL-RESEARCH.md): does plate OCR on a third-party feed count as ALPR "use"? Does the handheld iPhone app fall under
    the same state rules? (The jurisdiction gate is not applied to handheld capture yet.)
 9. **Model release follow-ups (from PR #16 review):** (a) wire `.aar` into `ModelManager`/`ModelRegistry` (`artifactExtension` handles `"aar"`, extract via `ModelArchive`); (b) harden `ModelArchive` extraction against symlink entries and `../` path escape, with tests; (c) package the missing `vehicle-make-model-classifier.aar` or drop its registry entry; (d) owner publishes `models-v0.1.0`, then flip the ROADMAP line back to ✅.
+
+## 11. Desktop console (macOS Hub as the full control app) — 2026-10-14
+
+Decision (owner): the macOS Hub is the **full desktop GUI console** for everything — web feeds, iPhone/Continuity and Wi‑Fi/IP
+cameras, files and video, the ML/LLM pipeline, review, and **moderation (moderators only)**.
+
+Shipped (slice 1): regular windowed app (`apps/macos-hub/Sources/Console/`) with a sidebar — Dashboard, Public feeds (catalogue table,
+terms status), Cameras & ingest (snapshot endpoint, watched folder, RTSP start/stop, detected local cameras), Models, Settings — plus a
+**Moderation** pane that exists only while a moderator token is in the Keychain. Moderation talks to the server's JSON API
+(`/moderator/api/…`: `MODERATOR_TOKEN` + `X-PlateWatch-Moderator` header; never exposes plates). Enrolment is offered only when
+`defaults write org.platewatch.PlateWatchHub moderatorEnrollment -bool true`. The UI gate is not a security boundary; the server is.
+
+Next slices: live capture from local/Continuity cameras into the pipeline; video-file ingest; live frame viewer with detection overlays;
+per-source status (robots-blocked/403/429); detections/outbox review pane; CloudKit moderation source (needs server-to-server key);
+LLM/MLX assistants (on-device only; no frame uploads, AGENTS.md rule 3).

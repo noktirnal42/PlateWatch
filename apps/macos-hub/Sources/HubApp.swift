@@ -25,6 +25,14 @@ struct PlateWatchHubApp: App {
     }
 
     var body: some Scene {
+        // The main desktop console.
+        WindowGroup("PlateWatch Hub", id: "console") {
+            ConsoleView(hub: hub)
+                .modelContainer(modelContainer)
+                .onAppear { hub.attach(context: modelContainer.mainContext) }
+        }
+        .defaultSize(width: 1080, height: 680)
+
         MenuBarExtra("PlateWatch Hub", systemImage: "antenna.radiowaves.left.and.right") {
             HubStatusView(hub: hub)
         }

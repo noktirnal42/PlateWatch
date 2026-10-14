@@ -23,7 +23,7 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        LSUIElement: true   # menu-bar resident hub
+        LSUIElement: false   # full desktop app (the menu-bar item stays as a status shortcut)
         NSCameraUsageDescription: "The Hub can analyze cameras (including iPhones via Continuity Camera) for fleet vehicle identification, on-device."
         NSBonjourServices: [_platewatch-snapshot._tcp]   # advertises the snapshot ingest endpoint to IP cameras on the LAN
         CFBundleDisplayName: PlateWatch Hub

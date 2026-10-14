@@ -23,7 +23,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_platewatch-snapshot._tcp</string>
