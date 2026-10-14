@@ -25,7 +25,8 @@ struct ConsoleView: View {
 
     @ObservedObject var hub: HubController
     @State private var selection: Pane? = .dashboard
-    @State private var moderator = ModeratorAccess.isEnrolled
+    /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
+    @State private var moderator = false
 
     private var panes: [Pane] { Pane.allCases.filter { $0 != .moderation || moderator } }
 
@@ -50,6 +51,7 @@ struct ConsoleView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .task { moderator = await Task.detached { ModeratorAccess.isEnrolled }.value }
         .navigationTitle(selection?.rawValue ?? "PlateWatch Hub")
         .frame(minWidth: 860, minHeight: 540)
     }

@@ -98,6 +98,41 @@ struct ModerationClient: Sendable {
         return try decoder.decode([Item].self, from: data)
     }
 
+    struct Takedown: Decodable, Identifiable, Sendable {
+        let id: UUID
+        let createdAt: Date?
+        let sightingID: UUID?
+        let reason: String
+        let contact: String?
+    }
+
+    private static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { d in
+            let s = try d.singleValueContainer().decode(String.self)
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = f.date(from: s) { return date }
+            f.formatOptions = [.withInternetDateTime]
+            if let date = f.date(from: s) { return date }
+            throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "bad date \(s)"))
+        }
+        return decoder
+    }
+
+    func takedowns() async throws -> [Takedown] {
+        let (data, response) = try await session.data(for: request("moderator/api/takedowns", method: "GET"))
+        if let code = (response as? HTTPURLResponse)?.statusCode, code != 200 { throw ClientError.http(code) }
+        return try Self.decoder().decode([Takedown].self, from: data)
+    }
+
+    /// `hide` removes the sighting from every public surface for good; `dismiss` closes the request.
+    func resolve(_ id: UUID, hide: Bool) async throws {
+        let body = try JSONEncoder().encode(["action": hide ? "hide" : "dismiss"])
+        let (_, response) = try await session.data(for: request("moderator/api/takedowns/\(id.uuidString)/resolve", method: "POST", body: body))
+        if let code = (response as? HTTPURLResponse)?.statusCode, code != 204 { throw ClientError.http(code) }
+    }
+
     func decide(_ id: UUID, _ decision: Decision) async throws {
         let body = try JSONEncoder().encode(["decision": decision.rawValue])
         let (_, response) = try await session.data(for: request("moderator/api/sightings/\(id.uuidString)/decision",
