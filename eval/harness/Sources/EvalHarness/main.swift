@@ -105,7 +105,11 @@ for entry in entries {
         let sb = FleetScoring.vehicleGateScore(gate: gate, vehicle: b).confidence
         return sa != sb ? sa < sb : (a.plates.isEmpty && !b.plates.isEmpty)
     }
-    let identity = primary.map { resolver.resolve(vehicle: $0) }
+    // A photo's own EXIF GPS is the location hint (same rule as the app's photo import).
+    let photoGPS = (try? Data(contentsOf: url)).flatMap { ImageLocation.coordinate(in: $0) }
+    let identity = primary.map {
+        resolver.resolve(vehicle: $0, location: photoGPS.map { .init(latitude: $0.latitude, longitude: $0.longitude) })
+    }
     let plates = frame.vehicles.flatMap(\.plates).compactMap(\.best).map { "\($0.text)(\(Int($0.confidence * 100))%)" }
     let lines = Array(Set(frame.vehicles.flatMap { $0.sceneText.map(\.text) })).sorted().prefix(14)
     outcomes.append(Outcome(

@@ -194,7 +194,26 @@ final class CaptureViewModel: ObservableObject {
             lastResult = .failed("photo", "Could not decode that image.")
             return
         }
+        // An imported photo says where *it* was taken. The phone's current location is wrong for an
+        // old photo, so a photo without GPS gets no location at all (never the phone's).
+        importedPhoto = (isImport: true, gps: ImageLocation.coordinate(in: data))
+        defer { importedPhoto = (isImport: false, gps: nil) }
         await runAccurate(pixelBuffer: buffer, source: "photo")
+    }
+
+    private var importedPhoto: (isImport: Bool, gps: (latitude: Double, longitude: Double)?) = (false, nil)
+
+    /// Where the frame being analysed was captured: the photo's own GPS for an import, otherwise the
+    /// phone's current ~1 km bucket (live capture).
+    private func captureLocation() -> (geohash6: String, latitude: Double, longitude: Double)? {
+        if importedPhoto.isImport {
+            guard let gps = importedPhoto.gps else { return nil }
+            return (Geohash.encode(latitude: gps.latitude, longitude: gps.longitude, precision: 6),
+                    gps.latitude, gps.longitude)
+        }
+        guard let bucket = LocationProvider.shared.currentBucket(),
+              let center = Geohash.decodeCenter(bucket.geohash6) else { return nil }
+        return (bucket.geohash6, center.latitude, center.longitude)
     }
 
     private func runAccurate(pixelBuffer: CVPixelBuffer, source: String) async {
@@ -292,10 +311,9 @@ final class CaptureViewModel: ObservableObject {
 
     private func makeSubmission(frame: DetectionFrame, vehicle: VehicleObservation,
                                 confidence: Double, markings: FleetMarkings) -> SightingSubmissionDTO {
-        let bucket = LocationProvider.shared.currentBucket()
         return SightingSubmissionDTO(
             capturedAt: frame.timestamp,
-            geohash6: bucket?.geohash6 ?? "",
+            geohash6: captureLocation()?.geohash6 ?? "",
             exactLatitude: nil,  // exact geo attaches post-confirmation
             exactLongitude: nil,
             deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
@@ -309,11 +327,7 @@ final class CaptureViewModel: ObservableObject {
     /// The structured identity for this vehicle, using the phone's coarse location (the same ~1 km
     /// bucket sightings already use) only to settle ambiguous place names.
     private func resolveIdentity(vehicle: VehicleObservation, markings: FleetMarkings) -> VehicleIdentity {
-        var hint: IdentityResolver.LocationHint?
-        if let bucket = LocationProvider.shared.currentBucket(),
-           let center = Geohash.decodeCenter(bucket.geohash6) {
-            hint = .init(latitude: center.latitude, longitude: center.longitude)
-        }
+        let hint = captureLocation().map { IdentityResolver.LocationHint(latitude: $0.latitude, longitude: $0.longitude) }
         return identityResolver.resolve(sceneText: vehicle.sceneText, plates: vehicle.plates,
                                         vehicleClass: vehicle.vehicleClass, markings: markings,
                                         location: hint, enhancedText: vehicle.enhancedText)
