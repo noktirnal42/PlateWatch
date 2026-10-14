@@ -16,7 +16,7 @@ apps/*/project.local.yml
 .build/
 
 # Model artifacts — downloaded/converted weights are NEVER committed
-models/cache/
+models/cache
 models/*.mlmodel
 models/*.mlpackage
 models/*.mlmodelc
@@ -43,9 +43,15 @@ server/.env
 **/GoogleService-Info.plist
 
 # Evaluation corpus images (licensed per eval/manifest.json; may show civilian plates)
-eval/corpus/
+eval/corpus
 eval/results/
 
 # Your own test photos (unknown licence) - never committed
-eval/user/
+eval/user
 training/
+eval/degraded
+eval/feeds
+# Local-data links (never commit: absolute symlinks to a dev machine's data replace real directories on checkout)
+/eval/corpus
+/eval/user
+/models/cache
