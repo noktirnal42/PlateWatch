@@ -42,3 +42,34 @@ public struct FeedCatalogue: Codable, Sendable, Equatable {
         try encoded().write(to: url, options: .atomic)
     }
 }
+
+public extension FeedCatalogue {
+
+    /// Folds a freshly imported list of sources (e.g. a city's open-data camera list) into this catalogue **without
+    /// disturbing human decisions**:
+    ///  - a source already known by id keeps its recorded terms and confirmation, and its stated resolution;
+    ///    its name, URL, position and citation are refreshed from the import (portals change URLs — Iowa did in 2026);
+    ///  - **if the image host changed**, the confirmation is withdrawn (`automatedUseAllowed = false`): the terms a person
+    ///    read applied to the old host, not the new one;
+    ///  - brand-new sources are added exactly as imported (unconfirmed);
+    ///  - sources missing from the import are kept (a catalogue outage must not silently delete anything).
+    func merged(with imported: [PublicFeedSource]) -> FeedCatalogue {
+        var result = sources
+        var index = Dictionary(uniqueKeysWithValues: result.enumerated().map { ($1.id, $0) })
+        for fresh in imported {
+            guard let i = index[fresh.id] else {
+                index[fresh.id] = result.count
+                result.append(fresh)
+                continue
+            }
+            var kept = fresh
+            kept.terms = result[i].terms
+            kept.nativeLongSide = result[i].nativeLongSide ?? fresh.nativeLongSide
+            if result[i].url.host?.lowercased() != fresh.url.host?.lowercased() {
+                kept.terms.automatedUseAllowed = false
+            }
+            result[i] = kept
+        }
+        return FeedCatalogue(schemaVersion: schemaVersion, sources: result)
+    }
+}
