@@ -20,7 +20,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
 - ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; **needs the Apple-account step** (import schema, deploy to production) and a moderator publish tool (P0-5)
-- ⬜ Publish a verified `models-v0.1.0` release + archive extraction in `ModelManager` (`.mlpackage` is a directory) (P0-3)
+- ⏳ `models-v0.1.0` release drafted (not yet published; owner publishes): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned; `.aar` packaging + `ModelArchive` extraction (P0-3). **Open:** `ModelManager` does not yet install `.aar` models; the `vehicle-make-model-classifier` asset is not yet packaged
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
 - ⬜ Full visual redesign of Sightings/Watchlist/Capture (current screens are functional + branded, not final)
 
@@ -47,13 +47,12 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ⬜ Hub: RTSP ingest (VLCKit or AVF HLS interstitial)
 
 ## M2 — Identification depth
-- ⬜ CoreML plate detector + plate OCR (converted models in registry)
+- ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
 - ⬜ Make/model/color classifier — colour model not yet found with a recordable licence (`docs/DECISIONS.md`)
-- ⬜ Fleet markings parser: Vision text → FoundationModels `@Generable`
-  extraction (agency name, unit #, "POLICE"/"FIRE" class text)
-- ⬜ Plate-design classifier (state/exempt/federal plate families) — decision: build labeled dataset, licensing review first (`docs/DECISIONS.md`)
+- ◐ Fleet markings parser: Vision text → FoundationModels `@Generable` extraction (agency name, unit #, "POLICE"/"FIRE" class text) — wired into the iOS capture path
+- ◐ Plate-design classifier (state/exempt/federal plate families) — decision: pivot from per-state (60 % accuracy, noisy keyword-search data) to the design families the redaction gate actually consumes (standard/exempt/government/official); train on plate crops (`docs/DECISIONS.md`)
 - ⬜ Vehicle Re-ID upgrade: OSNet CoreML model replacing feature prints
-- ⬜ Damage/decal uniqueness cues folded into re-ID anchor
+- ⬜ Fleet gate classifier: binary fleet/civilian on detector crops (whole-scene 6-class training plateaued at 66–81 % due to background shortcut learning)
 
 ## M3 — Enrichment & records
 - ✅ Importers: GSA federal fleet CSV → Vehicle + SourceCitation

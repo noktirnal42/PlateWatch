@@ -55,3 +55,6 @@ eval/feeds
 /eval/corpus
 /eval/user
 /models/cache
+
+# Packaged release artifacts (staged locally, published to GitHub Releases)
+models/release/
