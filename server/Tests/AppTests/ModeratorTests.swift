@@ -124,3 +124,34 @@ private extension SightingSubmissionDTO {
         return try! decoder.decode(SightingSubmissionDTO.self, from: Data(json.utf8))
     }
 }
+
+final class ModeratorAPIAuthTests: XCTestCase {
+    private let token = String(repeating: "x", count: 32)
+    private var basic: String { "Basic " + Data("moderator:\(token)".utf8).base64EncodedString() }
+
+    func testAPIRequiresCustomHeaderEvenWithValidCredentials() async throws {
+        try await withApp { app in
+            try app.register(collection: ModeratorController(token: token))
+            let res = try await app.sendRequest(.GET, "moderator/api/queue", headers: ["Authorization": basic])
+            XCTAssertEqual(res.status, .forbidden, "a cross-site request cannot add the header")
+        }
+    }
+
+    func testAPIRejectsWrongPasswordWithHeader() async throws {
+        try await withApp { app in
+            try app.register(collection: ModeratorController(token: token))
+            let bad = "Basic " + Data("moderator:nope".utf8).base64EncodedString()
+            let res = try await app.sendRequest(.GET, "moderator/api/queue",
+                                                headers: ["Authorization": bad, ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(res.status, .unauthorized)
+        }
+    }
+
+    func testAPIDisabledWithoutToken() async throws {
+        try await withApp { app in
+            try app.register(collection: ModeratorController(token: nil))
+            let res = try await app.sendRequest(.GET, "moderator/api/queue", headers: [ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(res.status, .notFound)
+        }
+    }
+}
