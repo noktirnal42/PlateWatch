@@ -31,11 +31,14 @@ targets:
           UIColorName: LaunchBackground
           UIImageName: LaunchLogo
           UIImageRespectsSafeAreaInsets: false
-        UIRequiresFullScreen: true
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSCameraUsageDescription: "PlateWatch identifies taxpayer-funded vehicles on public roads using on-device ML. Video is analyzed on-device; raw footage is never uploaded."
         NSLocationWhenInUseUsageDescription: "Sightings are bucketed to ~1 km; precise location is only attached to fleet-confirmed vehicles."
         CFBundleDisplayName: PlateWatch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [remote-notification]
         PlateWatchUseCloudKit: true
@@ -57,8 +60,37 @@ targets:
       - package: VehicleML
       - package: PlateSync
 
+  PlateWatchTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: PlateWatch
+      - package: PlateKit
+
+  PlateWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: PlateWatch
+
 packages:
   PlateKit: { path: ../../packages/PlateKit }
   CaptureKit: { path: ../../packages/CaptureKit }
   VehicleML: { path: ../../packages/VehicleML }
   PlateSync: { path: ../../packages/PlateSync }
+
+schemes:
+  PlateWatch:
+    build:
+      targets:
+        PlateWatch: all
+    test:
+      targets: [PlateWatchTests, PlateWatchUITests]

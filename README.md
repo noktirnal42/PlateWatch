@@ -18,21 +18,40 @@ and on-device machine learning.
 
 ## Project status — pre-alpha
 
+**October 14 iOS continuation:** observation details/evidence, coarse-summary sharing,
+paused-retry recovery, validated fleet watchlists with alert controls, local cleanup,
+painted app icon and simulator CloudKit startup-crash fix. See
+[the current UI handoff](docs/IOS-UI-HANDOFF.md) for tests, boundaries and remaining work.
+[Project website and screenshot gallery](https://noktirnal42.github.io/PlateWatch/).
+
+<p>
+<img src="site/screenshots/ios-sightings.png" width="210" alt="Synthetic local preview: sighting outbox">
+<img src="site/screenshots/ios-observation.png" width="210" alt="Synthetic local preview: observation detail">
+<img src="site/screenshots/ios-watchlist.png" width="210" alt="Synthetic local preview: fleet watchlist">
+</p>
+
+These are real simulator UI captures with **synthetic local preview data**, not
+recognition, field-camera or backend-publication proof. Sightings is an outbox;
+received rows leave the queue. CloudKit deployment and moderator publishing remain open.
+
+
 The core loop now works on real photos: **point it at (or import a photo of) a public-service
 vehicle and it recognises it, reads door text and plates, and records it** — with a human
 confirm step for borderline cases. Measured on 62 real US photos
 ([docs/EVALUATION.md](docs/EVALUATION.md)): **100 % precision, 0 civilian false positives,
-57 % fully-automatic recall (76 % with confirmation)** on Apple Vision alone, identical on a
-physical iPhone. Recall is the weak side and is the main thing still to improve.
+57 % automatic recall on Mac / 59 % on iPhone in the initial baseline**
+on Apple Vision alone. The evaluation document records later configurations separately. Recall is the weak side and is the main thing still to improve.
 
 | Area | State |
 |---|---|
-| Core packages (PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters) | Built and tested — 155 tests pass |
+| Core packages (PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters) | Built and tested in CI; current run linked below (historical counts vary by pass) |
 | iOS app | Builds, installs and runs on simulator and iPhone; photo-import → recognise → record works; live camera path unit-tested but not yet field-verified |
 | Reference server (ingest, moderation, exports, k-anonymous heatmap, agency report) | Builds, 41 tests pass; not deployed publicly |
 | CloudKit public database | Backend + schema written ([cloudkit/](cloudkit/)); **awaiting import/deploy with the developer account** |
 | CoreML models | Optional; not yet published. Apple's built-in vehicle classifier is used instead for now |
-| watchOS app / macOS Hub / CarPlay | Present; not verified in the latest pass (CarPlay needs Apple's entitlement) |
+| watchOS app / macOS Hub / CarPlay | App targets build in CI; physical watch alerts and CarPlay remain unverified (CarPlay needs Apple's entitlement) |
+
+[![CI](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml)
 
 Known problems and what was fixed: [docs/QA-REPORT.md](docs/QA-REPORT.md). Plan:
 **M-Alpha** in [docs/ROADMAP.md](docs/ROADMAP.md). Contributions welcome.

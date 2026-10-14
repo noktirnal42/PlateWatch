@@ -10,16 +10,19 @@ struct PlateWatchApp: App {
 
     let modelContainer: ModelContainer
     let backend: any SyncBackend
+    @State private var previewOnboarded = false
+    @State private var selectedTab = PreviewFixtures.initialTab
 
     init() {
         let schema = Schema([PendingSubmission.self, WatchlistItem.self])
-        let config = ModelConfiguration("PlateWatch", schema: schema, cloudKitDatabase: .none)
+        let config = ModelConfiguration("PlateWatch", schema: schema, isStoredInMemoryOnly: PreviewFixtures.isEnabled, cloudKitDatabase: .none)
         do {
             modelContainer = try ModelContainer(for: schema, configurations: config)
         } catch {
             fatalError("SwiftData unavailable: \(error)")
         }
-        backend = SyncBackends.makeDefault()
+        backend = AppSyncConfiguration.makeBackend()
+        PreviewFixtures.populate(modelContainer)
         #if DEBUG
         SelfTest.runIfRequested()
         #endif
@@ -29,26 +32,36 @@ struct PlateWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TabView {
+            TabView(selection: $selectedTab) {
                 CaptureView()
                     .tabItem { Label("Capture", systemImage: "camera.viewfinder") }
+                    .tag(0)
                 SightingsListView()
                     .tabItem { Label("Sightings", systemImage: "list.bullet.rectangle") }
+                    .tag(1)
                 WatchlistView()
                     .tabItem { Label("Watchlist", systemImage: "eye") }
+                    .tag(2)
                 HeatmapView()
                     .tabItem { Label("Explore", systemImage: "map") }
+                    .tag(3)
                 SettingsView()
                     .tabItem { Label("About", systemImage: "info.circle") }
+                    .tag(4)
             }
-            .tint(Color.accentColor)
-            .fullScreenCover(isPresented: Binding(get: { !hasOnboarded }, set: { _ in })) {
+            .modifier(PreviewAppearance())
+            .tint(PWStyle.fleetText)
+            .fullScreenCover(isPresented: Binding(get: { PreviewFixtures.isEnabled ? ProcessInfo.processInfo.arguments.contains("-PWPreviewOnboarding") && !previewOnboarded : !hasOnboarded }, set: { _ in })) {
                 OnboardingView {
-                    hasOnboarded = true
-                    LocationProvider.shared.authorizeIfNeeded()
+                    if PreviewFixtures.isEnabled { previewOnboarded = true }
+                    else {
+                        hasOnboarded = true
+                        LocationProvider.shared.authorizeIfNeeded()
+                    }
                 }
             }
             .task {
+                guard !PreviewFixtures.isEnabled else { return }
                 if hasOnboarded { LocationProvider.shared.authorizeIfNeeded() }
                 try? await backend.ensureWatchlistSubscription()
                 // Steady drain loop: outbox empties opportunistically, never
@@ -59,7 +72,7 @@ struct PlateWatchApp: App {
                 }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
+                if phase == .active && !PreviewFixtures.isEnabled {
                     Task { await drainOutbox() }
                 }
             }
@@ -75,12 +88,29 @@ struct PlateWatchApp: App {
 }
 
 private struct SyncBackendKey: EnvironmentKey {
-    static let defaultValue: any SyncBackend = SyncBackends.makeDefault()
+    static let defaultValue: any SyncBackend = AppSyncConfiguration.makeBackend()
 }
 
 public extension EnvironmentValues {
     var syncBackend: any SyncBackend {
         get { self[SyncBackendKey.self] }
         set { self[SyncBackendKey.self] = newValue }
+    }
+}
+
+/// Unsigned simulator builds cannot construct an entitled CloudKit container.
+/// Keep this app boundary explicit; signed physical-device builds use PlateSync.
+enum AppSyncConfiguration {
+    static func makeBackend() -> any SyncBackend {
+        #if targetEnvironment(simulator)
+        let configured = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"]
+        let fallback = URL(string: "http://127.0.0.1:8083")!
+        let url = configured.flatMap(URL.init(string:)).flatMap {
+            ["http", "https"].contains($0.scheme?.lowercased() ?? "") && $0.host != nil ? $0 : nil
+        } ?? fallback
+        return RESTBackend(baseURL: url)
+        #else
+        return SyncBackends.makeDefault()
+        #endif
     }
 }

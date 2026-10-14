@@ -135,22 +135,24 @@ Re-run `EvalHarness`; precision must stay 100 % with 0 civilian/commercial false
 
 ---
 
-## 6. Visual redesign  *(functional + branded now, not final)*
+## 6. iOS review and visual polish *(2026-10-14 continuation)*
 
-Done: icon, launch screen, accent colour, onboarding, About, empty states, Explore map, informative rows.
-Open (from `docs/QA-REPORT.md` P2): Sighting **detail** view (image/clip preview, share/export, retract),
-watchlist validation + alert history (state patterns exist in PlateKit), Settings (mirror URL, delete-my-data),
-haptics/sound on a fleet hit, **VoiceOver** descriptions for overlay boxes, **Dark Mode + Dynamic Type audit**,
-landscape layout (dashcam use), iPad. Design tokens: `apps/ios/Sources/DesignSystem.swift`, colours in
-`Assets.xcassets` (`PWAmber`, `PWInk`, `LaunchBackground`, `AccentColor`).
+Delivered: painted app icon; branded onboarding/About; readable semantic fleet text
+colors; observation detail with identity/evidence, coarse summary export, paused
+retry recovery and local discard; validated duplicate-free fleet watchlists with
+mute/unmute and stale notification-copy cleanup; local queue/watchlist deletion.
+Simulator CloudKit startup trap is fixed at the iOS app boundary. Landscape and iPad
+multitasking are enabled; live-camera layout still needs handheld verification.
 
-### 6b. Painted app icon
-The shipped icon is generated in code (`scripts/make-brand-assets.swift` → `Assets.xcassets/AppIcon`). A
-painted version was requested; the **Blueprint Studio Asset Generator** MCP server needed authorization (the
-owner enables it in claude.ai connector settings; an agent cannot start OAuth). Brief used: 1024×1024 PNG,
-full-bleed, no transparency/rounded corners, amber `#FFC21A` plate with "PW" inside viewfinder brackets on
-`#0E1116`, readable at 60 px. Drop the PNG at `apps/ios/Sources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`
-and update `site/logo.svg`/favicon if the mark changes. Ask the owner before swapping.
+**Current handoff and reproduction:** [IOS-UI-HANDOFF.md](IOS-UI-HANDOFF.md).
+Screenshots on the project site use labeled, synthetic, DEBUG-only preview data;
+they are not recognition or backend-delivery proof.
+
+**Open:** durable received-history, image/clip preview, backend withdrawal/removal,
+alert history, runtime mirror settings, field haptics/thermal/orientation, spoken
+VoiceOver and smallest-device/RTL audits. Local clear does not delete remote records.
+The icon is generated and installed; layered/tinted platform variants remain optional
+release polish. No external image-generator account authorization is needed.
 
 ---
 
@@ -276,14 +278,14 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 2. **Read the Austin image host's terms** (`cctv.austinmobility.io`), record them in the catalogue entry, then run a slow real pilot and save
    frames under `eval/feeds/` (gitignored) so the harness can score real feed stills instead of a degraded proxy.
 3. ~~Decide analysis tier from the vehicle's pixel size~~ — **done** (900 / 400 px thresholds from measured detection rates; FEED-SOURCES.md §1).
-4. ~~Feed politeness: robots.txt~~ — **done** (RobotsCache gates every poll). Still open: a per-host rate limit shared across sources of one host, and surfacing 'blocked by robots.txt / refused (403/429)' as a visible per-source status in the Hub.
+4. ~~Feed politeness: robots.txt~~ — **done** (RobotsCache gates every poll). Both former gaps are **done**: shared 1 req/s per-host pacing, and a per-source status (Polling / Blocked by robots.txt / Suspended / Awaiting terms) in the Hub's Public feeds table.
 5. Skip source-masked regions (some cameras blank vehicles with grey blobs at source).
 6. Retrain the fleet crop classifier on `training/fleet2` with `scripts/build_fleet_crop_dataset.sh`; wire it in only if rear-view police
    recall is real and civilian false positives stay at zero.
 7. Server/publishing guardrails: aggregation delay (24–72 h), ~1 km coarsening, k-suppression, 21-day TTL, access audit log, takedown channel.
 8. Counsel questions (FEED-LEGAL-RESEARCH.md): does plate OCR on a third-party feed count as ALPR "use"? Does the handheld iPhone app fall under
    the same state rules? (The jurisdiction gate is not applied to handheld capture yet.)
-9. **Model release follow-ups (from PR #16 review):** (a) wire `.aar` into `ModelManager`/`ModelRegistry` (`artifactExtension` handles `"aar"`, extract via `ModelArchive`); (b) harden `ModelArchive` extraction against symlink entries and `../` path escape, with tests; (c) package the missing `vehicle-make-model-classifier.aar` or drop its registry entry; (d) owner publishes `models-v0.1.0`, then flip the ROADMAP line back to ✅.
+9. ~~Model release follow-ups~~ — **done**: `.aar` install wired and extraction hardened (symlinks / escape rejected); registry pins the published SHAs (`aa` output is not byte-reproducible, so always re-hash the uploaded asset).
 
 ## 11. Desktop console (macOS Hub as the full control app) — 2026-10-14
 

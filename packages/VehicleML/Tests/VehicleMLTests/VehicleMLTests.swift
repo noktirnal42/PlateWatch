@@ -126,6 +126,8 @@ final class ModelArtifactTests: XCTestCase {
         XCTAssertEqual(entry(url: "https://x/m.zip", format: "mlmodel").artifactExtension, "mlmodel")
         XCTAssertEqual(entry(url: "https://x/m.mlmodel", format: "mlpackage").artifactExtension, "mlpackage")
         XCTAssertEqual(entry(url: "https://x/download?id=3").artifactExtension, "mlmodel", "unknown → single file")
+        XCTAssertEqual(entry(url: "https://x/m.aar").artifactExtension, "aar")
+        XCTAssertEqual(entry(url: "https://x/m.bin", format: "aar").artifactExtension, "aar")
     }
 
     func testRegistryEntryWithoutFormatStillDecodes() throws {

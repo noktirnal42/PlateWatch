@@ -104,6 +104,7 @@ struct HeatmapView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Explore")
             .refreshable { await load() }
             .task { await load() }
@@ -136,6 +137,10 @@ struct HeatmapView: View {
     }
 
     private func load() async {
+        guard !PreviewFixtures.isEnabled else {
+            errorText = "Public aggregates are disabled in the local demo preview."
+            return
+        }
         loading = true
         defer { loading = false }
         errorText = nil

@@ -14,15 +14,16 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Graceful camera / permission / launch states; permission prompts asked in context (P1-1…P1-3)
 - ✅ Fleet detection without CoreML models: door-text vehicles, graded markings score, Apple Vision classifier cue (P0-2, P0-4) — **57 % automatic recall at 100 % precision on real photos, 76 % with human confirmation**
 - ✅ Human-in-the-loop "confirm this is a government vehicle" → moderation queue
-- ✅ App icon, accent colour, launch screen, onboarding, About, branded empty states (P1-3…P1-5); painted icon pending image-generator access
+- ✅ App icon, accent colour, launch screen, onboarding, About, branded empty states (P1-3…P1-5); painted amber/graphite icon added 2026-10-14 (IOS-UI-HANDOFF.md)
 - ✅ Real map for Explore; aggregates work on CloudKit via client-side k-anonymity (P1-6)
 - ✅ Evaluation corpus + harness (`eval/`), verified on a physical iPhone
 - ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
 - ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; **needs the Apple-account step** (import schema, deploy to production) and a moderator publish tool (P0-5)
-- ⏳ `models-v0.1.0` release drafted (not yet published; owner publishes): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned; `.aar` packaging + `ModelArchive` extraction (P0-3). **Open:** `ModelManager` does not yet install `.aar` models; the `vehicle-make-model-classifier` asset is not yet packaged
+- ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
-- ⬜ Full visual redesign of Sightings/Watchlist/Capture (current screens are functional + branded, not final)
+- ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors and painted icon landed (2026-10-14); full field/accessibility audit and received-history/media remain
+- ✅ iOS simulator startup CloudKit trap fixed in app + delegate backend selection; regression test added
 
 ## M0 — Foundation (this bootstrap)
 - ✅ Monorepo + package architecture (PlateKit, CaptureKit, VehicleML, PlateSync)

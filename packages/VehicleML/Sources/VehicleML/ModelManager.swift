@@ -125,10 +125,19 @@ public actor ModelManager {
             throw ManagerError.integrityCheckFailed(entry.name)
         }
 
-        // The registry ships raw .mlpackage directories (unzipped by the
-        // packager into a folder) — compile to .mlmodelc for runtime.
-        let modelFolder = tmpZip // rename for clarity; a real pack ships .mlpackage
-        let compiled = try await MLModel.compileModel(at: modelFolder)
+        // `.aar` entries (a .mlpackage is a directory) are unpacked in isolation first; single files compile directly.
+        var modelSource = tmpZip
+        var workDirectory: URL?
+        if entry.artifactExtension == "aar" {
+            let work = config.cacheDirectory.appendingPathComponent("extract-\(UUID().uuidString)", isDirectory: true)
+            workDirectory = work
+            modelSource = try ModelArchive.extractIsolated(archiveAt: tmpZip, workDirectory: work)
+        }
+        defer {
+            try? fm.removeItem(at: tmpZip)
+            if let workDirectory { try? fm.removeItem(at: workDirectory) }
+        }
+        let compiled = try await MLModel.compileModel(at: modelSource)
         if fm.fileExists(atPath: compiledURL.path) { try fm.removeItem(at: compiledURL) }
         try fm.moveItem(at: compiled, to: compiledURL)
     }
