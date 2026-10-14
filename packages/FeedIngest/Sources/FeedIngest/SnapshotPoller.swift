@@ -13,15 +13,20 @@ public struct SnapshotPoller: Sendable {
     /// When true (the default) nothing is fetched unless `source.mayBeAnalysed` — a person confirmed the feed's
     /// terms (docs/FEED-SOURCES.md §5). Public *viewing* is not a licence to analyse.
     public let enforceTerms: Bool
+    /// Optional extra permission check run before **every** fetch cycle (e.g. `RobotsCache.isAllowed`). When it says no,
+    /// the poller stops: it never contacts a URL it was told not to fetch, and picks up policy changes within the cache TTL.
+    public typealias FetchGate = @Sendable (URL) async -> Bool
+    private let gate: FetchGate?
 
     /// True when this poller is allowed to contact the source at all.
     public var isPermitted: Bool { !enforceTerms || source.mayBeAnalysed }
 
     public init(source: PublicFeedSource, sink: FeedFrameSink, session: URLSession? = nil,
-                enforceTerms: Bool = true) {
+                enforceTerms: Bool = true, gate: FetchGate? = nil) {
         self.source = source
         self.sink = sink
         self.enforceTerms = enforceTerms
+        self.gate = gate
         self.session = session ?? {
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = 10
@@ -65,6 +70,7 @@ public struct SnapshotPoller: Sendable {
         guard isPermitted else { return }
         var schedule = FeedSchedule(refreshInterval: source.refreshInterval)
         while !Task.isCancelled {
+            if let gate, !(await gate(source.url)) { return }      // robots.txt (or another policy) says stop
             schedule = await pollOnce(schedule: &schedule)
             if schedule.isSuspended { return }
             let sleepFor = max(0, schedule.nextFetchAt.timeIntervalSinceNow)

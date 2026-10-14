@@ -276,7 +276,7 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 2. **Read the Austin image host's terms** (`cctv.austinmobility.io`), record them in the catalogue entry, then run a slow real pilot and save
    frames under `eval/feeds/` (gitignored) so the harness can score real feed stills instead of a degraded proxy.
 3. ~~Decide analysis tier from the vehicle's pixel size~~ — **done** (900 / 400 px thresholds from measured detection rates; FEED-SOURCES.md §1).
-4. Feed politeness: `robots.txt` check, per-host rate limit, stop-and-flag on 403/429 (guardrail table in FEED-SOURCES.md §6b).
+4. ~~Feed politeness: robots.txt~~ — **done** (RobotsCache gates every poll). Still open: a per-host rate limit shared across sources of one host, and surfacing 'blocked by robots.txt / refused (403/429)' as a visible per-source status in the Hub.
 5. Skip source-masked regions (some cameras blank vehicles with grey blobs at source).
 6. Retrain the fleet crop classifier on `training/fleet2` with `scripts/build_fleet_crop_dataset.sh`; wire it in only if rear-view police
    recall is real and civilian false positives stay at zero.
