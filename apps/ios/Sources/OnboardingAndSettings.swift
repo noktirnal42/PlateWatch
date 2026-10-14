@@ -1,6 +1,7 @@
 import PlateKit
 import PlateSync
 import SwiftUI
+import SwiftData
 
 /// First-run explanation of what PlateWatch is — and is not. The legal and
 /// ethical model is the product's differentiator, so it comes before any
@@ -13,23 +14,29 @@ struct OnboardingView: View {
             Color("LaunchBackground").ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Image("LaunchLogo")
-                        .resizable().scaledToFit()
-                        .frame(width: 96, height: 96)
-                        .accessibilityHidden(true)
+                    HStack {
+                        Image("BrandIcon").resizable().scaledToFit()
+                            .frame(width: 88, height: 88)
+                            .clipShape(.rect(cornerRadius: 20))
+                            .accessibilityHidden(true)
+                        Spacer()
+                        Text("PRE-ALPHA").font(.caption.weight(.bold)).tracking(2)
+                            .foregroundStyle(PWStyle.fleet)
+                    }
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("PlateWatch")
+                        Text("Watch the public fleet.")
                             .font(.largeTitle.weight(.bold))
+                        Text("PlateWatch").font(.headline).foregroundStyle(PWStyle.fleet)
                         Text("Hold taxpayer-funded vehicles accountable — police, fire, transit, public works and government fleets.")
                             .font(.title3)
                             .foregroundStyle(.white.opacity(0.78))
                     }
                     principle("lock.shield.fill", "On-device analysis",
-                              "Camera frames are read on your iPhone. Raw video never leaves it.")
+                              "Camera frames are read on your iPhone. Raw video stays on your device.")
                     principle("building.columns.fill", "Fleet vehicles only",
                               "Private-citizen plates are dropped before anything is saved or shared.")
                     principle("doc.text.magnifyingglass", "Public records, with sources",
-                              "Agency details come from public fleet records and always carry a citation.")
+                              "Agency readings show their evidence. Public-record enrichment must always carry a citation.")
                     principle("hand.raised.fill", "Your location stays coarse",
                               "Sightings are bucketed to about 1 km unless a vehicle is fleet-confirmed.")
                     Button(action: onContinue) {
@@ -47,6 +54,7 @@ struct OnboardingView: View {
                 }
                 .padding(24)
                 .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
         }
         .foregroundStyle(.white)
@@ -73,6 +81,11 @@ struct OnboardingView: View {
 /// and where the rules live. Nothing here is a developer string.
 struct SettingsView: View {
     @Environment(\.syncBackend) private var backend
+    @Environment(\.modelContext) private var modelContext
+    @Query private var queued: [PendingSubmission]
+    @Query private var watchlist: [WatchlistItem]
+    @State private var confirmClear = false
+    @State private var errorText: String?
 
     private var backendName: String {
         backend is CloudKitBackend ? "iCloud (CloudKit public database)" : "Self-hosted server"
@@ -85,13 +98,32 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Sync") {
+                Section {
+                    HStack(alignment: .top, spacing: 16) {
+                        Image("BrandIcon").resizable().scaledToFit()
+                            .frame(width: 76, height: 76).clipShape(.rect(cornerRadius: 18))
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("PlateWatch").font(.title2.weight(.bold))
+                            Text("Public fleets. Public accountability.").font(.subheadline).foregroundStyle(.secondary)
+                            Text("PRE-ALPHA · \(version)").font(.caption.monospaced()).foregroundStyle(PWStyle.fleetText)
+                        }
+                    }.padding(.vertical, 8)
+                }
+                Section("Analysis & delivery") {
                     LabeledContent("Shared database") { Text(backendName).multilineTextAlignment(.trailing) }
                     LabeledContent("Analysis") {
                         Text(PassiveCaptureStatus.shared.modelStatus == "baseline vision"
                              ? "Apple Vision (on-device)" : PassiveCaptureStatus.shared.modelStatus)
                             .multilineTextAlignment(.trailing)
                     }
+                }
+                Section {
+                    LabeledContent("Queued observations", value: String(queued.count))
+                    LabeledContent("Local watchlist", value: String(watchlist.count))
+                    Button("Clear local queue & watchlist", systemImage: "trash", role: .destructive) { confirmClear = true }
+                } header: { Text("On this device") } footer: {
+                    Text("Clears queued observations and local watchlist entries. Already received, published or in-flight submissions require backend removal and are not deleted by this action.")
                 }
                 Section("Principles") {
                     Label("Fleet vehicles only", systemImage: "building.columns")
@@ -115,7 +147,23 @@ struct SettingsView: View {
                     Text("PlateWatch is pre-alpha. Detection quality is still being tuned.")
                 }
             }
+            .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("About")
+            .confirmationDialog("Clear local data?", isPresented: $confirmClear, titleVisibility: .visible) {
+                Button("Clear queue & watchlist", role: .destructive) { clearLocalData() }
+            } message: { Text("This removes \(queued.count) queued observations and \(watchlist.count) watchlist entries from this device. Backend records and transfers already in progress are unaffected.") }
+            .alert("Could not clear local data", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(errorText ?? "") }
         }
     }
+    private func clearLocalData() {
+        for row in queued { modelContext.delete(row) }
+        for row in watchlist { modelContext.delete(row) }
+        do {
+            try modelContext.save()
+            if !PreviewFixtures.isEnabled { UserDefaults.standard.removeObject(forKey: "watchlistPlates") }
+        } catch { modelContext.rollback(); errorText = error.localizedDescription }
+    }
+
 }

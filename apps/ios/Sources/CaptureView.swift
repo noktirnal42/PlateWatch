@@ -22,12 +22,16 @@ struct CaptureView: View {
         ZStack {
             Color("LaunchBackground").ignoresSafeArea()
             CameraPreview(session: viewModel.captureSession)
-                .ignoresSafeArea()
+                .ignoresSafeArea().accessibilityHidden(true)
             DetectionOverlay(frame: viewModel.latestFrame)
                 .ignoresSafeArea()
-            if viewModel.cameraState != .running && viewModel.cameraState != .starting {
-                CameraUnavailableCard(state: viewModel.cameraState)
-                    .padding(.horizontal, 24)
+            if PreviewFixtures.isEnabled || (viewModel.cameraState != .running && viewModel.cameraState != .starting) {
+                ScrollView {
+                    CameraUnavailableCard(state: PreviewFixtures.isEnabled ? .unavailable("Preview") : viewModel.cameraState)
+                        .padding(.horizontal, 24)
+                }
+                .safeAreaPadding(.top, 64)
+                .safeAreaPadding(.bottom, 160)
             }
             VStack {
                 HStack(alignment: .top) {
@@ -41,13 +45,15 @@ struct CaptureView: View {
                 Spacer()
                 CaptureControls(viewModel: viewModel, photoItem: $photoItem)
                     .padding(.bottom, 4)
-                StatusBar(text: viewModel.statusText)
+                StatusBar(text: PreviewFixtures.isEnabled ? "Demo preview — camera and sync disabled" : viewModel.statusText)
             }
             .padding()
             .animation(.snappy, value: viewModel.fleetHitPending)
         }
+        .safeAreaInset(edge: .top) { PreviewBanner() }
         // Wait for onboarding: the camera prompt must not appear over it.
         .task(id: hasOnboarded) {
+            guard !PreviewFixtures.isEnabled else { return }
             guard hasOnboarded else { return }
             viewModel.attach(context: modelContext, backend: backend)
             await viewModel.start()
@@ -114,7 +120,7 @@ private struct CaptureControls: View {
                     }
                 }
             }
-            .disabled(viewModel.processingStill)
+            .disabled(viewModel.processingStill || viewModel.cameraState != .running)
             .accessibilityLabel("Capture still frame")
             .accessibilityHint("Runs one accurate analysis pass on the current frame")
 
@@ -324,6 +330,9 @@ private struct DetectionOverlay: View {
             }
         }
         .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Vehicle detections")
+        .accessibilityValue("\(frame?.vehicles.filter { $0.vehicleClass.isFleet }.count ?? 0) fleet vehicles in view")
         .animation(.easeOut(duration: 0.15), value: frame?.vehicles.count ?? 0)
     }
 }

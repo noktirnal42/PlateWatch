@@ -1,5 +1,10 @@
 # PlateWatch — Handoff Document
 
+> **2026-10-14 WS1 continuation:** current iOS review/branding and simulator startup
+> crash handoff: [docs/IOS-UI-HANDOFF.md](docs/IOS-UI-HANDOFF.md). The older session
+> logs below are historical and contain superseded counts and status claims.
+
+
 > **Session 2026-10-13 (evening, continuation agent):** vehicle-detector fusion fixed
 > (recording fleet evidence no longer erased when the CoreML vehicle detector runs —
 > recall back to 59 % with plate reads up 10→15/62); CoreML plate detector wired into

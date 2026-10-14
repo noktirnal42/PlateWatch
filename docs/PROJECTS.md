@@ -27,10 +27,14 @@ tests must stay green before its status advances.
   path, review flow, on-device self-test.
 - **Docs:** NEXT-STEPS §2 (field test), QA-REPORT, EVALUATION.
 - **Test:** `swift test --package-path packages/CaptureKit` + iOS build.
-- **Status:** core loop works on stills (155+ tests green); live-camera
-  handheld field test pending (mirroring cannot expose the camera).
-- **Next:** handheld live test on iPhone (portrait+landscape, dusk, moving);
-  watchOS build verification; CarPlay entitlement gate.
+- **Status:** still-photo core loop inherited; 2026-10-14 iOS review/branding pass
+  adds observation detail/export, retry recovery, validated fleet watchlists,
+  local cleanup and simulator CloudKit startup-crash fix. See
+  [IOS-UI-HANDOFF.md](IOS-UI-HANDOFF.md) for validation and screenshot boundaries.
+  Handheld live-camera field testing remains pending.
+- **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
+  VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
+  CarPlay entitlement gate.
 
 ## WS2 — Hub & remote camera sources (macOS)
 
