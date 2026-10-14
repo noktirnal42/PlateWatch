@@ -2,100 +2,82 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "name": "plate-detector-createml-v1",
+      "task": "plate-detection",
+      "version": "0.2.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-detector-createml-v1.mlmodel",
+      "sha256": "04114e3fea5d6946bdb0252751bd2ac3fbc015b9fc67d81d291fccafd040c506",
+      "sourceURL": "https://github.com/noktirnal42/PlateWatch/blob/main/models/provenance/plate-detector-createml-v1.md",
+      "license": "PlateWatch (trained by this project); training images CC BY 2.0 (Open Images V7 'Vehicle registration plate' annotations CC BY 4.0) - per-image attribution in the provenance file",
+      "inputDescription": "IMAGE 416x416 RGB; Create ML Object Detection pipeline (neural network + NMS); single class 'plate'; outputs confidence/coordinates MultiArrays via VNCoreMLRequest",
+      "minimumOS": "17.0",
+      "format": "mlmodel",
+      "notes": "Home-trained Create ML detector (2000 iterations). Won the head-to-head against plate-detector-yolov8n on the 62-image corpus (plate reads 19/62 vs 17/62, fleet recall 63% vs 61%, precision 100% both; see docs/DECISIONS.md 2026-10-13). Single-file .mlmodel compiles directly after download."
+    },
+    {
       "name": "plate-detector-yolov8n",
       "task": "plate-detection",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-detector-yolov8n.mlpackage",
-      "sha256": "a1e4aa235cbd3ff5bc54cdb5984830f5482360a21df79b2da2881443159c2196",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-detector-yolov8n.aar",
+      "sha256": "07b3b8e978b97989a92aab540d977cbd337622dc4ec4d40c1a5f18c8c801d6cc",
       "sourceURL": "https://github.com/joker5914/yolov8n-license-plate",
       "license": "AGPL-3.0 (model weights used per upstream terms; see registry notes)",
       "inputDescription": "IMAGE 640x640 BGR letterboxed; YOLOv8 license plate detection",
       "minimumOS": "17.0",
-      "notes": "Converted from joker5914/yolov8n-license-plate (Ultralytics YOLOv8). Runs via VNCoreMLRequest (object detection)."
-    },
-    {
-      "name": "plate-ocr-trocr-small",
-      "task": "plate-ocr",
-      "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-ocr-trocr-small.mlpackage",
-      "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "https://github.com/mariovigliar/trocr-base-printed_license_plates_ocr",
-      "license": "MIT",
-      "inputDescription": "IMAGE 384x96 RGB plate crop; TrOCR vision-encoder-decoder",
-      "minimumOS": "17.0",
-      "notes": "TrOCR-based plate OCR (transformers). Requires transformers\u2192CoreML export path; Vision fallback used until then."
+      "format": "aar",
+      "notes": "Converted from joker5914/yolov8n-license-plate (Ultralytics YOLOv8). Apple-Archived (.aar); VehicleML.ModelArchive extracts before compile. Superseded by plate-detector-createml-v1 (0.2.0) as the head-to-head loser, kept as fallback."
     },
     {
       "name": "vehicle-detector-yolov8n",
       "task": "vehicle-detection",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-detector-yolov8n.mlpackage",
-      "sha256": "f0dd457cc256f922bc8fa534f7303fc8ac23c7a86a59df8c34dedb4071456e14",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-detector-yolov8n.aar",
+      "sha256": "1a986849cf9ccd5a2b89f6c4005edd281cb76887e229cab4939d032e8bc34594",
       "sourceURL": "https://github.com/ultralytics/ultralytics",
       "license": "AGPL-3.0 (compatible with project license)",
       "inputDescription": "IMAGE 640x640 BGR letterboxed; YOLOv8 COCO detection heads",
       "minimumOS": "17.0",
-      "notes": "COCO vehicle classes (car, truck, bus, motorcycle) gate the fleet classifier stages; fine-tune on fleet imagery later (ROADMAP M2)."
+      "format": "aar",
+      "notes": "COCO vehicle classes (car, truck, bus, motorcycle) gate the fleet classifier stages; fine-tune on fleet imagery later (ROADMAP M2). A COCO detector never vouches for a fleet class (see PlateAnalysisPipeline fusion rules)."
     },
     {
       "name": "vehicle-type-classifier",
       "task": "vehicle-type-classification",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-type-classifier.mlpackage",
-      "sha256": "b71090c166631800f15eecf04424394a9e7b011cb112c10a226a45d9a0b6a1a7",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-type-classifier.aar",
+      "sha256": "728ff6aaca8da8d20cad646c5a8edd68b23311a4e501f2644d12948cd88ce01e",
       "sourceURL": "https://huggingface.co/dima806/vehicle_10_types_image_detection",
       "license": "Apache-2.0",
       "inputDescription": "IMAGE 224x224 RGB; ViT-B/16 10 vehicle types (car, truck, bus, motorcycle, bicycle, etc.)",
       "minimumOS": "17.0",
-      "notes": "10-class vehicle type classifier. Used to route detection to specialized stages."
+      "format": "aar",
+      "notes": "10-class vehicle type classifier. Used to route detection to specialized stages. Palettization skipped (coremltools API drift); float16 weights."
     },
     {
       "name": "vehicle-make-model-classifier",
       "task": "vehicle-make-model-classification",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-make-model-classifier.mlpackage",
-      "sha256": "8b1b1bdbc606b2c967ea234fb6e0bebd499101b038b06bf99bb78a5fd5066088",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-make-model-classifier.aar",
+      "sha256": "b1f589332e4e87af061cd4aca10aedb1d8b8a8704237762e5a556c8f53acc407",
       "sourceURL": "https://huggingface.co/dima806/car_models_image_detection",
       "license": "Apache-2.0",
       "inputDescription": "IMAGE 224x224 RGB; ViT-B/16 car model classifier",
       "minimumOS": "17.0",
+      "format": "aar",
       "notes": "Fine-grained car make+model classifier (ViT-B/16). Outputs make/model probabilities."
     },
     {
-      "name": "vehicle-color-classifier",
-      "task": "vehicle-color-classification",
-      "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-color-classifier.mlpackage",
-      "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "https://huggingface.co/EstherSan/car_identified_model_7",
-      "license": "Apache-2.0",
-      "inputDescription": "IMAGE 256x256 RGB; MobileViT v2 vehicle color classifier",
-      "minimumOS": "17.0",
-      "notes": "Vehicle color classifier (MobileViT v2). Outputs color probabilities."
-    },
-{
       "name": "vehicle-reid-osnet-x0_25",
       "task": "vehicle-reid",
       "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-reid-osnet-x0_25.mlpackage",
-      "sha256": "63f02f12d2473aa4f66afceb9f3bb8ea4dc637f7f260a9953c6a929053581a65",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-reid-osnet-x0_25.aar",
+      "sha256": "9aaf3322ce2f9ee7edd716e1f48be18838a22fa5df8d22e201c8b977b35e3013",
       "sourceURL": "https://github.com/KaiyangZhou/deep-person-reid",
       "license": "MIT",
       "inputDescription": "IMAGE 128x256 RGB; outputs 512-dim embedding (OSNet x0.25 on MSMT17)",
       "minimumOS": "17.0",
-      "notes": "OSNet x0.25 trained on MSMT17 (person re-ID), transfers to vehicle re-ID. Converted via deep-person-reid (torchreid) PyTorch trace → CoreML mlprogram. INT8 palettization pending API stabilization. Replaces feature-print re-ID fallback."
-    },
-    {
-      "name": "plate-design-classifier",
-      "task": "plate-design-classification",
-      "version": "0.1.0",
-      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-design-classifier.mlpackage",
-      "sha256": "REPLACE_AT_CONVERSION_TIME",
-      "sourceURL": "custom-training-required",
-      "license": "PlateWatch",
-      "inputDescription": "IMAGE 224x224 RGB; plate crop; outputs design family (CA-standard, CA-exempt, US-GOV, etc.)",
-      "minimumOS": "17.0",
-      "notes": "Plate design classifier (state/exempt/federal plate families). No pre-trained model available; requires custom training on US plate design dataset. Placeholder for M2."
+      "format": "aar",
+      "notes": "OSNet x0.25 trained on MSMT17 (person re-ID), transfers to vehicle re-ID. Converted via deep-person-reid (torchreid) PyTorch trace -> CoreML mlprogram. Complements the Vision feature-print fallback."
     }
   ]
 }

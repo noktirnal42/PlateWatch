@@ -4,6 +4,33 @@ One entry per decision, newest first. Each records the choice, the reason,
 and what it commits us to. Superseded decisions stay here with a pointer to
 the replacement.
 
+## 2026-10-13 — Plate detector: home-trained Create ML model wins the head-to-head
+
+**Decision.** `plate-detector-createml-v1` (0.2.0, single-file `.mlmodel`, 416×416
+Create ML object-detection pipeline, trained 2000 iterations on Open Images V7
+"Vehicle registration plate" boxes) becomes the registry's `plate-detection`
+model, superseding the converted `plate-detector-yolov8n` (0.1.0, kept as
+fallback).
+
+**Measured (62-image corpus, full pipeline incl. vehicle detector).**
+Plate reads 19/62 (Create ML) vs 17/62 (YOLOv8n) vs 12/62 (no detector);
+fleet recall 63 % vs 61 % vs 61 %; precision 100 % and 0 civilian false
+positives in all three configurations. A plate-only re-run (harness
+`--tasks plate-detection`) agreed: 20/62 vs 18/62 reads, recall 63 % vs 61 %.
+The Create ML model is also ~10× larger (31 MB vs 3 MB) — accepted for the
+accuracy gain; ANE-resident at runtime.
+
+**Provenance.** Training images are Google Open Photos/Flickr CC BY 2.0 with
+Open Images CC BY 4.0 annotations — the full per-image list is committed at
+`models/provenance/plate-detector-createml-v1.md` (guardrail 5). The YOLOv8n
+weights remain AGPL-3.0, compatible with the project license.
+
+**Packaging.** `.mlpackage` models cannot be single-file release assets, so
+directory packages ship as Apple Archives (`.aar`) and are extracted on-device
+by `VehicleML.ModelArchive` before `MLModel.compileModel`. The Create ML export
+is a single `.mlmodel` file and ships raw. Artifact format is recorded per
+registry entry (`format`: `mlmodel` | `aar`).
+
 ## 2026-10-11 — M4 heatmap granularity: agency aggregates with k-anonymity
 
 **Decision.** Public aggregates are published per agency and per geohash-6

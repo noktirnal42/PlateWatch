@@ -39,12 +39,13 @@ and 0 civilian false positives at every step.
 
 Plate OCR is the **weakest** part. A plausibility filter (5–8 characters, letters *and* digits, no
 run of 5+ letters) removed false "plates" that were really state names, slogans and fleet asset
-IDs ("NEWYORK", "COMPANY7", "0325775"), and stills now also detect plate-shaped rectangles and
-read each crop separately. Every plate read now looks like a real registration (e.g. `K398HN`,
-`JL923`, `PZ3122G`, `GV4728R`), but only **9–11 of 62 images** produce one. Plates are small,
-angled and often blurred; the real fix is the dedicated CoreML plate detector + OCR (ROADMAP M2),
-which is not shipped yet. Vision's own confidence is ~100 % on almost everything, so the displayed
-plate confidence is not meaningful yet.
+IDs ("NEWYORK", "COMPANY7", "0325775"), and stills also detect plate-shaped rectangles and read
+each crop separately. The dedicated CoreML plate detector (home-trained on Open Images plate
+boxes — see `docs/DECISIONS.md`) raised images with a plausible plate read from 12/62 to
+**19/62**, and every read now looks like a real registration (e.g. `K398HN`, `JL923`, `PZ3122G`,
+`GV4728R`, `POLICE D756`). Plates are small, angled and often blurred; specialized plate OCR
+(ROADMAP M2) is the next lever. Vision's own confidence is ~100 % on almost everything, so the
+displayed plate confidence is not meaningful yet.
 
 ## How the decision is made
 

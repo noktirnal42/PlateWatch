@@ -49,3 +49,6 @@ eval/results/
 # Your own test photos (unknown licence) - never committed
 eval/user/
 training/
+
+# Packaged release artifacts (staged locally, published to GitHub Releases)
+models/release/
