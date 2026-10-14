@@ -19,6 +19,35 @@ public enum ModelArchive {
     public enum ArchiveError: Error {
         case extractionFailed(String)
         case modelRootNotFound
+        /// The archive contained a symbolic link or wrote outside its destination.
+        case unsafeContents(String)
+    }
+
+    /// Extract into a private, freshly created directory and verify nothing escaped it. The archive is untrusted
+    /// (sha256-pinned, but still): any symlink entry or any file written beside the payload directory fails the
+    /// extraction and the work directory is removed. Returns the model root; the caller removes `workDirectory`.
+    public static func extractIsolated(archiveAt archiveURL: URL, workDirectory: URL) throws -> URL {
+        let fm = FileManager.default
+        try? fm.removeItem(at: workDirectory)
+        try fm.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+        let payload = workDirectory.appendingPathComponent("payload", isDirectory: true)
+        do {
+            let root = try extract(archiveAt: archiveURL, to: payload)
+            let siblings = try fm.contentsOfDirectory(atPath: workDirectory.path)
+            guard siblings == ["payload"] else { throw ArchiveError.unsafeContents("entries outside payload: \(siblings)") }
+            return root
+        } catch {
+            try? fm.removeItem(at: workDirectory)
+            throw error
+        }
+    }
+
+    /// Throws if `root` contains any symbolic link.
+    static func rejectSymlinks(under root: URL) throws {
+        guard let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isSymbolicLinkKey]) else { return }
+        for case let url as URL in e where (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
+            throw ArchiveError.unsafeContents("symlink: \(url.lastPathComponent)")
+        }
     }
 
     /// Extract `archiveURL` into `destination` and return the model root
@@ -46,6 +75,7 @@ public enum ModelArchive {
         do { _ = try ArchiveStream.process(readingFrom: decode, writingTo: extract) }
         catch { throw ArchiveError.extractionFailed(error.localizedDescription) }
         try? extract.close()
+        try rejectSymlinks(under: destination)
 
         return try normalize(extractedAt: destination, archiveStem: archiveURL.deletingPathExtension().lastPathComponent,
                              destination: destination)

@@ -62,4 +62,37 @@ final class ModelArchiveTests: XCTestCase {
         XCTAssertEqual(root.lastPathComponent, "tiny.mlmodel")
         XCTAssertEqual(try Data(contentsOf: root), Data("coreml".utf8))
     }
+
+    func testSymlinkEntryIsRejectedAndCleanedUp() throws {
+        guard aaAvailable else { throw XCTSkip("aa CLI unavailable") }
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ma-\(UUID().uuidString)", isDirectory: true)
+        let wrap = work.appendingPathComponent("wrap", isDirectory: true)
+        try FileManager.default.createDirectory(at: wrap, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        try Data("x".utf8).write(to: wrap.appendingPathComponent("tiny.mlmodel"))
+        try FileManager.default.createSymbolicLink(atPath: wrap.appendingPathComponent("evil").path, withDestinationPath: "/etc")
+        let aar = work.appendingPathComponent("evil.aar")
+        try archive(wrap, to: aar)
+
+        let scratch = work.appendingPathComponent("scratch", isDirectory: true)
+        XCTAssertThrowsError(try ModelArchive.extractIsolated(archiveAt: aar, workDirectory: scratch))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path), "work directory must be removed on failure")
+    }
+
+    func testExtractIsolatedReturnsModelInsidePayload() throws {
+        guard aaAvailable else { throw XCTSkip("aa CLI unavailable") }
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ma-\(UUID().uuidString)", isDirectory: true)
+        let wrap = work.appendingPathComponent("wrap", isDirectory: true)
+        try FileManager.default.createDirectory(at: wrap, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        try Data("coreml".utf8).write(to: wrap.appendingPathComponent("ok.mlmodel"))
+        let aar = work.appendingPathComponent("ok.aar")
+        try archive(wrap, to: aar)
+        let scratch = work.appendingPathComponent("scratch", isDirectory: true)
+        let root = try ModelArchive.extractIsolated(archiveAt: aar, workDirectory: scratch)
+        XCTAssertTrue(root.path.contains("/payload/"))
+        XCTAssertEqual(root.lastPathComponent, "ok.mlmodel")
+    }
 }

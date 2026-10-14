@@ -39,13 +39,13 @@ public struct ModelRegistryEntry: Sendable, Codable, Hashable {
     }
 
     /// File extension the downloaded artifact must carry so CoreML can compile it. A single-file `.mlmodel`
-    /// (Create ML export) works with `MLModel.compileModel` directly; a `.mlpackage` directory cannot be
-    /// downloaded as one file and needs archive extraction (not implemented yet).
+    /// (Create ML export) works with `MLModel.compileModel` directly; a `.mlpackage` directory ships as an Apple
+    /// Archive (`aar`), which `ModelManager` extracts via `ModelArchive` before compiling.
     public var artifactExtension: String {
         let explicit = format?.lowercased()
-        if explicit == "mlmodel" || explicit == "mlpackage" { return explicit! }
+        if explicit == "mlmodel" || explicit == "mlpackage" || explicit == "aar" { return explicit! }
         let ext = url.pathExtension.lowercased()
-        return (ext == "mlmodel" || ext == "mlpackage") ? ext : "mlmodel"
+        return (ext == "mlmodel" || ext == "mlpackage" || ext == "aar") ? ext : "mlmodel"
     }
 }
 
