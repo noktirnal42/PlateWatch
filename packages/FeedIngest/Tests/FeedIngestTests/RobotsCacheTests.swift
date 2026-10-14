@@ -70,6 +70,20 @@ final class RobotsCacheTests: XCTestCase {
         XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
     }
 
+    func testHTMLHomepageIsNotARobotsPolicy() async {
+        RobotsStubProtocol.responder = { _ in (200, "text/html", Data("<!DOCTYPE html><html>App</html>".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date()))
+        let allowed = await cache.isAllowed(makeURL())
+        XCTAssertFalse(allowed)
+    }
+
+    func testUTF8BOMDoesNotHideUserAgentDirective() async {
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("\u{FEFF}User-agent: *\nDisallow: /private/\n".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date()))
+        let allowed = await cache.isAllowed(makeURL(path: "/private/camera.jpg"))
+        XCTAssertFalse(allowed)
+    }
+
     func test404MeansAllowAll() async {
         let clock = ClockBox(Date(timeIntervalSince1970: 1_000_000_000))
         RobotsStubProtocol.responder = { _ in (404, "text/plain", Data()) }
@@ -336,5 +350,47 @@ final class RobotsCacheTests: XCTestCase {
             XCTAssertFalse(allowed)
         }
         RobotsStubProtocol.extraHeaders = [:]
+    }
+}
+
+extension RobotsCacheTests {
+    func testCitedCaltransServerErrorPermissionIsPathScoped() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        RobotsStubProtocol.responder = { _ in (500, "text/html", Data("Internal Server Error".utf8)) }
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: "PlateWatchHub", publicAPIPermissions: [.caltransCCTV])
+        let allowed = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/camera/camera.jpg")!)
+        let elsewhere = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/private/camera.jpg")!)
+        let otherHost = await cache.isAllowed(URL(string: "https://example.gov/data/d3/cctv/image/camera.jpg")!)
+        XCTAssertTrue(allowed)
+        XCTAssertFalse(elsewhere)
+        XCTAssertFalse(otherHost)
+    }
+
+    func testCitedGrantNeverOverridesExplicitDisallowOrAuthRefusal() async {
+        for status in [200, 401, 403, 429] {
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [RobotsStubProtocol.self]
+            RobotsStubProtocol.responder = { _ in (status, "text/plain", Data("User-agent: *\nDisallow: /".utf8)) }
+            let cache = RobotsCache(session: URLSession(configuration: config), userAgent: "PlateWatchHub", publicAPIPermissions: [.caltransCCTV])
+            let allowed = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/camera.jpg")!)
+            XCTAssertFalse(allowed, "HTTP \(status)")
+        }
+    }
+
+    func testCitedGrantDoesNotOverrideTLSOrNetworkFailures() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        RobotsStubProtocol.responder = nil
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: "PlateWatchHub", publicAPIPermissions: [.caltransCCTV])
+        let allowed = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/camera.jpg")!)
+        XCTAssertFalse(allowed)
+    }
+
+    func testCitedGrantDoesNotOverrideSchemePortOrDistrict() {
+        for url in ["http://cwwp2.dot.ca.gov/data/d3/cctv/image/a.jpg", "https://cwwp2.dot.ca.gov:8443/data/d3/cctv/image/a.jpg", "https://cwwp2.dot.ca.gov/data/d13/cctv/image/a.jpg"] {
+            XCTAssertFalse(PublicAPIPermission.caltransCCTV.allows(URL(string: url)!, robotsHTTPStatus: 500))
+        }
+        XCTAssertNotNil(PublicAPIPermission.caltransCCTV.citation.url)
     }
 }

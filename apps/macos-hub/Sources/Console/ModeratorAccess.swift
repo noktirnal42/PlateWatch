@@ -71,6 +71,10 @@ struct ModerationClient: Sendable {
         self.baseURL = url; self.token = token
     }
 
+    init(baseURL: URL, token: String, session: URLSession) {
+        self.baseURL = baseURL; self.token = token; self.session = session
+    }
+
     private func request(_ path: String, method: String, body: Data? = nil) -> URLRequest {
         var r = URLRequest(url: baseURL.appending(path: path))
         r.httpMethod = method
@@ -85,17 +89,7 @@ struct ModerationClient: Sendable {
     func queue() async throws -> [Item] {
         let (data, response) = try await session.data(for: request("moderator/api/queue", method: "GET"))
         if let code = (response as? HTTPURLResponse)?.statusCode, code != 200 { throw ClientError.http(code) }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { d in
-            let s = try d.singleValueContainer().decode(String.self)
-            let f = ISO8601DateFormatter()
-            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = f.date(from: s) { return date }
-            f.formatOptions = [.withInternetDateTime]
-            if let date = f.date(from: s) { return date }
-            throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "bad date \(s)"))
-        }
-        return try decoder.decode([Item].self, from: data)
+        return try Self.decoder().decode([Item].self, from: data)
     }
 
     struct Takedown: Decodable, Identifiable, Sendable {
@@ -131,7 +125,9 @@ struct ModerationClient: Sendable {
         let action: String
         let target: String?
         let detail: String?
-        var id: String { "\(createdAt?.timeIntervalSince1970 ?? 0)|\(action)|\(target ?? "")|\(detail ?? "")" }
+        // The API currently has no row ID. Give each decoded row its own identity so identical actions are not collapsed.
+        let id = UUID()
+        private enum CodingKeys: String, CodingKey { case createdAt, action, target, detail }
     }
 
     func audit() async throws -> [AuditEntry] {

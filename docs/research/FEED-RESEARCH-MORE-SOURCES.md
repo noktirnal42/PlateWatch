@@ -1,5 +1,11 @@
 # More public camera sources for the PlateWatch Hub (snapshotJPEG) - research 2026-10-14
 
+> Historical broad survey. "READY" below describes the original catalogue research, not current image health,
+> permission to bulk poll, or enabled Hub imports. See [USA-FEEDS-2026-10-14.md](USA-FEEDS-2026-10-14.md)
+> for corrected Caltrans/Oregon/Utah/New Mexico access and the requested AZ/NV/CO/AL checks.
+> Canadian options have been removed from the product menu.
+
+
 Method: real HTTP requests from the dev machine, User-Agent `PlateWatchResearch/0.1 (+https://github.com/noktirnal42/PlateWatch)`, ~1 request/second, robots.txt checked per image host, one catalogue pull + 3-8 sampled images per source (no bulk polling). No tracked repo files were edited, nothing committed, no symlinks. Raw catalogue pulls and scripts live in `/private/tmp/pw-research/` (`w/`, `ag.py`, `agall.py`, `sample.py`).
 Machine-readable list of READY sources: `/private/tmp/pw-research/more-sources.json` (also contains a second array `termsUnclearButWorkingKeyless`).
 Not legal advice. Status meaning: READY = no key, keyless catalogue AND keyless live still verified, open/explicit public-use terms. NEEDS-KEY = free key/registration needed for the catalogue. TERMS-UNCLEAR = technically works keyless but no open licence read/found (or conflicting robots). NO = forbids automation, login, video-only, dead, or robots disallow.

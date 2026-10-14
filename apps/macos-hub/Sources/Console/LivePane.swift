@@ -121,37 +121,55 @@ final class LatestFrame: @unchecked Sendable {
 }
 
 struct LivePane: View {
+    @ObservedObject private var hub: HubController
     @StateObject private var live: LiveController
     @State private var devices: [AVCaptureDevice] = []
     @State private var selected: String = ""
 
-    init(hub: HubController) { _live = StateObject(wrappedValue: LiveController(hub: hub)) }
+    init(hub: HubController) { self.hub = hub; _live = StateObject(wrappedValue: LiveController(hub: hub)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let source = hub.liveFeed {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
+                        Text("Snapshot feed · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
+                        if let frame = hub.liveFeedFrame {
+                            Text("Analysed \(frame.updatedAt, format: .dateTime.hour().minute().second()) · \(frame.result.boxes.count) vehicle(s)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    FeedBlockButton(hub: hub, preferences: hub.favorites, source: source)
+                    Button("Close web feed") { hub.stopLiveFeed() }
+                }
+            }
             HStack {
                 Picker("Camera", selection: $selected) {
                     ForEach(devices, id: \.uniqueID) { Text($0.localizedName).tag($0.uniqueID) }
                 }.frame(maxWidth: 320)
                 Button("Start camera") {
-                    if let d = devices.first(where: { $0.uniqueID == selected }) { Task { await live.startCamera(d) } }
+                    if let d = devices.first(where: { $0.uniqueID == selected }) { hub.stopLiveFeed(); Task { await live.startCamera(d) } }
                 }.disabled(selected.isEmpty)
                 Button("Open video…") {
                     let panel = NSOpenPanel(); panel.allowedContentTypes = [.movie, .video]
-                    if panel.runModal() == .OK, let url = panel.url { live.startVideo(url) }
+                    if panel.runModal() == .OK, let url = panel.url { hub.stopLiveFeed(); live.startVideo(url) }
                 }
-                Button("Stop") { live.stop() }.disabled(!live.running)
+                Button("Stop") { live.stop(); hub.stopLiveFeed() }.disabled(!live.running && hub.liveFeed == nil)
                 Spacer()
-                Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
+                if hub.liveFeed == nil {
+                    Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
+                }
             }
             ZStack {
                 Rectangle().fill(.black.opacity(0.85))
-                if let image = live.image {
+                if let image = hub.liveFeed == nil ? live.image : hub.liveFeedFrame?.image {
                     GeometryReader { geo in
                         let size = fitted(CGSize(width: image.width, height: image.height), in: geo.size)
                         ZStack(alignment: .topLeading) {
                             Image(decorative: image, scale: 1).resizable().frame(width: size.width, height: size.height)
-                            ForEach(live.boxes) { box in
+                            ForEach(hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? [])) { box in
                                 Rectangle().stroke(box.isFleet ? Color.green : Color.yellow, lineWidth: 2)
                                     .frame(width: box.rect.width * size.width, height: box.rect.height * size.height)
                                     .overlay(alignment: .topLeading) {
@@ -166,7 +184,7 @@ struct LivePane: View {
                         .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     }
                 } else {
-                    Text("Start a camera or open a video").foregroundStyle(.secondary)
+                    Text(hub.liveFeed == nil ? "Start a camera, open a video, or choose Open in Live in Public feeds" : hub.liveFeedStatus).foregroundStyle(.secondary)
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
             Text("In memory only. Overlays show vehicle class and fleet score, never plate text. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
@@ -178,7 +196,10 @@ struct LivePane: View {
                                                        mediaType: .video, position: .unspecified).devices
             if selected.isEmpty { selected = devices.first?.uniqueID ?? "" }
         }
-        .onDisappear { live.stop() }
+        .task(id: hub.liveFeed?.id) {
+            if hub.liveFeed != nil { live.stop(); await hub.loadLiveFeed() }
+        }
+        .onDisappear { live.stop(); hub.stopLiveFeed() }
     }
 
     private func fitted(_ image: CGSize, in box: CGSize) -> CGSize {

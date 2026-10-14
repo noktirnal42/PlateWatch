@@ -46,6 +46,8 @@ jobs:
         run: xcodebuild -project apps/ios/PlateWatch.xcodeproj -scheme PlateWatch -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
       - name: Build macOS hub (unsigned)
         run: xcodebuild -project apps/macos-hub/PlateWatchHub.xcodeproj -scheme PlateWatchHub -destination 'generic/platform=macOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - name: Test macOS Hub polling, blocks, favorites and moderation (unsigned, hostless)
+        run: xcodebuild -project apps/macos-hub/PlateWatchHub.xcodeproj -scheme PlateWatchHub -destination 'platform=macOS' -configuration Debug -parallel-testing-enabled NO -collect-test-diagnostics never CODE_SIGNING_ALLOWED=NO test
       - name: Build watchOS app (simulator, unsigned)
         run: xcodebuild -project apps/watchos/PlateWatchWatch.xcodeproj -scheme PlateWatchWatch -destination 'generic/platform=watchOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
 

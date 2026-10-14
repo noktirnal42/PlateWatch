@@ -1,56 +1,66 @@
 import SwiftUI
 
-/// Moderator review queue. Shown only to an enrolled moderator. Mirrors the server's privacy rule: items carry unit
-/// number, ~1 km area and fleet confidence, never a plate.
+/// Moderator-only console. Queue items never contain plate text. Backend authorization remains the security boundary.
 struct ModerationPane: View {
     var onSignOut: () -> Void
-    @State private var items: [ModerationClient.Item] = []
-    @State private var error: String?
-    @State private var busy = false
+    @StateObject private var store = ModerationStore()
     @State private var selection: ModerationClient.Item.ID?
-
-    @State private var client: ModerationClient?
-    @State private var note = ""
-    @State private var tab = 0
-    @State private var takedowns: [ModerationClient.Takedown] = []
-    @State private var audit: [ModerationClient.AuditEntry] = []
     @State private var takedownSelection: ModerationClient.Takedown.ID?
+    @State private var tab = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Picker("", selection: $tab) {
-                Text("Sightings (\(items.count))").tag(0)
-                Text("Takedown requests (\(takedowns.count))").tag(1)
-                Text("Audit log").tag(2)
-            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Picker("Moderation section", selection: $tab) {
+                    Text("Sightings (\(store.items.count))").tag(0)
+                    Text("Takedown requests (\(store.takedowns.count))").tag(1)
+                    Text("Audit log (\(store.audit.count))").tag(2)
+                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 620)
+                Spacer()
+                if store.busy { ProgressView().controlSize(.small).accessibilityLabel("Refreshing moderation data") }
+                Button("Refresh", systemImage: "arrow.clockwise") { Task { await store.refresh() } }.disabled(store.busy)
+            }
+            if let error = activeError { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
+            if let actionError = store.actionError { Text(actionError).foregroundStyle(.red) }
             if tab == 2 { auditView } else if tab == 1 { takedownView } else { sightingsView }
+            if let last = store.lastLoadedAt {
+                Text("Last refresh: \(last.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
+            }
         }
         .padding()
-        .task {
-            client = await Task.detached { ModerationClient() }.value     // Keychain read, off the main thread
-            await load()
-        }
+        .task { await store.connect() }
+    }
+
+    private var activeError: String? {
+        switch tab { case 1: store.takedownError; case 2: store.auditError; default: store.queueError }
     }
 
     private var auditView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            Table(audit) {
-                TableColumn("When") { Text($0.createdAt ?? .distantPast, format: .dateTime) }
+            Table(store.audit) {
+                TableColumn("When") { row in
+                    if let date = row.createdAt { Text(date, format: .dateTime) } else { Text("Not recorded").foregroundStyle(.secondary) }
+                }
                 TableColumn("Action") { Text($0.action).monospaced() }
                 TableColumn("Target") { Text($0.target?.prefix(8).lowercased() ?? "—").monospaced() }
                 TableColumn("Detail") { Text($0.detail ?? "") }
             }
-            Text("Append-only record of moderator decisions, takedown requests and retention purges. It stores action and ID only, never sighting content.")
+            .overlay {
+                if store.audit.isEmpty && !store.busy && store.auditError == nil {
+                    ContentUnavailableView("No audit entries returned", systemImage: "list.clipboard", description: Text("Refresh to check for new moderator actions."))
+                }
+            }
+            Text("Newest 200 audit entries. Actions and target IDs only; sighting content is excluded. A refresh error leaves the last loaded rows visible.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 
     private var takedownView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            Table(takedowns, selection: $takedownSelection) {
-                TableColumn("Received") { Text($0.createdAt ?? .distantPast, format: .dateTime) }
+            Table(store.takedowns, selection: $takedownSelection) {
+                TableColumn("Received") { row in
+                    if let date = row.createdAt { Text(date, format: .dateTime) } else { Text("Not recorded") }
+                }
                 TableColumn("Sighting") { Text($0.sightingID?.uuidString.prefix(8).lowercased() ?? "—").monospaced() }
                 TableColumn("Reason") { Text($0.reason).lineLimit(2) }
                 TableColumn("Contact") { Text($0.contact ?? "—") }
@@ -60,57 +70,34 @@ struct ModerationPane: View {
                 Button("Dismiss request") { Task { await resolve(hide: false) } }
                 Spacer()
                 Text("Hide removes the sighting from every public surface.").font(.caption).foregroundStyle(.secondary)
-            }.disabled(takedownSelection == nil || busy)
+            }.disabled(takedownSelection == nil || store.busy)
         }
     }
 
     private var sightingsView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("\(items.count) pending").font(.headline)
-                Spacer()
-                Button("Refresh") { Task { await load() } }.disabled(busy)
-            }
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            if !note.isEmpty { Text(note).font(.caption).foregroundStyle(.secondary) }
-            Table(items, selection: $selection) {
+            Text("\(store.items.count) pending").font(.headline)
+            Table(store.items, selection: $selection) {
                 TableColumn("Unit") { Text($0.unitNumber ?? "—") }
                 TableColumn("Area (geohash6)") { Text($0.geohash6).monospaced() }
                 TableColumn("Fleet confidence") { Text($0.fleetConfidence, format: .percent.precision(.fractionLength(0))) }
                 TableColumn("Captured") { Text($0.capturedAt, format: .dateTime) }
             }
             HStack {
-                Button("Approve as fleet vehicle") { Task { await decide(.approve) } }
-                    .keyboardShortcut("a", modifiers: .command)
-                Button("Reject", role: .destructive) { Task { await decide(.reject) } }
-                    .keyboardShortcut("r", modifiers: .command)
+                Button("Approve as fleet vehicle") { Task { await decide(.approve) } }.keyboardShortcut("a", modifiers: .command)
+                Button("Reject", role: .destructive) { Task { await decide(.reject) } }.keyboardShortcut("r", modifiers: .command)
                 Spacer()
                 Text("Approving publishes the sighting to the world-readable feed.").font(.caption).foregroundStyle(.secondary)
-            }.disabled(selection == nil || busy)
+            }.disabled(selection == nil || store.busy)
         }
     }
 
-    private func load() async {
-        guard let client else { error = ModerationClient.ClientError.notEnrolled.localizedDescription; return }
-        busy = true; note = "Loading from \(client.baseURL.host ?? "server")…"
-        defer { busy = false }
-        if let t = try? await client.takedowns() { takedowns = t }
-        if let a = try? await client.audit() { audit = a }
-        do { items = try await client.queue(); error = nil; note = "Loaded \(items.count) at \(Date().formatted(date: .omitted, time: .standard))" }
-        catch { self.error = error.localizedDescription; note = "" }
-    }
-
     private func resolve(hide: Bool) async {
-        guard let client, let id = takedownSelection else { return }
-        busy = true; defer { busy = false }
-        do { try await client.resolve(id, hide: hide); takedowns.removeAll { $0.id == id }; takedownSelection = nil; error = nil }
-        catch { self.error = error.localizedDescription }
+        guard let id = takedownSelection else { return }
+        if await store.resolve(id, hide: hide) { takedownSelection = nil }
     }
-
-    private func decide(_ d: ModerationClient.Decision) async {
-        guard let client, let id = selection else { return }
-        busy = true; defer { busy = false }
-        do { try await client.decide(id, d); items.removeAll { $0.id == id }; selection = nil; error = nil }
-        catch { self.error = error.localizedDescription }
+    private func decide(_ decision: ModerationClient.Decision) async {
+        guard let id = selection else { return }
+        if await store.decide(id, decision: decision) { selection = nil }
     }
 }

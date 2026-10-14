@@ -24,6 +24,7 @@ struct ConsoleView: View {
     }
 
     @ObservedObject var hub: HubController
+    @Environment(\.openWindow) private var openWindow
     @State private var selection: Pane? = .dashboard
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
@@ -42,7 +43,7 @@ struct ConsoleView: View {
                 case .dashboard: DashboardPane(hub: hub)
                 case .live: LivePane(hub: hub)
                 case .review: ReviewPane()
-                case .feeds: FeedsPane(hub: hub)
+                case .feeds: FeedsPane(hub: hub, onOpenLive: { selection = .live })
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
                 case .moderation: ModerationPane(onSignOut: { moderator = false; selection = .dashboard })
@@ -53,7 +54,13 @@ struct ConsoleView: View {
         }
         .task { moderator = await Task.detached { ModeratorAccess.isEnrolled }.value }
         .navigationTitle(selection?.rawValue ?? "PlateWatch Hub")
-        .frame(minWidth: 860, minHeight: 540)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Hub Help", systemImage: "questionmark.circle") { openWindow(id: "hub-help") }
+                    .help("Feed status, favorites, blocks and Live analysis (⌘?)")
+            }
+        }
+        .frame(minWidth: 1000, minHeight: 600)
     }
 }
 
@@ -74,8 +81,14 @@ struct DashboardPane: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Fleet activity, on this Mac").font(.largeTitle.bold())
+                    Text("On-device analysis · fleet-only evidence · counts for this session")
+                        .foregroundStyle(.secondary)
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
                     Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)")
+                    Stat(title: "Public feed frames", value: "\(hub.feedFramesAnalyzed)")
                     Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)")
                     Stat(title: "Frames skipped (busy)", value: "\(hub.framesDropped)")
                     Stat(title: "Outbox pending", value: "\(hub.pendingCount)")

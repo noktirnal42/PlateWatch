@@ -117,12 +117,21 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
       <tr><td>Recognition (real photos)</td><td><span class="tag ok">100% precision</span></td><td>On 62 licensed US photos: 0 civilian false positives, 57% automatic recall on Mac and 59% on iPhone in the initial baseline; later configurations are documented in the evaluation report. Recall is the main thing still improving. <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/EVALUATION.md">Method &amp; limits</a></td></tr>
       <tr><td>Core packages</td><td><span class="tag ok">tested</span></td><td>Package and server checks run in CI. CaptureKit: 16 tests passed in the October 14 local pass. The badge below links the current remote result.</td></tr>
       <tr><td>iOS app</td><td><span class="tag wip">pre-alpha</span></td><td>Inherited photo-import recognition; new observation detail, coarse-summary sharing, paused-retry recovery, fleet watchlist validation and alert controls, local cleanup, and painted icon. Simulator CloudKit startup trap fixed. Live camera still needs handheld field testing.</td></tr>
-      <tr><td>Reference server</td><td><span class="tag ok">builds · 41 tests</span></td><td>Ingest, moderation, exports, k-anonymous heatmap, agency report. Not yet deployed publicly.</td></tr>
+      <tr><td>Reference server</td><td><span class="tag ok">tested in CI</span></td><td>Ingest, moderation, exports, k-anonymous heatmap, agency report. Not yet deployed publicly.</td></tr>
       <tr><td>CloudKit backend</td><td><span class="tag wip">schema ready</span></td><td>Moderated two-tier design and schema written; waiting on the one-time import and production deploy.</td></tr>
-      <tr><td>CoreML models</td><td><span class="tag no">not yet</span></td><td>Optional upgrade. For now PlateWatch uses Apple’s built-in vehicle classifier plus on-device text recognition.</td></tr>
-      <tr><td>watchOS · macOS Hub · CarPlay</td><td><span class="tag wip">partial</span></td><td>App targets build in CI. Hub feed robots/terms review is merged; physical watch alerts, live transports and CarPlay remain separate verification gates.</td></tr>
+      <tr><td>CoreML models</td><td><span class="tag wip">optional detectors</span></td><td>SHA-pinned model registry and archive installation are implemented; availability and evaluation depend on the installed model. Built-in Vision remains the fallback. <a href="https://github.com/noktirnal42/PlateWatch/blob/main/models/registry.json">Model registry</a></td></tr>
+      <tr><td>macOS Hub</td><td><span class="tag ok">desktop console</span></td><td>Snapshot-feed background analysis, Open in Live overlays, favorites and reversible blocks, USA catalogue imports, moderator audit refresh and offline help. Continuous public video remains pending. <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/HUB-HANDOFF-2026-10-14.md">Verification &amp; next steps</a></td></tr>
+      <tr><td>watchOS · CarPlay</td><td><span class="tag wip">partial</span></td><td>Targets build in CI; physical watch alerts and CarPlay remain separate verification gates.</td></tr>
     </tbody>
   </table></div>
+</div></section>
+
+<section id="hub"><div class="wrap">
+  <div class="eyebrow">macOS · PlateWatch Hub</div>
+  <h2>One console for reviewed camera feeds.</h2>
+  <p class="sub">Browse, search and sort cameras. Pin favorites, block unavailable views, and open a selected snapshot in Live to inspect its analysis overlays. Background work continues outside Live. Frames stay in memory; fleet observations pass the same privacy gates.</p>
+  <figure style="margin:28px 0"><img src="assets/hub-pipeline.svg" width="1440" height="470" style="width:100%;height:auto;border-radius:20px" alt="Illustrated Hub workflow: camera catalogue, terms and robots checks, on-device analysis, fleet gate and review outbox" loading="lazy"><figcaption style="font-size:14px;color:var(--muted);margin-top:10px">Illustrated workflow, not an app screenshot. Web snapshots refresh at their source interval; continuous public-video playback remains an open milestone.</figcaption></figure>
+  <p class="sub">New imports: Oregon TripCheck, Utah UDOT GIS and New Mexico NMRoads. Existing imports: Austin, Caltrans, Washington and Iowa. Imports add metadata; new hosts remain inactive until terms review. Arizona, Nevada, Colorado and Alabama have access or verification gates described in the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/research/USA-FEEDS-2026-10-14.md">USA feed audit</a>.</p>
 </div></section>
 
 <section id="screens"><div class="wrap">
@@ -144,7 +153,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
     <span>Camera</span><b>→</b><span>Vehicle &amp; plate detect</span><b>→</b><span>OCR + multi-frame fusion</span><b>→</b><span>Fleet-confidence gate</span><b>→</b><span>Outbox</span><b>→</b><span>CloudKit / REST mirror</span><b>→</b><span>Public dataset</span>
   </div>
   <div class="grid" style="margin-top:20px">
-    <div class="card"><div class="num">ON-DEVICE</div><h3>Apple Neural Engine</h3><p>Vision text recognition today, CoreML detectors and classifiers next. No frame has to leave the phone.</p></div>
+    <div class="card"><div class="num">ON-DEVICE</div><h3>Apple Neural Engine</h3><p>Vision text recognition with optional installed CoreML detectors. Analysis stays on the device.</p></div>
     <div class="card"><div class="num">GATED</div><h3>Fleet-only ingestion</h3><p>A RedactionGate drops private-plate reads before upload; exact location is withheld until a vehicle is fleet-confirmed.</p></div>
     <div class="card"><div class="num">SOURCED</div><h3>Provenance on everything</h3><p>Enrichment — agency, unit, cost — carries a citation to a public record. No citation, no enrichment.</p></div>
     <div class="card"><div class="num">OPEN</div><h3>Portable by design</h3><p>CloudKit for Apple devices, a Vapor REST reference server for everyone else, AGPL-3.0 throughout.</p></div>
@@ -169,7 +178,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
     <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Deploy CloudKit schema</li><li>Moderator publish tool</li><li>Live-camera field test</li><li>Fleet-specific classifier (recall)</li><li>Finish field and accessibility audits</li></ul></div>
     <div class="card"><div class="num">NEXT · M2</div><h3>Identification depth</h3><ul><li>Plate detector + OCR models</li><li>Make/model/colour</li><li>Plate-design classifier</li><li>Vehicle re-ID</li></ul></div>
     <div class="card"><div class="num">THEN · M4</div><h3>Network &amp; UX</h3><ul><li>Real heatmap &amp; timeline</li><li>Agency report card in-app</li><li>Watchlist push to watchOS</li><li>CarPlay passive mode</li></ul></div>
-    <div class="card"><div class="num">NEXT · M6/M7</div><h3>Sources & records</h3><ul><li>iPhone-as-webcam + webcams (Hub)</li><li>Public traffic-cam feeds</li><li>Official rosters, photos, Brady lists</li><li>Cited cross-references</li></ul></div>
+    <div class="card"><div class="num">NEXT · M6/M7</div><h3>Sources & records</h3><ul><li>iPhone-as-webcam + webcams (Hub)</li><li>Validated continuous public-video feeds</li><li>Official rosters, photos, Brady lists</li><li>Cited cross-references</li></ul></div>
     <div class="card"><div class="num">LATER · M5</div><h3>Beyond Apple</h3><ul><li>Public REST mirror</li><li>Raspberry Pi edge agent</li><li>Android client</li><li>Web explorer</li></ul></div>
   </div>
 </div></section>

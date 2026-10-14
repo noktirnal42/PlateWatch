@@ -55,6 +55,49 @@ public enum CameraCatalogueImporters {
                 (root["exceededTransferLimit"] as? Bool) ?? false)
     }
 
+    /// UDOT's public GIS still publishes retired commuterlink.utah.gov URLs. Only its known snapshot
+    /// branch is migrated to UDOT Traffic; unrelated URLs remain untouched for normal validation.
+    public static func utahTraffic(_ data: Data, operator op: Operator) throws -> SocrataImportResult {
+        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var features = root["features"] as? [[String: Any]] else { throw ImportError.malformed("no features array") }
+        for index in features.indices {
+            guard var attributes = features[index]["attributes"] as? [String: Any],
+                  let raw = attributes["URL"] as? String, let url = URL(string: raw),
+                  ["www.commuterlink.utah.gov", "commuterlink.utah.gov"].contains(url.host?.lowercased() ?? ""),
+                  url.path.hasPrefix("/1_devices/"), url.pathExtension.lowercased() == "jpeg",
+                  !url.path.contains(".."), !url.path.contains("\\"), url.query == nil else { continue }
+            var migrated = URLComponents()
+            migrated.scheme = "https"; migrated.host = "udottraffic.utah.gov"; migrated.path = url.path
+            attributes["URL"] = migrated.url?.absoluteString
+            features[index]["attributes"] = attributes
+        }
+        root["features"] = features
+        return try arcGIS(JSONSerialization.data(withJSONObject: root),
+                          fields: .init(name: "NAME", image: "URL", id: "OBJECTID"), operator: op).result
+    }
+
+    /// NMRoads' official web app uses this keyless catalogue and HTTPS image proxy.
+    /// Only fixed, enabled cameras are imported; legacy RTMP stream fields are deliberately not treated as HLS.
+    public static func newMexicoRoads(_ data: Data, operator op: Operator) throws -> SocrataImportResult {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = root["cameraInfo"] as? [[String: Any]] else { throw ImportError.malformed("no cameraInfo array") }
+        var sources: [PublicFeedSource] = [], skipped: [SkipReason] = [], seen = Set<String>()
+        for row in rows {
+            let id = Self.string(row["name"]) ?? ""
+            guard row["enabled"] as? Bool == true, row["mobile"] as? Bool != true else {
+                skipped.append(.init(cameraID: id, reason: .notTurnedOn)); continue
+            }
+            var image = URLComponents(string: "https://servicev5.nmroads.com/RealMapWAR/GetCameraImage")!
+            image.queryItems = [.init(name: "ts", value: "0"), .init(name: "cameraName", value: id)]
+            switch build(id: id, name: Self.string(row["title"]), image: image.url?.absoluteString,
+                         lat: Self.double(row["lat"]), lon: Self.double(row["lon"]), operator: op, seen: &seen) {
+            case .success(let source): sources.append(source)
+            case .failure(let reason): skipped.append(reason)
+            }
+        }
+        return .init(sources: sources, skippedCount: skipped.count, skipReasons: skipped)
+    }
+
     // MARK: Caltrans CWWP2 (one JSON per district)
 
     public static func caltrans(_ data: Data, district: Int, operator op: Operator) throws -> SocrataImportResult {
@@ -72,6 +115,32 @@ public enum CameraCatalogueImporters {
             switch build(id: id, name: Self.string(loc["locationName"]), image: Self.string(image?["currentImageURL"]),
                          lat: Self.double(loc["latitude"]), lon: Self.double(loc["longitude"]), operator: op, seen: &seen) {
             case .success(let s): sources.append(s)
+            case .failure(let reason): skipped.append(reason)
+            }
+        }
+        return SocrataImportResult(sources: sources, skippedCount: skipped.count, skipReasons: skipped)
+    }
+
+    // MARK: Oregon TripCheck's official published inventory (JSON, despite the .js suffix)
+
+    public static func oregonTripCheck(_ data: Data, operator op: Operator) throws -> SocrataImportResult {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = root["features"] as? [[String: Any]] else { throw ImportError.malformed("no features array") }
+        var sources: [PublicFeedSource] = [], skipped: [SkipReason] = [], seen = Set<String>()
+        for feature in features {
+            let attrs = feature["attributes"] as? [String: Any] ?? [:]
+            let camera = Self.string(attrs["cameraId"]) ?? ""
+            let imageID = Self.string(attrs["publishedImageId"]) ?? ""
+            let id = camera.isEmpty || imageID.isEmpty ? "" : "\(camera)-\(imageID)"
+            guard let filename = attrs["filename"] as? String, !filename.isEmpty,
+                  !filename.contains("/"), !filename.contains("\\"), !filename.contains("..") else {
+                skipped.append(.init(cameraID: id, reason: .invalidImageURL)); continue
+            }
+            // Filename is a single component; URL appending percent-encodes spaces without changing case.
+            let image = URL(string: "https://www.tripcheck.com/RoadCams/cams/")!.appending(path: filename)
+            switch build(id: id, name: Self.string(attrs["title"]), image: image.absoluteString,
+                         lat: Self.double(attrs["latitude"]), lon: Self.double(attrs["longitude"]), operator: op, seen: &seen) {
+            case .success(let source): sources.append(source)
             case .failure(let reason): skipped.append(reason)
             }
         }

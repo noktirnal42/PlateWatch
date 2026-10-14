@@ -7,6 +7,7 @@ public actor RobotsCache {
     private let ttl: TimeInterval
     private let failureTTL: TimeInterval = 600 // 10 minutes for 5xx/network errors
     private let now: @Sendable () -> Date
+    private let publicAPIPermissions: [PublicAPIPermission]
     private let maxBodySize: Int = 500 * 1024 // 500 KiB
 
     // Cache entries
@@ -21,7 +22,8 @@ public actor RobotsCache {
 
     private struct CachedPolicy {
         let policy: RobotsPolicy
-        let isFailure: Bool // true if cached failure (disallow all)
+        let isFailure: Bool // true if cached failure (disallow all, except a scoped operator grant)
+        var serverErrorStatus: Int? = nil
     }
 
     /// Initialize the cache.
@@ -34,12 +36,14 @@ public actor RobotsCache {
         session: URLSession,
         userAgent: String,
         ttl: TimeInterval = 86_400,
+        publicAPIPermissions: [PublicAPIPermission] = [],
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.session = session
         self.userAgent = userAgent
         self.ttl = ttl
         self.now = now
+        self.publicAPIPermissions = publicAPIPermissions
     }
 
     /// Check if a URL is allowed per robots.txt.
@@ -55,14 +59,14 @@ public actor RobotsCache {
 
         // Check cache
         if let entry = cache[cacheKey], entry.expiresAt > currentTime {
-            return entry.policy.policy.isAllowed(path: pathAndQuery(from: url))
+            return permission(entry.policy, for: url)
         }
 
         // Check for in-flight fetch
         if let task = inFlight[cacheKey] {
             do {
                 let result = try await task.value
-                return result.policy.isAllowed(path: pathAndQuery(from: url))
+                return permission(result, for: url)
             } catch {
                 // Task failed, treat as disallow
                 return false
@@ -85,11 +89,17 @@ public actor RobotsCache {
 
                 // Cap body size
                 let bodyData = data.count > maxBodySize ? data.prefix(maxBodySize) : data
-                let body = String(data: bodyData, encoding: .utf8) ?? ""
+                let body = (String(data: bodyData, encoding: .utf8) ?? "").replacingOccurrences(of: "\u{FEFF}", with: "")
 
                 switch statusCode {
                 case 200..<300:
-                    // Parse robots.txt
+                    // Some SPA/parked hosts return their HTML homepage with 200 for every path.
+                    // That is not a successful robots policy fetch; retry later instead of silently allowing it.
+                    let mime = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+                    guard !mime.contains("text/html"),
+                          !body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") else {
+                        throw URLError(.cannotParseResponse)
+                    }
                     let policy = RobotsPolicy(parsing: body, userAgent: userAgent)
                     return CachedPolicy(policy: policy, isFailure: false)
                 case 403 where Self.isObjectStoreMissingKey(httpResponse, body: body):
@@ -106,8 +116,10 @@ public actor RobotsCache {
                 case 400..<500:
                     // Other 4xx (404 and friends): no robots.txt, allow all
                     return CachedPolicy(policy: .allowAll, isFailure: false)
+                case 500...599:
+                    // Cache the HTTP status so a cited, origin/path-scoped operator grant can be evaluated per URL.
+                    return CachedPolicy(policy: .disallowAll, isFailure: true, serverErrorStatus: statusCode)
                 default:
-                    // 5xx and other errors: disallow all
                     throw URLError(.badServerResponse)
                 }
             } catch {
@@ -123,7 +135,7 @@ public actor RobotsCache {
             let expiresAt = now().addingTimeInterval(result.isFailure ? failureTTL : ttl)
             cache[cacheKey] = CacheEntry(policy: result, expiresAt: expiresAt)
             inFlight[cacheKey] = nil
-            return result.policy.isAllowed(path: pathAndQuery(from: url))
+            return permission(result, for: url)
         } catch {
             // Cache failure for 10 minutes
             let failurePolicy = CachedPolicy(policy: .disallowAll, isFailure: true)
@@ -132,6 +144,12 @@ public actor RobotsCache {
             inFlight[cacheKey] = nil
             return false
         }
+    }
+
+    private func permission(_ cached: CachedPolicy, for url: URL) -> Bool {
+        if cached.policy.isAllowed(path: pathAndQuery(from: url)) { return true }
+        guard let code = cached.serverErrorStatus else { return false }
+        return publicAPIPermissions.contains { $0.allows(url, robotsHTTPStatus: code) }
     }
 
     static func isObjectStoreMissingKey(_ response: HTTPURLResponse, body: String) -> Bool {
