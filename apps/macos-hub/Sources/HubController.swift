@@ -131,6 +131,36 @@ final class HubController: ObservableObject {
         }
     }
 
+    /// Returns a summary of feed hosts from `feeds.json` for the review UI.
+    /// Returns empty array if file is missing or corrupt.
+    func feedHosts() -> [FeedHostSummary] {
+        guard let catalogue = try? FeedCatalogue.load(from: feedsFile) else { return [] }
+        return catalogue.hosts()
+    }
+
+    /// Confirms terms for all cameras on a host.
+    /// Loads the catalogue, applies the confirmation, writes it back, and restarts feeds.
+    func confirmFeedTerms(host: String, licenseClass: FeedTerms.LicenseClass, termsURL: URL, attribution: String) throws {
+        // A catalogue that cannot be read must surface as an error, not as a silent no-op the person takes for success.
+        let catalogue = try FeedCatalogue.load(from: feedsFile)
+        let updated = try catalogue.confirmingTerms(
+            forHost: host,
+            licenseClass: licenseClass,
+            termsURL: termsURL,
+            attribution: attribution,
+            now: Date()
+        )
+        try updated.write(to: feedsFile)
+        startFeeds()
+    }
+
+    /// Revokes terms confirmation for all cameras on a host.
+    func revokeFeedTerms(host: String) throws {
+        let catalogue = try FeedCatalogue.load(from: feedsFile)
+        try catalogue.revokingConfirmation(forHost: host).write(to: feedsFile)
+        startFeeds()
+    }
+
     /// One frame from a public feed. Everything is decided from *that source*: its catalogued position (identity hint
     /// and the plate-recognition jurisdiction gate), and the frame's real size (analysis tier). The frame lives in
     /// memory only.
