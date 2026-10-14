@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PlateWatch — open accountability infrastructure for public fleets & officials</title>
 <meta name="description" content="PlateWatch is open, on-device accountability infrastructure: it documents publicly funded fleets and cross-references the public record about the officials who run them. Private citizens are out of scope by design. Pre-alpha.">
-<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="icon" href="assets/app-icon.png" type="image/png">
+<meta property="og:image" content="https://noktirnal42.github.io/PlateWatch/assets/app-icon.png">
 <meta property="og:title" content="PlateWatch">
 <meta property="og:description" content="Open-source ALPR for public accountability — taxpayer-funded vehicles only, on-device, public records only.">
 <style>
@@ -74,6 +75,10 @@ pre{background:var(--code);border:1px solid var(--line);border-radius:12px;paddi
 .roadmap{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
 .roadmap .card ul{margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:14px}
 .roadmap .card li{margin:3px 0}
+.screens{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.screens figure{margin:0}.screens img{display:block;width:100%;height:auto;border-radius:20px;border:1px solid var(--line);box-shadow:0 12px 30px #0001}
+.screens figcaption{font-weight:600;font-size:14px;text-align:center;margin-top:12px}
+@media(max-width:700px){.screens{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}
 footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--muted);font-size:14px}
 footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
 :focus-visible{outline:3px solid var(--amber);outline-offset:3px;border-radius:6px}
@@ -82,9 +87,9 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
 </head>
 <body>
 <header class="nav"><div class="wrap">
-  <a class="brand" href="#top"><img src="logo.svg" alt="" width="30" height="30">PlateWatch</a>
+  <a class="brand" href="#top"><img src="assets/app-icon.png" alt="" width="30" height="30">PlateWatch</a>
   <nav aria-label="Primary">
-    <a href="#status">Status</a><a class="opt" href="#how">How it works</a><a class="opt" href="#rules">Principles</a><a href="#roadmap">Roadmap</a>
+    <a href="#status">Status</a><a class="opt" href="#screens">Screens</a><a class="opt" href="#how">How it works</a><a class="opt" href="#rules">Principles</a><a href="#roadmap">Roadmap</a>
     <a href="https://github.com/noktirnal42/PlateWatch">GitHub</a>
   </nav>
 </div></header>
@@ -94,7 +99,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
   <div class="hero">
     <span class="pill"><i></i>Pre-alpha · building in the open</span>
     <h1>Watch the <em>public fleet</em>.<br>Watch the <em>record</em>.</h1>
-    <p class="lede">PlateWatch is open accountability infrastructure. On-device recognition documents publicly funded vehicles — police, fire, transit, public works, federal fleets — from your phone today (webcams and public traffic cameras are planned); the plan is for cited public records (rosters, FOIA releases, Brady lists, court dockets) to connect those vehicles to the officials who run them — that records program has not started. Public officials are not shielded from public scrutiny. Private citizens are out of scope by design.</p>
+    <p class="lede">PlateWatch is open accountability infrastructure. On-device recognition documents publicly funded vehicles — police, fire, transit, public works, federal fleets — from your phone today (Hub folder drops and reviewed snapshot feeds extend the source pipeline); the plan is for cited public records (rosters, FOIA releases, Brady lists, court dockets) to connect those vehicles to the officials who run them — that records program has not started. Public officials are not shielded from public scrutiny. Private citizens are out of scope by design.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/noktirnal42/PlateWatch">View on GitHub</a>
       <a class="btn" href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">Read the latest QA report</a>
@@ -105,19 +110,31 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
 
 <section id="status"><div class="wrap">
   <h2>Where the project stands</h2>
-  <p class="sub">Honest status, updated from the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/QA-REPORT.md">2026-10-13 QA pass</a> on a physical iPhone and the simulator. The foundations are tested; the live-camera loop still needs field testing.</p>
+  <p class="sub">Updated October 14, 2026. The <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/IOS-UI-HANDOFF.md">iOS review and visual handoff</a> separates shipped UI from pilot blockers. Historical recognition results come from the October 13 photo corpus; this UI pass does not remeasure accuracy.</p>
   <div class="scroll"><table>
     <thead><tr><th>Area</th><th>State</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr><td>Recognition (real photos)</td><td><span class="tag ok">100% precision</span></td><td>On 62 licensed US photos: 0 civilian false positives, 57% fully-automatic recall, 76% with a human confirmation step — identical on a real iPhone. Recall is the main thing still improving. <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/EVALUATION.md">Method &amp; limits</a></td></tr>
-      <tr><td>Core packages</td><td><span class="tag ok">tested</span></td><td>PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters — 155 tests across packages and server.</td></tr>
-      <tr><td>iOS app</td><td><span class="tag wip">pre-alpha</span></td><td>Photo import → recognise → record works on simulator and iPhone, with onboarding, map and review flow. Live-camera field testing and a full visual redesign are still to do.</td></tr>
+      <tr><td>Recognition (real photos)</td><td><span class="tag ok">100% precision</span></td><td>On 62 licensed US photos: 0 civilian false positives, 57% automatic recall on Mac and 59% on iPhone in the initial baseline; later configurations are documented in the evaluation report. Recall is the main thing still improving. <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/EVALUATION.md">Method &amp; limits</a></td></tr>
+      <tr><td>Core packages</td><td><span class="tag ok">tested</span></td><td>Package and server checks run in CI. CaptureKit: 16 tests passed in the October 14 local pass. The badge below links the current remote result.</td></tr>
+      <tr><td>iOS app</td><td><span class="tag wip">pre-alpha</span></td><td>Inherited photo-import recognition; new observation detail, coarse-summary sharing, paused-retry recovery, fleet watchlist validation and alert controls, local cleanup, and painted icon. Simulator CloudKit startup trap fixed. Live camera still needs handheld field testing.</td></tr>
       <tr><td>Reference server</td><td><span class="tag ok">builds · 41 tests</span></td><td>Ingest, moderation, exports, k-anonymous heatmap, agency report. Not yet deployed publicly.</td></tr>
       <tr><td>CloudKit backend</td><td><span class="tag wip">schema ready</span></td><td>Moderated two-tier design and schema written; waiting on the one-time import and production deploy.</td></tr>
       <tr><td>CoreML models</td><td><span class="tag no">not yet</span></td><td>Optional upgrade. For now PlateWatch uses Apple’s built-in vehicle classifier plus on-device text recognition.</td></tr>
-      <tr><td>watchOS · macOS Hub · CarPlay</td><td><span class="tag wip">unverified</span></td><td>Code present; not exercised in the latest pass. CarPlay needs Apple’s entitlement.</td></tr>
+      <tr><td>watchOS · macOS Hub · CarPlay</td><td><span class="tag wip">partial</span></td><td>App targets build in CI. Hub feed robots/terms review is merged; physical watch alerts, live transports and CarPlay remain separate verification gates.</td></tr>
     </tbody>
   </table></div>
+</div></section>
+
+<section id="screens"><div class="wrap">
+  <h2>A clearer review workflow</h2>
+  <p class="sub">Actual simulator screenshots of the October 14 build. The amber banner identifies synthetic, local preview data: these screens demonstrate the UI, not recognition accuracy, camera behavior or backend publication.</p>
+  <div class="screens">
+    <figure><img src="screenshots/ios-sightings.png" alt="PlateWatch Sightings outbox with two synthetic fleet observations, including paused delivery retries" loading="lazy"><figcaption>Review the queue</figcaption></figure>
+    <figure><img src="screenshots/ios-observation.png" alt="Queued observation detail with coarse area, evidence score and summary sharing" loading="lazy"><figcaption>Inspect the observation</figcaption></figure>
+    <figure><img src="screenshots/ios-watchlist.png" alt="Local fleet watchlist with validation, public-fleet attestation and notification controls" loading="lazy"><figcaption>Watch known fleet plates</figcaption></figure>
+    <figure><img src="screenshots/ios-about.png" alt="About PlateWatch with on-device analysis information and local queue and watchlist cleanup" loading="lazy"><figcaption>Understand and control your data</figcaption></figure>
+  </div>
+  <p class="sub" style="margin-top:24px"><a href="https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml"><img src="https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml/badge.svg" alt="Current GitHub CI status"></a> · <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/IOS-UI-HANDOFF.md">Verification, limitations and next steps</a></p>
 </div></section>
 
 <section id="how"><div class="wrap">
@@ -149,7 +166,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between}
   <h2>Roadmap</h2>
   <p class="sub">Current focus is <b>M-Alpha</b>: make the core loop work end to end. Full list in the <a href="https://github.com/noktirnal42/PlateWatch/blob/main/docs/ROADMAP.md">roadmap</a>.</p>
   <div class="roadmap">
-    <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Deploy CloudKit schema</li><li>Moderator publish tool</li><li>Live-camera field test</li><li>Fleet-specific classifier (recall)</li><li>Visual redesign</li></ul></div>
+    <div class="card"><div class="num">NOW · M-ALPHA</div><h3>Make it work</h3><ul><li>Deploy CloudKit schema</li><li>Moderator publish tool</li><li>Live-camera field test</li><li>Fleet-specific classifier (recall)</li><li>Finish field and accessibility audits</li></ul></div>
     <div class="card"><div class="num">NEXT · M2</div><h3>Identification depth</h3><ul><li>Plate detector + OCR models</li><li>Make/model/colour</li><li>Plate-design classifier</li><li>Vehicle re-ID</li></ul></div>
     <div class="card"><div class="num">THEN · M4</div><h3>Network &amp; UX</h3><ul><li>Real heatmap &amp; timeline</li><li>Agency report card in-app</li><li>Watchlist push to watchOS</li><li>CarPlay passive mode</li></ul></div>
     <div class="card"><div class="num">NEXT · M6/M7</div><h3>Sources & records</h3><ul><li>iPhone-as-webcam + webcams (Hub)</li><li>Public traffic-cam feeds</li><li>Official rosters, photos, Brady lists</li><li>Cited cross-references</li></ul></div>

@@ -49,6 +49,22 @@ jobs:
       - name: Build watchOS app (simulator, unsigned)
         run: xcodebuild -project apps/watchos/PlateWatchWatch.xcodeproj -scheme PlateWatchWatch -destination 'generic/platform=watchOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
 
+  ios-review:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate iOS project
+        run: |
+          brew install xcodegen
+          cp apps/ios/project.local.example.yml apps/ios/project.local.yml
+          (cd apps/ios && xcodegen)
+      - name: Test iOS review and isolated preview flows
+        run: |
+          xcodebuild -project apps/ios/PlateWatch.xcodeproj -scheme PlateWatch \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=latest' \
+            -parallel-testing-enabled NO -collect-test-diagnostics never \
+            CODE_SIGNING_ALLOWED=NO test
+
   eval-harness:
     runs-on: macos-26
     steps:

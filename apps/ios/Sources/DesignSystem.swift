@@ -7,6 +7,7 @@ enum PWStyle {
     /// Accent for fleet-classified detections. Matches the overlay border.
     static let fleet = Color("PWAmber")
     static let ink = Color("PWInk")
+    static let fleetText = Color("PWFleetText")
     static let queued = Color.orange
     static let synced = Color.green
     static let failing = Color.red
@@ -46,7 +47,7 @@ struct PrivacyChip: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.ultraThinMaterial, in: .capsule)
-            .accessibilityHint("Frames are analyzed on this device. Only fleet-confirmed records can sync.")
+            .accessibilityHint("Frames are analyzed on this device. Only fleet-scoped structured observations enter the moderation queue.")
     }
 }
 
@@ -59,8 +60,10 @@ struct SyncStatusPill: View {
             return ("Queued", PWStyle.queued, "clock")
         } else if retryCount < 5 {
             return ("Retrying · \(retryCount)", PWStyle.queued, "arrow.triangle.2.circlepath")
-        } else {
+        } else if retryCount < 8 {
             return ("Needs attention", PWStyle.failing, "exclamationmark.triangle.fill")
+        } else {
+            return ("Retries paused", PWStyle.failing, "pause.circle.fill")
         }
     }
 
@@ -108,6 +111,27 @@ struct PWEmptyState: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 36)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Editorial header used across data screens; native lists carry the actions.
+struct PWSectionIntro: View {
+    let eyebrow: String
+    let title: String
+    let message: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(eyebrow, systemImage: systemImage)
+                .font(.caption.weight(.bold)).tracking(1.5)
+                .foregroundStyle(PWStyle.fleetText)
+            Text(title).font(.title2.weight(.bold))
+            Text(message).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
     }
 }

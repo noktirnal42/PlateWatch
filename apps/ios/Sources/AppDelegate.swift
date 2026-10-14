@@ -9,7 +9,7 @@ import UserNotifications
 /// match mirrored watchlist plates, and post a local notification for hits.
 /// The watch mirrors its own copy via UserDefaults for its haptic path.
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    private let backend = SyncBackends.makeDefault()
+    private let backend = AppSyncConfiguration.makeBackend()
     private let notificationDelegate = ForegroundPresenter()
 
     func application(_ application: UIApplication,
@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     @MainActor
     private func evaluateNewest() async -> Bool {
+        guard !PreviewFixtures.isEnabled else { return false }
         guard let delta = try? await backend.pullSightings(since: nil) else { return false }
         let plates = Set(UserDefaults.standard.stringArray(forKey: "watchlistPlates") ?? [])
         guard !plates.isEmpty else { return false }
@@ -66,6 +67,7 @@ private func matchesWatchlist(_ sighting: PublicSightingDTO, plates: Set<String>
 /// Asks for notification permission once, at the moment it is useful.
 enum NotificationPermission {
     static func requestIfNeeded() {
+        guard !PreviewFixtures.isEnabled else { return }
         Task {
             let center = UNUserNotificationCenter.current()
             let settings = await center.notificationSettings()
