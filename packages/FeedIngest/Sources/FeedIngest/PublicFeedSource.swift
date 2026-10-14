@@ -19,6 +19,26 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
     public var citation: SourceCitation
     /// Optional honoring note, e.g. "Caltrans public feed, 5 s cadence".
     public var termsNote: String
+    /// Recorded terms (docs/FEED-SOURCES.md §5). Defaults to "unknown, not allowed".
+    public var terms: FeedTerms
+    /// Native image long side in pixels, when the catalogue states it (picks the analysis tier).
+    public var nativeLongSide: Int?
+    public var locationConfidence: LocationConfidence
+
+    /// A source may be analysed only after a human confirmed its terms: terms page + date recorded,
+    /// `automatedUseAllowed` set, and a licence class that is not `askFirst`/`unknown`.
+    public var mayBeAnalysed: Bool {
+        terms.automatedUseAllowed && terms.termsURL != nil && terms.termsReadOn != nil
+            && terms.licenseClass != .askFirst && terms.licenseClass != .unknown
+    }
+
+    /// Identity inference needs a trustworthy camera position.
+    public var mayResolveIdentity: Bool { locationConfidence != .unknown }
+
+    /// The tier for a received frame: its actual size wins over the catalogue's claim.
+    public func analysisTier(frameLongSide: Int?) -> AnalysisTier {
+        AnalysisTier.tier(forLongSide: frameLongSide ?? nativeLongSide ?? 0)
+    }
 
     public enum Kind: String, Sendable, Codable {
         /// A JPEG endpoint that serves the current frame per request
@@ -47,7 +67,10 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
                 refreshInterval: TimeInterval,
                 geohash6: String,
                 citation: SourceCitation,
-                termsNote: String = "") throws {
+                termsNote: String = "",
+                terms: FeedTerms = .unknown,
+                nativeLongSide: Int? = nil,
+                locationConfidence: LocationConfidence = .approximate) throws {
         guard refreshInterval >= Self.minimumRefreshInterval else {
             throw CreationError.refreshIntervalTooAggressive
         }
@@ -62,5 +85,28 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
         self.geohash6 = geohash6
         self.citation = citation
         self.termsNote = termsNote
+        self.terms = terms
+        self.nativeLongSide = nativeLongSide
+        self.locationConfidence = locationConfidence
+    }
+
+    // Older saved catalogues have none of the newer keys: decode them with safe defaults.
+    private enum CodingKeys: String, CodingKey {
+        case id, name, url, kind, refreshInterval, geohash6, citation, termsNote, terms, nativeLongSide, locationConfidence
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        url = try c.decode(URL.self, forKey: .url)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        refreshInterval = try c.decode(TimeInterval.self, forKey: .refreshInterval)
+        geohash6 = try c.decode(String.self, forKey: .geohash6)
+        citation = try c.decode(SourceCitation.self, forKey: .citation)
+        termsNote = try c.decodeIfPresent(String.self, forKey: .termsNote) ?? ""
+        terms = try c.decodeIfPresent(FeedTerms.self, forKey: .terms) ?? .unknown
+        nativeLongSide = try c.decodeIfPresent(Int.self, forKey: .nativeLongSide)
+        locationConfidence = try c.decodeIfPresent(LocationConfidence.self, forKey: .locationConfidence) ?? .approximate
     }
 }

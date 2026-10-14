@@ -25,6 +25,10 @@ final class HubController: ObservableObject {
     @Published private(set) var rtspStreams: [String: RTSPStreamStatus] = [:]
 
     private let pipeline = PlateAnalysisPipeline()
+    /// Detector models (plate / vehicle) hot-swap in here as they install; empty = baseline Vision.
+    private let contextBox = AnalysisContextBox()
+    private let modelManager: ModelManager
+    @Published private(set) var modelStatus = "baseline vision"
     private let fileSource = FileFrameSource()
     private let gate = RedactionGate(config: .standard)
     private var watchDescriptor: DispatchSourceFileSystemObject?
@@ -49,9 +53,25 @@ final class HubController: ObservableObject {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
         self.modelContext = context
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appending(path: "PlateWatchHub/Models", directoryHint: .isDirectory)
+        self.modelManager = ModelManager(config: .init(
+            registryURL: URL(string: "https://raw.githubusercontent.com/noktirnal42/PlateWatch/main/models/registry.json")!,
+            cacheDirectory: support))
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
+        Task { await refreshModels() }
         processNewFiles()   // pick up anything dropped while the Hub was not running
+    }
+
+    /// Installs the detector models (registry, or a developer override `Local/<task>.mlmodel`). Best-effort:
+    /// failure leaves baseline Vision active.
+    func refreshModels() async {
+        let box = contextBox, manager = modelManager
+        let count = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
+        }.value
+        modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
     }
 
     func attach(context: ModelContext) {
@@ -146,6 +166,7 @@ final class HubController: ObservableObject {
         let handler = RTSPStreamHandler(
             url: url,
             pipeline: pipeline,
+            contextBox: contextBox,
             gate: gate,
             homeGeohash6: homeGeohash6,
             modelContext: modelContext)
@@ -256,7 +277,7 @@ final class HubController: ObservableObject {
             return
         }
         do {
-            let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: AnalysisContext(models: [:]))
+            let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: frameContext(contextBox, for: buffer))
             framesAnalyzed += 1
             let hits = recordFleetHits(in: frame)
             sendHTTPResponse(on: connection, status: 200,
@@ -333,7 +354,7 @@ final class HubController: ObservableObject {
                 guard let buffer = FileFrameSource.pixelBuffer(from: url) else { continue }
                 let frame = try? await pipeline.analyze(
                     .init(pixelBuffer: buffer),
-                    context: AnalysisContext(models: [:]))
+                    context: frameContext(contextBox, for: buffer))
                 filesProcessed += 1
                 framesAnalyzed = filesProcessed
                 guard let frame else {
@@ -350,6 +371,15 @@ final class HubController: ObservableObject {
 
     private var inFlight = Set<String>()
     private var filesProcessed = 0
+}
+
+/// The analysis context for one frame: the shared models plus the thorough text path only where the frame has
+/// enough pixels to read lettering (docs/FEED-SOURCES.md §1 — recall collapses below ~480 px).
+func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer) -> AnalysisContext {
+    var context = box.current
+    let longSide = max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))
+    context.thorough = AnalysisTier.tier(forLongSide: longSide).thorough
+    return context
 }
 
 /// Status of an RTSP stream
@@ -372,6 +402,7 @@ public struct RTSPStreamStatus: Sendable {
 final class RTSPStreamHandler: @unchecked Sendable {
     private let url: String
     private let pipeline: PlateAnalysisPipeline
+    private let contextBox: AnalysisContextBox
     private let gate: RedactionGate
     private let homeGeohash6: String
     private let modelContext: ModelContext?
@@ -384,9 +415,11 @@ final class RTSPStreamHandler: @unchecked Sendable {
     var statusUpdate: ((RTSPStreamStatus) -> Void)?
     var onFleetHit: ((DetectionFrame) -> Void)?
     
-    init(url: String, pipeline: PlateAnalysisPipeline, gate: RedactionGate, homeGeohash6: String, modelContext: ModelContext?) {
+    init(url: String, pipeline: PlateAnalysisPipeline, contextBox: AnalysisContextBox, gate: RedactionGate,
+         homeGeohash6: String, modelContext: ModelContext?) {
         self.url = url
         self.pipeline = pipeline
+        self.contextBox = contextBox
         self.gate = gate
         self.homeGeohash6 = homeGeohash6
         self.modelContext = modelContext
@@ -524,7 +557,7 @@ final class RTSPStreamHandler: @unchecked Sendable {
                         do {
                             let frame = try await pipeline.analyze(
                                 FramePacketLike(pixelBuffer: packet.pixelBuffer),
-                                context: AnalysisContext(models: [:]))
+                                context: frameContext(contextBox, for: packet.pixelBuffer))
                             
                             await MainActor.run {
                                 self.handleFrame(frame, timestamp: timestamp)

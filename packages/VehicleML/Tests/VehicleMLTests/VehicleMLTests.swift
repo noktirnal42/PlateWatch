@@ -108,3 +108,54 @@ final class RegistryPlaceholderTests: XCTestCase {
         XCTAssertNil(onlyPlaceholder.latest(forTask: "plate-ocr"))
     }
 }
+
+// MARK: - Model artifacts and developer overrides
+
+final class ModelArtifactTests: XCTestCase {
+
+    private func entry(url: String, format: String? = nil) -> ModelRegistryEntry {
+        ModelRegistryEntry(name: "plate-detector-createml", task: "plate-detection", version: "0.2.0",
+                           url: URL(string: url)!, sha256: String(repeating: "a", count: 64),
+                           license: "CC BY 2.0 data", inputDescription: "IMAGE", format: format)
+    }
+
+    /// CoreML compiles by extension; the old temp name ("<name>.download") could never compile.
+    func testArtifactExtensionFollowsFormatThenURL() {
+        XCTAssertEqual(entry(url: "https://x/m.mlmodel").artifactExtension, "mlmodel")
+        XCTAssertEqual(entry(url: "https://x/m.mlpackage").artifactExtension, "mlpackage")
+        XCTAssertEqual(entry(url: "https://x/m.zip", format: "mlmodel").artifactExtension, "mlmodel")
+        XCTAssertEqual(entry(url: "https://x/m.mlmodel", format: "mlpackage").artifactExtension, "mlpackage")
+        XCTAssertEqual(entry(url: "https://x/download?id=3").artifactExtension, "mlmodel", "unknown → single file")
+    }
+
+    func testRegistryEntryWithoutFormatStillDecodes() throws {
+        let json = """
+        {"schemaVersion":1,"entries":[{"name":"n","task":"plate-detection","version":"0.1.0",
+        "url":"https://x/n.mlpackage","sha256":"\(String(repeating: "b", count: 64))","license":"MIT","inputDescription":"IMAGE"}]}
+        """
+        let reg = try JSONDecoder().decode(ModelRegistry.self, from: Data(json.utf8))
+        XCTAssertNil(reg.entries[0].format)
+        XCTAssertEqual(reg.entries[0].artifactExtension, "mlpackage")
+    }
+
+    func testLocalOverridePrefersCompiledThenPackageThenFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pw-local-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertNil(ModelManager.localModelURL(forTask: "plate-detection", in: dir))
+        func touch(_ name: String) { FileManager.default.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data()) }
+        touch("plate-detection.mlmodel")
+        XCTAssertEqual(ModelManager.localModelURL(forTask: "plate-detection", in: dir)?.lastPathComponent, "plate-detection.mlmodel")
+        touch("plate-detection.mlpackage")
+        XCTAssertEqual(ModelManager.localModelURL(forTask: "plate-detection", in: dir)?.lastPathComponent, "plate-detection.mlpackage")
+        touch("plate-detection.mlmodelc")
+        XCTAssertEqual(ModelManager.localModelURL(forTask: "plate-detection", in: dir)?.lastPathComponent, "plate-detection.mlmodelc")
+        XCTAssertNil(ModelManager.localModelURL(forTask: "vehicle-detection", in: dir), "per-task, never another task's file")
+    }
+
+    func testDefaultLocalDirectoryIsUnderTheCache() {
+        let cfg = ModelManager.Config(registryURL: URL(string: "https://x/r.json")!,
+                                      cacheDirectory: URL(fileURLWithPath: "/tmp/cache"))
+        XCTAssertEqual(cfg.localModelsDirectory.path, "/tmp/cache/Local")
+    }
+}

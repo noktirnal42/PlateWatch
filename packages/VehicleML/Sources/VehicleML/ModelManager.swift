@@ -15,10 +15,15 @@ public actor ModelManager {
         public var registryURL: URL
         /// Local cache root (app group container in production).
         public var cacheDirectory: URL
+        /// Developer override: a model dropped here as `<task>.mlmodel` / `<task>.mlpackage` / `<task>.mlmodelc`
+        /// (e.g. `plate-detection.mlmodel`) is used instead of the registry's. Lets a freshly trained model be tried
+        /// on a device or the Hub with no release. Defaults to `<cacheDirectory>/Local`.
+        public var localModelsDirectory: URL
 
-        public init(registryURL: URL, cacheDirectory: URL) {
+        public init(registryURL: URL, cacheDirectory: URL, localModelsDirectory: URL? = nil) {
             self.registryURL = registryURL
             self.cacheDirectory = cacheDirectory
+            self.localModelsDirectory = localModelsDirectory ?? cacheDirectory.appendingPathComponent("Local", isDirectory: true)
         }
     }
 
@@ -48,6 +53,9 @@ public actor ModelManager {
     /// `MLModel` is documented thread-safe but is itself non-Sendable, and
     /// raw returns across actor isolation don't compile under Swift 6.
     public func model(forTask task: String, registry: ModelRegistry) async throws -> CompiledModel {
+        if let local = Self.localModelURL(forTask: task, in: config.localModelsDirectory) {
+            return CompiledModel(try await loadLocal(local, task: task))
+        }
         guard let entry = registry.latest(forTask: task) else {
             throw AnalysisError.modelMissing(task: task)
         }
@@ -64,8 +72,41 @@ public actor ModelManager {
         return CompiledModel(model)
     }
 
+    /// The developer-override file for `task`, if any. Preference: compiled > package > single file.
+    static func localModelURL(forTask task: String, in directory: URL) -> URL? {
+        for ext in ["mlmodelc", "mlpackage", "mlmodel"] {
+            let url = directory.appendingPathComponent("\(task).\(ext)")
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        return nil
+    }
+
+    /// Loads a local override, compiling `.mlmodel`/`.mlpackage` once per file modification time.
+    private func loadLocal(_ url: URL, task: String) async throws -> MLModel {
+        let fm = FileManager.default
+        let mtime = Int(((try? fm.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date)?.timeIntervalSince1970 ?? 0)
+        let key = "local:\(task):\(mtime)"
+        if let cached = loaded[key] { return cached }
+        let model: MLModel
+        if url.pathExtension == "mlmodelc" {
+            model = try MLModel(contentsOf: url)
+        } else {
+            let compiledURL = config.cacheDirectory.appendingPathComponent("local-\(task).\(mtime).mlmodelc")
+            if !fm.fileExists(atPath: compiledURL.path) {
+                try fm.createDirectory(at: config.cacheDirectory, withIntermediateDirectories: true)
+                let compiled = try await MLModel.compileModel(at: url)
+                try fm.moveItem(at: compiled, to: compiledURL)
+            }
+            model = try MLModel(contentsOf: compiledURL)
+        }
+        loaded[key] = model
+        states[task] = .installed(version: "local")
+        return model
+    }
+
     private func downloadAndCompile(entry: ModelRegistryEntry, to compiledURL: URL) async throws {
-        let tmpZip = config.cacheDirectory.appendingPathComponent("\(entry.name).download")
+        // CoreML compiles by file extension, so the temporary artifact must carry the right one.
+        let tmpZip = config.cacheDirectory.appendingPathComponent("\(entry.name).\(entry.artifactExtension)")
         let (fileURL, response) = try await session.download(from: entry.url)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw ManagerError.downloadFailed(entry.url)

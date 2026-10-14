@@ -19,10 +19,13 @@ public struct ModelRegistryEntry: Sendable, Codable, Hashable {
     public let inputDescription: String
     /// Minimum OS for this model (ANE features vary).
     public let minimumOS: String?
+    /// Artifact format: "mlmodel" (one file, e.g. a Create ML export) or "mlpackage". Optional: when absent
+    /// it is taken from the URL's extension.
+    public let format: String?
 
     public init(name: String, task: String, version: String, url: URL, sha256: String,
                 sourceURL: URL? = nil, license: String, inputDescription: String,
-                minimumOS: String? = nil) {
+                minimumOS: String? = nil, format: String? = nil) {
         self.name = name
         self.task = task
         self.version = version
@@ -32,6 +35,17 @@ public struct ModelRegistryEntry: Sendable, Codable, Hashable {
         self.license = license
         self.inputDescription = inputDescription
         self.minimumOS = minimumOS
+        self.format = format
+    }
+
+    /// File extension the downloaded artifact must carry so CoreML can compile it. A single-file `.mlmodel`
+    /// (Create ML export) works with `MLModel.compileModel` directly; a `.mlpackage` directory cannot be
+    /// downloaded as one file and needs archive extraction (not implemented yet).
+    public var artifactExtension: String {
+        let explicit = format?.lowercased()
+        if explicit == "mlmodel" || explicit == "mlpackage" { return explicit! }
+        let ext = url.pathExtension.lowercased()
+        return (ext == "mlmodel" || ext == "mlpackage") ? ext : "mlmodel"
     }
 }
 
