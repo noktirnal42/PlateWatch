@@ -34,6 +34,7 @@ public struct SkipReason: Sendable, Equatable, Hashable {
         case invalidCoordinates = "invalid_coordinates"
         case zeroCoordinates = "zero_coordinates"
         case duplicateCameraID = "duplicate_camera_id"
+        case missingCameraID = "missing_camera_id"
         case refreshIntervalTooAggressive = "refresh_interval_too_aggressive"
     }
 }
@@ -49,13 +50,15 @@ public struct SocrataCameraCatalogue: Sendable {
     ///   - datasetURL: The URL of the Socrata dataset (used for citations and stable IDs).
     ///   - refreshInterval: Polling interval in seconds (must be ≥ 1 second).
     ///   - retrievedAt: When the dataset was retrieved (for citation).
+    ///   - attribution: Credit line for the operator of the portal (Austin by default; set it for other portals).
     /// - Returns: An `SocrataImportResult` containing the imported sources and skip information.
     /// - Throws: If the JSON is malformed or not an array.
     public static func sources(
         fromJSON data: Data,
         datasetURL: URL,
         refreshInterval: TimeInterval = 60,
-        retrievedAt: Date = Date()
+        retrievedAt: Date = Date(),
+        attribution: String = "City of Austin"
     ) throws -> SocrataImportResult {
         let json = try JSONSerialization.jsonObject(with: data)
         guard let records = json as? [[String: Any]] else {
@@ -76,12 +79,13 @@ public struct SocrataCameraCatalogue: Sendable {
             licenseClass: .publicDomain,
             termsURL: nil,
             termsReadOn: nil,
-            attribution: "City of Austin",
+            attribution: attribution,
             automatedUseAllowed: false
         )
 
         for record in records {
-            guard let cameraID = record["camera_id"] as? String else {
+            guard let cameraID = record["camera_id"] as? String, !cameraID.isEmpty else {
+                skipReasons.append(SkipReason(cameraID: "(missing)", reason: .missingCameraID))
                 continue
             }
 
@@ -138,7 +142,8 @@ public struct SocrataCameraCatalogue: Sendable {
 
             let geohash6 = Geohash.encode(latitude: latitude, longitude: longitude, precision: 6)
 
-            let trimmedName = (record["location_name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawName = (record["location_name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedName = rawName.isEmpty ? "Camera \(cameraID)" : rawName
 
             let stableID = stableUUID(datasetURL: datasetURL, cameraID: cameraID)
 

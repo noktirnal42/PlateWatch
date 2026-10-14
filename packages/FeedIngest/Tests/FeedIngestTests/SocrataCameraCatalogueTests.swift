@@ -264,4 +264,36 @@ final class SocrataCameraCatalogueTests: XCTestCase {
             XCTAssertFalse(source.mayBeAnalysed, "Source \(source.name) should not be analysable (automatedUseAllowed=false)")
         }
     }
+
+    // MARK: - Review additions (Claude)
+
+    private func record(_ id: String?, name: String? = "MAIN ST", extra: String = "") -> String {
+        let idPart = id.map { "\"camera_id\":\"\($0)\"," } ?? ""
+        let namePart = name.map { "\"location_name\":\"\($0)\"," } ?? ""
+        return "{\(idPart)\(namePart)\"camera_status\":\"TURNED_ON\",\"screenshot_address\":\"https://cctv.example.gov/image/1.jpg\",\"location\":{\"type\":\"Point\",\"coordinates\":[-97.7,30.2]}\(extra)}"
+    }
+    private let dataset = URL(string: "https://data.example.gov/resource/abcd-1234")!
+
+    /// A record with no camera id used to vanish without a trace: the importer must account for every record.
+    func testRecordWithoutCameraIDIsReportedNotSilentlyDropped() throws {
+        let json = "[\(record("1")),\(record(nil)),\(record(""))]"
+        let result = try SocrataCameraCatalogue.sources(fromJSON: Data(json.utf8), datasetURL: dataset)
+        XCTAssertEqual(result.sources.count, 1)
+        XCTAssertEqual(result.skippedCount, 2)
+        XCTAssertEqual(result.skipReasons.map(\.reason), [.missingCameraID, .missingCameraID])
+    }
+
+    /// The importer is generic: the credit line is the operator's, supplied by the caller.
+    func testAttributionIsConfigurable() throws {
+        let result = try SocrataCameraCatalogue.sources(fromJSON: Data("[\(record("1"))]".utf8), datasetURL: dataset,
+                                                        attribution: "Example County DOT")
+        XCTAssertEqual(result.sources.first?.terms.attribution, "Example County DOT")
+        XCTAssertFalse(try XCTUnwrap(result.sources.first).mayBeAnalysed, "still unconfirmed")
+    }
+
+    func testEmptyNameFallsBackToTheCameraID() throws {
+        let result = try SocrataCameraCatalogue.sources(
+            fromJSON: Data("[\(record("42", name: "   ")),\(record("43", name: nil))]".utf8), datasetURL: dataset)
+        XCTAssertEqual(result.sources.map(\.name), ["Camera 42", "Camera 43"])
+    }
 }
