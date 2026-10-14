@@ -6,12 +6,14 @@ import SwiftUI
 /// (for enrolled moderators only) moderation.
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case dashboard = "Dashboard", feeds = "Public feeds", cameras = "Cameras & ingest", models = "Models"
+        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models"
         case moderation = "Moderation", settings = "Settings"
         var id: String { rawValue }
         var icon: String {
             switch self {
             case .dashboard: return "gauge.with.dots.needle.33percent"
+            case .live: return "eye"
+            case .review: return "tray.full"
             case .feeds: return "antenna.radiowaves.left.and.right"
             case .cameras: return "video"
             case .models: return "cpu"
@@ -37,6 +39,8 @@ struct ConsoleView: View {
             Group {
                 switch selection ?? .dashboard {
                 case .dashboard: DashboardPane(hub: hub)
+                case .live: LivePane(hub: hub)
+                case .review: ReviewPane()
                 case .feeds: FeedsPane(hub: hub)
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
@@ -95,9 +99,12 @@ struct DashboardPane: View {
 
 struct FeedsPane: View {
     @ObservedObject var hub: HubController
-    @Environment(\.openWindow) private var openWindow
     @State private var catalogue: FeedCatalogue?
     @State private var query = ""
+    @State private var reviewing: FeedHostSummary?
+
+    private var hosts: [FeedHostSummary] { catalogue?.hosts() ?? [] }
+    private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
 
     private var rows: [PublicFeedSource] {
         let all = catalogue?.sources ?? []
@@ -106,11 +113,27 @@ struct FeedsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if !needReview.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Cameras are not polled until you review and confirm each image host's terms.", systemImage: "hand.raised")
+                        .font(.headline)
+                    ForEach(needReview, id: \.host) { h in
+                        HStack {
+                            Text(h.host).monospaced()
+                            Text("\(h.totalCount - h.confirmedCount) of \(h.totalCount) cameras waiting").foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Review terms…") { reviewing = h }.buttonStyle(.borderedProminent)
+                        }
+                    }
+                }
+                .padding(12).background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+            }
             HStack {
                 FeedStatusRow(runner: hub.feedRunner)
                 Spacer()
-                Button("Import Austin cameras") { Task { await hub.importAustinCameras(); reload() } }
-                Button("Review terms…") { openWindow(id: "feeds-review") }
+                Menu("Add cameras") {
+                    Button("Import Austin traffic cameras") { Task { await hub.importAustinCameras(); reload() } }
+                }
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
@@ -118,20 +141,27 @@ struct FeedsPane: View {
                 TableColumn("Camera") { Text($0.name) }
                 TableColumn("Host") { Text($0.url.host ?? "") }
                 TableColumn("Location") { Text($0.geohash6.isEmpty ? "unknown" : $0.geohash6).monospaced() }
-                TableColumn("Terms") { s in
-                    Label(s.mayBeAnalysed ? "Confirmed" : "Awaiting terms",
-                          systemImage: s.mayBeAnalysed ? "checkmark.circle.fill" : "hourglass")
-                        .foregroundStyle(s.mayBeAnalysed ? .green : .orange)
+                TableColumn("Status") { s in
+                    let state = hub.feedRunner.state(of: s)
+                    Label(state.text, systemImage: state.icon).foregroundStyle(state.color)
                 }
             }
             .searchable(text: $query, prompt: "Filter cameras")
-            Text("\(rows.count) of \(catalogue?.sources.count ?? 0) sources. Only sources whose terms a person confirmed are polled, and robots.txt is honoured.")
+            Text("\(rows.count) of \(catalogue?.sources.count ?? 0) sources. robots.txt is honoured; one request per camera per refresh interval.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding()
         .onAppear(perform: reload)
         .onChange(of: hub.feedRunner.status) { _, _ in reload() }
+        .sheet(item: Binding(get: { reviewing.map(HostBox.init) }, set: { reviewing = $0?.host })) { box in
+            TermsReviewSheet(hub: hub, host: box.host,
+                             sample: catalogue?.sources.first { $0.url.host == box.host.host }) {
+                reviewing = nil; reload()
+            }
+        }
     }
+
+    private struct HostBox: Identifiable { let host: FeedHostSummary; var id: String { host.host } }
 
     private func reload() { catalogue = try? FeedCatalogue.load(from: hub.feedsFile) }
 }
@@ -174,7 +204,7 @@ struct CamerasPane: View {
                     VStack(alignment: .leading, spacing: 6) {
                         if devices.isEmpty { Text("None found.").foregroundStyle(.secondary) }
                         ForEach(devices, id: \.uniqueID) { Label($0.localizedName, systemImage: "camera") }
-                        Text("Detected only. Live capture into the analysis pipeline is the next slice.")
+                        Text("Open the Live pane to analyse a camera or a video file.")
                             .font(.caption).foregroundStyle(.secondary)
                     }.padding(4)
                 }

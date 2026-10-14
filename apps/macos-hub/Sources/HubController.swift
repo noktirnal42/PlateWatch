@@ -487,6 +487,25 @@ final class HubController: ObservableObject {
         watchDescriptor = source
     }
 
+    /// One frame from a live camera or a video file, shown in the console. Same rules as every other source
+    /// (jurisdiction gate, redaction gate, de-dup, outbox); the frame stays in memory. Overlay labels never include
+    /// plate text — only the vehicle class and the fleet score.
+    func analyseLive(_ buffer: CVPixelBuffer, sourceID: String) async -> LiveFrameResult? {
+        guard let frame = try? await pipeline.analyze(
+            .init(pixelBuffer: buffer),
+            context: frameContext(contextBox, for: buffer, readPlates: platesAllowed)) else { return nil }
+        framesAnalyzed += 1
+        let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
+        let recorded = recordFleetHits(in: frame, tier: tier, sourceID: sourceID)
+        let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
+            let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
+            return .init(id: vehicle.id, rect: vehicle.boundingBox,
+                         label: "\(vehicle.vehicleClass.rawValue) \(Int(confidence * 100))%",
+                         isFleet: gate.verdict(fleetConfidence: confidence) == .persistAndSync)
+        }
+        return LiveFrameResult(boxes: boxes, hits: recorded.hits)
+    }
+
     private func processNewFiles() {
         let fm = FileManager.default
         guard let all = try? fm.contentsOfDirectory(
@@ -521,6 +540,12 @@ final class HubController: ObservableObject {
 
     private var inFlight = Set<String>()
     private var filesProcessed = 0
+}
+
+struct LiveFrameResult: Sendable {
+    struct Box: Sendable, Identifiable { let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool }
+    var boxes: [Box]
+    var hits: Int
 }
 
 /// The analysis context for one frame: the shared models plus the thorough text path only where the frame has

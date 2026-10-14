@@ -1,5 +1,6 @@
 import FeedIngest
 import Foundation
+import SwiftUI
 
 /// Polls the Hub's confirmed public feeds. One task per source; each source is fetched through
 /// `FeedIngest.SnapshotPoller`, which honours the refresh-interval floor, single-flight, exponential back-off and
@@ -13,6 +14,21 @@ final class FeedRunner: ObservableObject {
 
     /// Identifies us to the operators of the feeds we poll, with where to reach us.
     static let userAgent = "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch; public-feed accountability research)"
+
+    /// What happened to each source the runner started. Sources not in the map were never started (awaiting terms).
+    enum SourceState: Equatable { case polling, blockedByRobots, suspended }
+    @Published private(set) var sourceStates: [UUID: SourceState] = [:]
+
+    struct Display { let text: String; let icon: String; let color: Color }
+    func state(of source: PublicFeedSource) -> Display {
+        guard source.mayBeAnalysed else { return .init(text: "Awaiting terms", icon: "hourglass", color: .orange) }
+        switch sourceStates[source.id] {
+        case .polling: return .init(text: "Polling", icon: "checkmark.circle.fill", color: .green)
+        case .blockedByRobots: return .init(text: "Blocked by robots.txt / refused", icon: "hand.raised.fill", color: .red)
+        case .suspended: return .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .yellow)
+        case nil: return .init(text: "Confirmed", icon: "checkmark.circle", color: .secondary)
+        }
+    }
 
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private let session: URLSession
@@ -36,9 +52,21 @@ final class FeedRunner: ObservableObject {
         let sink = ClosureSink(analyse)
         for source in catalogue.runnable {
             let robots = self.robots
+            let id = source.id
+            sourceStates[id] = .polling
             let poller = SnapshotPoller(source: source, sink: sink, session: session,
-                                        gate: { url in await robots.isAllowed(url) })
-            tasks[source.id] = Task { await poller.run(sink: sink) }
+                                        gate: { url in
+                                            let allowed = await robots.isAllowed(url)
+                                            if !allowed { await MainActor.run { self.sourceStates[id] = .blockedByRobots } }
+                                            return allowed
+                                        })
+            tasks[source.id] = Task {
+                await poller.run(sink: sink)
+                // `run` returns on its own only when robots refused (already recorded) or the source was suspended.
+                await MainActor.run {
+                    if !Task.isCancelled, self.sourceStates[id] == .polling { self.sourceStates[id] = .suspended }
+                }
+            }
         }
         runningCount = tasks.count
         status = Self.describe(running: runningCount, awaiting: awaitingTermsCount, total: catalogue.sources.count)
@@ -47,6 +75,7 @@ final class FeedRunner: ObservableObject {
     func stop() {
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
+        sourceStates.removeAll()
         runningCount = 0
     }
 
