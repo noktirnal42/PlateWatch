@@ -86,3 +86,16 @@ scoring — see [IDENTITY.md](IDENTITY.md). The harness takes `--models <dir> --
 detector lifts plate reads from 10 to 15 images without touching fleet recall), prints the identity per image, and scores
 hand-labelled agencies and plates (`agency` / `plates` keys in the manifest).
 
+
+## Why fleet vehicles are missed at full resolution (2026-10-13, 62-image corpus, Create ML plate detector)
+29/46 fleet vehicles pass the gate; **17 do not**. Reading the failures (not tuning to them):
+
+| Reason | Count | Examples |
+|---|---|---|
+| **No lettering read at all** | 10 marked + 2 unmarked | Stylised/italic or small lettering (US Mint "POLICE" reads as "POLBE"; Michigan State Police decal only; small "OKLAHOMA HIGHWAY PATROL" on a door), motion blur (fire SUVs), logo-only vehicles (USPS trucks with the eagle, no words), a bus with faint "Metro Transit". Two images are **unmarked police vehicles — undetectable from text by design** (and rightly: see LEGAL-ETHICS) |
+| **Text read, below the 0.55 gate (review queue)** | 7 | STATE TROOPER 0.32/0.51, HIGHWAY PATROL 0.47, USPS "www.usps.com" 0.47, POLICE 0.46 |
+
+- "Recall incl. review" is 76 %: the review queue catches most partial reads; an unattended Hub has no human to confirm them.
+- **De-slanting italic lettering does not help** (tried shear −0.5…+0.5 on the US Mint image: every angle garbles the text; the plain read is the best). Dropped.
+- What would move recall: a recogniser trained on stylised vehicle lettering (Create ML has no OCR template — needs a CLI-trained model), more tolerant fuzzy matching for state-agency phrases, and appearance cues (the vehicle-crop classifier, MODEL-TRAINING §7) for vehicles with no readable text.
+- Caveat: 62 images; do not tune the gate to these failures.

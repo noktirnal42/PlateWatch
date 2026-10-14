@@ -244,3 +244,42 @@ Three workstreams opened after this handoff was written — tracked in
 
 Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
 (blocked on the owner's Apple account) unless the owner reorders.
+
+---
+
+## 10. Status update 2026-10-14 (supersedes the "State:" lines in §3–§5 where they differ)
+
+**What changed since this handoff was first written**
+- **Plate detector (§3, §4):** a Create ML Object Detection model trained on Open Images plate boxes beats the YOLOv8n baseline on the
+  corpus (19/62 vs 17/62 images with a plate read, 12/62 with none; fleet recall 63 vs 61 %, precision 100 %, 0 civilian FP).
+  The pipeline *does* consume a `plate-detection` model now (`VisionBaselineAnalyzer.plateDetectorBoxes`). `ModelManager` installs
+  single-file `.mlmodel` artifacts and has a developer override `<cache>/Local/<task>.mlmodel`; **`.mlpackage`/`.aar` extraction and the
+  published release are still open** (GLM's branch `feat/model-release` / the owner's `gh release create`). Neither app ships a model yet.
+- **Fleet classifier (§5):** four Create ML runs (scene and vehicle-crop, V1/V2 feature print) — **not usable**: 66–73 % honest test accuracy,
+  police recall 2–4 of 8–12, confidently wrong on rear-view dark SUVs. Cause is data (front/side views, ~65 police images per class after
+  filtering), not settings. Recipe + lessons: MODEL-TRAINING.md §7; one-command dataset build `scripts/build_fleet_crop_dataset.sh`.
+  A 5× larger crawl (`training/fleet2`, gitignored) was in progress — retrain on it before concluding.
+- **Plate state:** flat Commons plate scans (CC BY-SA allowed by owner decision for this model only) → 60 % test accuracy but **fails on real
+  plate crops** (Minnesota → Tennessee). Location is the better source (below). Only 128 of 2,497 real Open Images plate crops have a
+  legible US state name (OCR auto-label) — too few. Park this model.
+- **Identity location (IDENTITY.md):** a frame's location comes from its *source* (phone GPS, photo EXIF, a feed camera's catalogued position,
+  the Hub operator's geohash). `IdentityResolver.syncIdentity` is the single "what may leave the device" rule.
+- **Public feeds (M6, FEED-SOURCES.md):** Hub now loads models, polls a `feeds.json` catalogue (**only sources whose terms a person confirmed**),
+  analyses each frame with that camera's location, resolution tier and plate-jurisdiction gate, and de-duplicates repeat sightings.
+  Measured: fleet recall collapses with resolution (63 → 57 → 35 → 7 % at 1080p-class → 720 → 480 → 240 px). First live frames (City of
+  Austin, 1080p wide night views): 0 hits, 0 FP — vehicles too small to read.
+- **Legal (research/FEED-LEGAL-RESEARCH.md, not legal advice):** Maine/New Hampshire restrict ALPR use by any person → plate recognition is
+  off in/near them (and AR, ID, KY, CT pending counsel) and when a source's location is unknown (`JurisdictionPolicy`, `AnalysisContext.readPlates`).
+
+**Do next, in this order**
+1. Merge PR #11 (feed quality) and GLM's model-release PR; owner runs `gh release create models-v…` and registers the Create ML detector.
+2. **Read the Austin image host's terms** (`cctv.austinmobility.io`), record them in the catalogue entry, then run a slow real pilot and save
+   frames under `eval/feeds/` (gitignored) so the harness can score real feed stills instead of a degraded proxy.
+3. ~~Decide analysis tier from the vehicle's pixel size~~ — **done** (900 / 400 px thresholds from measured detection rates; FEED-SOURCES.md §1).
+4. ~~Feed politeness: robots.txt~~ — **done** (RobotsCache gates every poll). Still open: a per-host rate limit shared across sources of one host, and surfacing 'blocked by robots.txt / refused (403/429)' as a visible per-source status in the Hub.
+5. Skip source-masked regions (some cameras blank vehicles with grey blobs at source).
+6. Retrain the fleet crop classifier on `training/fleet2` with `scripts/build_fleet_crop_dataset.sh`; wire it in only if rear-view police
+   recall is real and civilian false positives stay at zero.
+7. Server/publishing guardrails: aggregation delay (24–72 h), ~1 km coarsening, k-suppression, 21-day TTL, access audit log, takedown channel.
+8. Counsel questions (FEED-LEGAL-RESEARCH.md): does plate OCR on a third-party feed count as ALPR "use"? Does the handheld iPhone app fall under
+   the same state rules? (The jurisdiction gate is not applied to handheld capture yet.)

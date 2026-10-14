@@ -113,20 +113,9 @@ final class CaptureViewModel: ObservableObject {
     func refreshModels() async {
         let box = contextBox
         let manager = modelManager
+        // Shared with the Hub; a developer-override model in <cache>/Local/<task>.mlmodel loads even offline.
         let count: Int = await Task.detached(priority: .utility) {
-            do {
-                let registry = try await manager.fetchRegistry()
-                var models: [String: MLModel] = [:]
-                for task in ["vehicle-detection", "plate-detection"] {
-                    if let compiled = try? await manager.model(forTask: task, registry: registry) {
-                        models[task] = compiled.mlModel
-                    }
-                }
-                box.current = AnalysisContext(models: models)
-                return models.count
-            } catch {
-                return 0
-            }
+            await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
         }.value
         modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
     }
@@ -455,18 +444,6 @@ final class CaptureViewModel: ObservableObject {
         }
         #endif
         return heuristic
-    }
-}
-
-/// Thread-safe holder for the live AnalysisContext. The executor's
-/// synchronous provider reads this; the async model installer writes it.
-final class AnalysisContextBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _current = AnalysisContext(models: [:])
-
-    var current: AnalysisContext {
-        get { lock.lock(); defer { lock.unlock() }; return _current }
-        set { lock.lock(); defer { lock.unlock() }; _current = newValue }
     }
 }
 

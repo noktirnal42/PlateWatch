@@ -171,6 +171,7 @@ Not yet registered or bundled: neither the app nor the Hub runs a CoreML model t
 | v2 | 537 train, cleaned (Apple classifier filter) | random | 82 % | transit 97 % / transit 94 % |
 | v2g | 541 train, cleaned | **by photographer** | 71 % | public 81 % / transit 74 % |
 | v2g again | same | by photographer | 73 % (police 4/8) | transit 100 % / civilian 99 % |
+| **crops v3** | **1,438 train crops from a 5× larger crawl** (police 349 crops, was 71), cleaned, vehicle crops | by photographer | **77 %** (139/180; police 26/35, fire 26/37, ems 25/31, transit 41/45) | **Minneapolis crop: police 100 %; Waltham crop: transit 98 %, police 2 %** |
 
 Lessons: (1) the raw `police` class was mostly noise (~6 of 30 sampled were police cars; the rest motorcycles, bicycle patrols,
 boats, vintage photos) — filter crawls with `VNClassifyImageRequest` (keep car/truck, drop motorcycle/bicycle/boat). (2) A random
@@ -180,3 +181,20 @@ cruisers; the owner's photos are **rear views of dark SUVs** and are confidently
 wire in** until it has rear-view police data. It is not needed for the two reference photos (text + official plate identify them).
 
 ### Plate-state classifier — see the dataset notes in §4c; results appended below when trained.
+
+### Reproducing the fleet crop dataset (one command)
+`scripts/build_fleet_crop_dataset.sh <crawl dir> <out dir> [models dir]` runs the whole recipe from the lessons above: tag with Apple's
+classifier and keep car/truck/bus-like images → cut the main vehicle with the vehicle detector → split **by photographer**
+(`make_classifier_dataset.py --group-by-author`). On the first crawl (1,635 tagged images) it keeps 675 and yields 457/57/56
+train/validation/test crops in ~35 s. Output is a Create ML Image Classification folder; train it in the GUI as in §4b.
+
+### Fleet crop classifier, run v3 (2026-10-14): more data did what settings could not
+Same recipe, 5× the data (`scripts/build_fleet_crop_dataset.sh training/fleet2 …`: 4,128 tagged images → 1,986 kept → 1,438/182/180
+train/validation/test vehicle crops; police 279/35/35, public only 61/8/8). Create ML, Feature Print V2, all augmentations, 17 iterations:
+**training 81 %, validation 85 %, test 77 %** (previous best 73 %); police recall 26/35 = 74 % (was 4/8), 6 false positives.
+Weak spots: `fire` recall 26/37 (8 called `ems`), `ems` precision (16 false positives), `public` has too few crops (61) to judge.
+**Real photos:** the Minneapolis rear crop is now **police 100 %**, but the Waltham stealth-livery rear crop (dark grey lettering on black)
+is still **transit 98 %** — confident and wrong. Still **not safe to wire in as evidence** (a confident miss is worse than none); what it
+shows is that the bottleneck was data volume/diversity, and that dark low-contrast liveries still need their own examples (the Hub's
+text path and the review queue remain the primary route for them). Next: add stealth-livery and rear-view police images (Commons
+categories are thin on them), re-measure, and keep Waltham/Minneapolis as the fixed held-out check.

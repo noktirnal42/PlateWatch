@@ -49,7 +49,28 @@ final class SnapshotPollerTests: XCTestCase {
     private func makeSource() -> PublicFeedSource {
         try! PublicFeedSource(
             name: "test cam", url: URL(string: "https://example.gov/cam.jpg")!,
-            kind: .snapshotJPEG, refreshInterval: 1, geohash6: "drt2zq", citation: citation)
+            kind: .snapshotJPEG, refreshInterval: 1, geohash6: "drt2zq", citation: citation,
+            terms: .init(licenseClass: .publicDomain, termsURL: URL(string: "https://example.gov/terms")!,
+                         termsReadOn: Date(timeIntervalSince1970: 1_800_000_000), automatedUseAllowed: true))
+    }
+
+    /// A source nobody confirmed the terms of must cause **no network request at all**.
+    func testUnconfirmedSourceIsNeverContacted() async {
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let unconfirmed = try! PublicFeedSource(
+            name: "unconfirmed", url: URL(string: "https://example.gov/cam.jpg")!, kind: .snapshotJPEG,
+            refreshInterval: 1, geohash6: "drt2zq", citation: citation)
+        let sink = CollectingSink()
+        let poller = SnapshotPoller(source: unconfirmed, sink: sink, session: makeSession())
+        XCTAssertFalse(poller.isPermitted)
+        var schedule = FeedSchedule(refreshInterval: 1)
+        _ = await poller.pollOnce(schedule: &schedule, now: Date(timeIntervalSince1970: 5_000))
+        XCTAssertEqual(StubProtocol.requestCount, 0)
+        let frames = await sink.actor.frames.count
+        XCTAssertEqual(frames, 0)
+        // Opting out (tests, the owner's own camera) is explicit.
+        let own = SnapshotPoller(source: unconfirmed, sink: sink, session: makeSession(), enforceTerms: false)
+        XCTAssertTrue(own.isPermitted)
     }
 
     private func makeSession() -> URLSession {
@@ -118,4 +139,35 @@ final class SnapshotPollerTests: XCTestCase {
         let frames = await sink.actor.frames
         XCTAssertTrue(frames.isEmpty)
     }
+
+    /// A gate that says no stops the poller before any request is made (robots.txt disallow).
+    func testGateThatRefusesStopsThePollerWithoutAnyRequest() async {
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let source = makeSource()
+        let sink = CollectingSink()
+        let poller = SnapshotPoller(source: source, sink: sink, session: makeSession(), gate: { _ in false })
+        await poller.run(sink: sink)                       // returns immediately instead of looping forever
+        XCTAssertEqual(StubProtocol.requestCount, 0)
+    }
+
+    func testGateThatAllowsLetsTheFetchThrough() async {
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let source = makeSource()
+        let sink = CollectingSink()
+        let seen = GateRecorder()
+        let poller = SnapshotPoller(source: source, sink: sink, session: makeSession(),
+                                    gate: { url in await seen.record(url); return true })
+        let task = Task { await poller.run(sink: sink) }
+        try? await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+        let urls = await seen.urls
+        XCTAssertFalse(urls.isEmpty)
+        XCTAssertEqual(urls.first, source.url, "the gate is asked about the exact URL that would be fetched")
+        XCTAssertGreaterThanOrEqual(StubProtocol.requestCount, 1)
+    }
+}
+
+actor GateRecorder {
+    private(set) var urls: [URL] = []
+    func record(_ url: URL) { urls.append(url) }
 }

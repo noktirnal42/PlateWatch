@@ -23,6 +23,15 @@ Vapor reference server for cross-platform expansion.
    licenses; record them in `models/registry.json` (`license` field). Do not
    commit model weights.
 
+6. **Never commit local-data links or machine-specific paths.** No symlinks into a dev machine's folders (e.g.
+   `eval/corpus -> /Volumes/...`), no absolute paths in tracked files. A tracked symlink replaces the real directory on
+   checkout and **deletes the ignored data inside it** (this wiped the eval corpus and user photos on 2026-10-13). Check
+   `git status` / `git diff --cached --stat` for mode `120000` before committing, and never `git add -A` blindly in a
+   worktree you linked data into. Ignore data paths in `.gitignore` *without* a trailing slash so they match links too.
+
+7. **Parallel agents use separate git worktrees.** Do not edit or run branch-changing git commands in a checkout another
+   agent is using; make your own (`git worktree add /private/tmp/<name> -b <branch> origin/main`) and work only there.
+
 ## Build & test commands
 
 ```bash
