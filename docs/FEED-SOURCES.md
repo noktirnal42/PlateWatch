@@ -104,6 +104,22 @@ Public viewability ≠ reuse rights. Default **excluded unless the owner permits
 - **Enforcement cameras** (red-light/speed/ALPR networks run by police) and any feed not published for general public viewing.
 - Sources whose terms forbid automated use or storage, and any that require a login the project does not hold.
 
+### 3g. First live pilot — City of Austin (2026-10-13)
+Research (docs/research/FEED-RESEARCH-MUNICIPAL-STATE.md) found **Austin** the cleanest keyless source: Socrata dataset `b4k4-adkb`
+(listed Public Domain) with `camera_id`, `location` (GeoJSON point), `camera_status`, `screenshot_address` (image URL on
+`cctv.austinmobility.io`). **Verified live:** the catalogue query returned records with those fields, and one still from each of 5
+cameras fetched (1 request/s, identifying User-Agent, kept locally, **not committed**).
+- Frames are **1920×1080 JPEG, 110–235 KB** → analysis tier `full` by pixel count — but the scenes are wide night-time intersection
+  views where vehicles are a few dozen pixels tall. Pipeline result on the 5 frames: **0 fleet hits, 0 plates, 0 false positives, 0.46 s/image.**
+  So resolution *per vehicle*, not frame size, is what limits reading — the tier thresholds should eventually use the vehicle box size too.
+- At least one camera (Cesar Chavez / IH-35) **masks vehicles and pedestrians with grey blobs** before publishing: the operator is
+  privacy-masking at source; analysing a masked region is pointless and arguably against the operator's intent. Detect and skip.
+- The image host's own terms (austinmobility.io) were **not read** — only the dataset's Public Domain listing — so `automatedUseAllowed`
+  stays false until a person reads them. Pilot polling beyond a handful of frames should wait for that.
+- Other findings (research file): Seattle (REST layer 500'd; licence unread), Iowa (open portal; no licence text found; bans bots/framing),
+  Oregon TripCheck / Georgia / Arizona keyed, NYC & PennDOT agreement-based, **Houston TranStar prohibits redistribution/framing without
+  TxDOT's written consent, Minnesota has no developer access, DC lists locations only**; Caltrans/Michigan/CO/VA/IL/NJ could not be verified.
+
 ## 4. Reference / cross-referencing data (no video)
 | Source | Use | Access | Status |
 |---|---|---|---|
