@@ -46,4 +46,45 @@ final class FeedCatalogueTests: XCTestCase {
         XCTAssertThrowsError(try FeedCatalogue.load(from: URL(fileURLWithPath: "/nonexistent/feeds.json")))
         XCTAssertThrowsError(try FeedCatalogue.decode(Data("not json".utf8)))
     }
+
+    // MARK: - Merging an imported catalogue
+
+    private func make(_ id: String, url: String, confirmed: Bool, side: Int? = nil) -> PublicFeedSource {
+        let terms = confirmed
+            ? FeedTerms(licenseClass: .publicDomain, termsURL: URL(string: "https://example.gov/terms")!,
+                        termsReadOn: Date(timeIntervalSince1970: 1_800_000_000), attribution: "City", automatedUseAllowed: true)
+            : FeedTerms(licenseClass: .publicDomain)
+        return try! PublicFeedSource(
+            id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(id)")!, name: "cam \(id)", url: URL(string: url)!,
+            kind: .snapshotJPEG, refreshInterval: 30, geohash6: "9v6kpv",
+            citation: SourceCitation(sourceType: .openDataPortal), terms: terms, nativeLongSide: side)
+    }
+
+    /// Re-importing must never undo a person's decision.
+    func testMergeKeepsRecordedTermsAndAddsNewSources() {
+        let existing = FeedCatalogue(sources: [make("1", url: "https://cctv.example.gov/1.jpg", confirmed: true, side: 1920)])
+        let imported = [make("1", url: "https://cctv.example.gov/1-new.jpg", confirmed: false),   // same camera, URL refreshed
+                        make("2", url: "https://cctv.example.gov/2.jpg", confirmed: false)]       // new camera
+        let merged = existing.merged(with: imported)
+        XCTAssertEqual(merged.sources.count, 2)
+        let one = merged.sources.first { $0.name == "cam 1" }!
+        XCTAssertTrue(one.mayBeAnalysed, "confirmation survives a re-import")
+        XCTAssertEqual(one.url.absoluteString, "https://cctv.example.gov/1-new.jpg", "URL refreshed")
+        XCTAssertEqual(one.nativeLongSide, 1920)
+        XCTAssertFalse(merged.sources.first { $0.name == "cam 2" }!.mayBeAnalysed, "new sources arrive unconfirmed")
+    }
+
+    /// The terms a person read applied to the old image host, not to wherever the portal now points.
+    func testChangedHostWithdrawsConfirmation() {
+        let existing = FeedCatalogue(sources: [make("1", url: "https://cctv.example.gov/1.jpg", confirmed: true)])
+        let merged = existing.merged(with: [make("1", url: "https://other-vendor.example.com/1.jpg", confirmed: false)])
+        XCTAssertFalse(merged.sources[0].mayBeAnalysed)
+        XCTAssertNotNil(merged.sources[0].terms.termsURL, "the recorded terms page is kept for the reviewer to re-check")
+    }
+
+    /// A portal outage returns an empty list; that must not delete the catalogue.
+    func testSourcesMissingFromTheImportAreKept() {
+        let existing = FeedCatalogue(sources: [make("1", url: "https://cctv.example.gov/1.jpg", confirmed: true)])
+        XCTAssertEqual(existing.merged(with: []), existing)
+    }
 }

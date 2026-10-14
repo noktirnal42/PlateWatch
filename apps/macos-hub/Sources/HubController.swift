@@ -80,7 +80,44 @@ final class HubController: ObservableObject {
         startWatching()
         Task { await refreshModels() }
         startFeeds()
+        #if DEBUG
+        if CommandLine.arguments.contains("-PWImportAustin") { Task { await importAustinCameras() } }
+        #endif
         processNewFiles()   // pick up anything dropped while the Hub was not running
+    }
+
+    /// Imports the City of Austin traffic-camera catalogue (Socrata `b4k4-adkb`, listed Public Domain) into `feeds.json`.
+    /// New cameras arrive **unconfirmed** and are not polled until a person reads the image host's terms and records
+    /// them; existing confirmations are preserved (`FeedCatalogue.merged`). One catalogue request, identifying User-Agent.
+    @Published private(set) var importStatus = ""
+
+    func importAustinCameras() async {
+        importStatus = "Importing…"
+        let dataset = URL(string: "https://data.austintexas.gov/resource/b4k4-adkb")!
+        var components = URLComponents(url: dataset.appendingPathExtension("json"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "$limit", value: "5000"),
+                                 URLQueryItem(name: "$where", value: "camera_status='TURNED_ON'")]
+        var request = URLRequest(url: components.url!)
+        request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 60
+        do {
+            let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            let result = try SocrataCameraCatalogue.sources(fromJSON: data, datasetURL: dataset, attribution: "City of Austin")
+            let existing = (try? FeedCatalogue.load(from: feedsFile)) ?? FeedCatalogue()
+            let merged = existing.merged(with: result.sources)
+            try merged.write(to: feedsFile)
+            startFeeds()
+            importStatus = "Imported \(result.sources.count) cameras (\(result.skippedCount) skipped); \(merged.awaitingTerms.count) awaiting terms"
+        } catch {
+            importStatus = "Import failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Shows `feeds.json` in Finder, where a person records each source's terms (termsURL, termsReadOn, automatedUseAllowed).
+    func revealFeedsFile() {
+        if !FileManager.default.fileExists(atPath: feedsFile.path) { try? FeedCatalogue().write(to: feedsFile) }
+        NSWorkspace.shared.activateFileViewerSelecting([feedsFile])
     }
 
     /// Loads `feeds.json` and starts polling the confirmed sources. Missing/corrupt file = no feeds (never a crash).

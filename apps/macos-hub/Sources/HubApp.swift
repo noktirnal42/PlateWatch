@@ -67,6 +67,11 @@ struct HubStatusView: View {
             row("Snapshot server", hub.snapshotServerStatus)
             FeedStatusRow(runner: hub.feedRunner)
             HStack {
+                Button("Import Austin cameras") { Task { await hub.importAustinCameras() } }
+                Button("Reveal feeds.json") { hub.revealFeedsFile() }
+            }
+            if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
+            HStack {
                 Text("Preferred port").foregroundStyle(.secondary)
                 Spacer()
                 TextField("8088", value: $snapshotPortSetting, format: .number.grouping(.never))
