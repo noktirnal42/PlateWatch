@@ -36,10 +36,11 @@ struct RecordsPane: View {
             }.pickerStyle(.segmented).frame(maxWidth: 480)
             if tab == 0 { builder } else { programme }
         }.padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var builder: some View {
-        HSplitView {
+        HStack(alignment: .top, spacing: 16) {
             Form {
                 Section("Agency & scope") {
                     TextField("Public agency", text: $agency).help("Name of the public agency receiving this request")
@@ -59,7 +60,9 @@ struct RecordsPane: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Link("FOIA documentation", destination: URL(string: "https://github.com/noktirnal42/PlateWatch/blob/main/docs/FOIA.md")!)
                 }
-            }.formStyle(.grouped).frame(minWidth: 300, idealWidth: 360)
+            }.formStyle(.grouped)
+                .frame(minWidth: 300, idealWidth: 360, maxWidth: 420, maxHeight: .infinity, alignment: .top)
+            Divider()
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Label("Request preview", systemImage: "doc.text").font(.headline)
@@ -83,8 +86,8 @@ struct RecordsPane: View {
                                            description: Text("Enter an agency and choose at least one record category. Your identity is never filled in automatically."))
                 }
                 if !notice.isEmpty { Text(notice).font(.caption).foregroundStyle(.secondary) }
-            }.frame(minWidth: 420).padding(.leading, 12)
-        }
+            }.frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var programme: some View {
