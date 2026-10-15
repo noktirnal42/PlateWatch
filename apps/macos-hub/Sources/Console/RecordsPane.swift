@@ -37,10 +37,18 @@ struct RecordsPane: View {
         VStack(alignment: .leading, spacing: 16) {
             Picker("Records workspace", selection: $tab) {
                 Text("Fleet FOIA draft").tag(0)
+                Text("Requests").tag(3)
+                Text("Court & lists").tag(4)
                 Text("Public records directory").tag(1)
                 Text("Public-records programme").tag(2)
-            }.pickerStyle(.segmented).frame(maxWidth: 560)
-            if tab == 0 { builder } else if tab == 1 { directory } else { programme }
+            }.pickerStyle(.segmented).frame(maxWidth: 760)
+            switch tab {
+            case 0: builder
+            case 1: directory
+            case 3: RecordsRequestsView()
+            case 4: RecordsCourtListsView()
+            default: programme
+            }
         }.padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }

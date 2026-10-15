@@ -40,6 +40,7 @@ targets:
       - package: PlateSync
       - package: FeedIngest
       - package: FleetImporters
+      - package: AccountabilityKit
 
   PlateWatchHubTests:
     type: bundle.unit-test
@@ -64,6 +65,7 @@ packages:
   PlateSync: { path: ../../packages/PlateSync }
   FeedIngest: { path: ../../packages/FeedIngest }
   FleetImporters: { path: ../../packages/FleetImporters }
+  AccountabilityKit: { path: ../../packages/AccountabilityKit }
 
 schemes:
   PlateWatchHub:

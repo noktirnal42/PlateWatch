@@ -136,11 +136,31 @@ program lawful, accurate, and worth defending:
 
 ## Status & prerequisites
 
-Citation-gated profile, incident and person-link types exist in `AccountabilityKit`;
-automated person-record collection and cross-reference publication are not implemented.
-The Hub exposes the existing **fleet-only** FOIA draft generator and a labelled
-programme overview. It does not collect officer photos, run face recognition,
-or identify people in live footage.
+**Built (2026-10-15, local to the operator's Mac; nothing syncs or publishes):**
+
+- `AccountabilityKit/Records` — `FOIARequest`/`FOIATracker` (lifecycle, statutory due dates from a table that is
+  **marked unverified**, appeal/follow-up draft, released documents hashed and cited as `foiaRelease`);
+  `RecordCandidate` (every importer's only output: pending, verbatim, cited) and `RecordsLedger` (accept/reject,
+  idempotent re-import); `PublishedListImporter` (a CSV that a public body already published — Brady/Giglio list or POST
+  register — with the releasing office named by the user); `CourtListenerClient` (free RECAP/CourtListener search) and
+  `PacerClient` (user's own PACER account) turning dockets into pending `lawsuit` candidates;
+  `PersonMatcher` (suggestions only, confidence always < 1); `UnitRecordsIndex`.
+- **PACER budget** (`PacerBudget`): spending inside the free quarterly allowance (US$30, PACER's published waiver — a
+  setting, confirm on pacer.uscourts.gov) is always allowed; anything above it is allowed only up to the user's
+  "allowed above free" dollar limit, **default $0 = never billed**. Estimated cost is checked before each request and the
+  network is not touched when it would be refused. Credentials are typed by the user into the Keychain
+  (`org.platewatch.hub.records`); the code never sees them elsewhere.
+  The PACER/PCL endpoints are written from the public API description and are **UNVERIFIED against a live login**; the
+  CourtListener endpoint likewise (parsers and budget are unit-tested with fakes). First live use: free allowance only.
+- Hub → Records & FOIA → **Requests** and **Court & lists** tabs; Review shows a **cited-records strip** for the selected
+  vehicle's unit.
+
+**Location firewall, as implemented:** `UnitRecordsIndex.records(forUnit:agencyKey:)` takes only a unit number and the
+recognised agency's key — no sighting, place, time or camera — so nothing it returns can say where or when anyone was
+seen. It returns only moderator-confirmed `PersonLink`s and cited records, never inferences, and nothing at all when the
+agency was not recognised (unit numbers repeat across agencies). Accepting a candidate in the Hub stores a cited record
+but does **not** link it to a named person: that needs the cited, moderator-confirmed `PersonLink` step, which the Hub UI
+does not yet offer. Photos, face matching and live identification are still not built.
 
 Next implementation sequence for the records workstream:
 

@@ -81,11 +81,11 @@ tests must stay green before its status advances.
   LEGAL-ETHICS (Rules 2/6), DATA-MODEL (planned entities).
 - **Test:** `swift test --package-path packages/FleetImporters` +
   `swift test --package-path packages/AccountabilityKit`.
-- **Status:** GSA/city-fleet/auction importers + FOIA generator shipped;
-  person-level program **not started** (ethics review is the gate;
-  `AccountabilityKit` types may land first — no collection logic).
-- **Next:** citation-enforced types; roster→person importers; Brady/docket
-  importers; cross-reference chain behind moderator confirmation.
+- **Status:** GSA/city-fleet/auction importers + FOIA generator shipped; 2026-10-15 FOIA tracker, CSV list and
+  CourtListener/PACER (budget-guarded) importers, record candidates and the location-free unit-records index landed
+  (local only, `docs/ACCOUNTABILITY-DATA.md`). Not built: roster→person importers, `PersonLink` confirmation UI, any publication.
+- **Next:** exercise CourtListener/PACER live (free allowance); `PersonLink` confirmation flow with its own citation;
+  roster→person importers; confirm the FOIA deadline table against statute text.
 
 ## WS5 — Sync & backend
 

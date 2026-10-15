@@ -80,6 +80,8 @@ public struct IncidentRecord: Sendable, Identifiable, Hashable, Codable {
     public var subjectID: OfficialProfile.ID?
     /// Agency the record is about (agency-level records, or the subject's agency). Reference to a PlateKit `Agency`.
     public var agencyID: UUID?
+    /// The same agency as `VehicleIdentity.agencyKey` spells it; what agency-level records are looked up by.
+    public var agencyKey: String?
     public var citations: [SourceCitation]
 
     public enum Kind: String, Sendable, Codable, CaseIterable {
@@ -97,6 +99,7 @@ public struct IncidentRecord: Sendable, Identifiable, Hashable, Codable {
                 status: String = "",
                 subjectID: OfficialProfile.ID? = nil,
                 agencyID: UUID? = nil,
+                agencyKey: String? = nil,
                 citations: [SourceCitation]) throws {
         guard !reference.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw CreationError.missingReference
@@ -110,6 +113,7 @@ public struct IncidentRecord: Sendable, Identifiable, Hashable, Codable {
         self.status = status
         self.subjectID = subjectID
         self.agencyID = agencyID
+        self.agencyKey = agencyKey
         self.citations = citations
     }
 }

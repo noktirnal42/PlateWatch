@@ -1,7 +1,8 @@
 import Foundation
 import PlateKit
 
-/// What the operator's own device may show next to a fleet unit it has just recognised.
+/// What the operator's own device may show next to a fleet unit it has just recognised. Unit numbers repeat across
+/// agencies, so a lookup needs the recognised agency's key and **fails closed without one**.
 ///
 /// **Location firewall (docs/ACCOUNTABILITY-DATA.md):** the only inputs are a unit number and an agency. There is
 /// deliberately no sighting, place, time or camera parameter, so nothing returned can carry — or be joined to — where or
@@ -29,16 +30,15 @@ public struct UnitRecordsIndex: Sendable {
         self.incidents = ledger.incidents
     }
 
-    public func records(forUnit unit: String, agencyID: UUID?) -> Result {
-        let wanted = Self.normalise(unit)
-        guard !wanted.isEmpty else { return Result(agencyRecords: [], officials: []) }
-        let officials: [Official] = links.compactMap { link in
-            guard Self.normalise(link.unitNumber) == wanted, let profile = profiles[link.officialID] else { return nil }
-            if let agencyID, let own = profile.agencyID, own != agencyID { return nil }
-            let records = incidents.filter { $0.subjectID == profile.id }
-            return Official(profile: profile, link: link, records: records)
+    public func records(forUnit unit: String, agencyKey: String?) -> Result {
+        let wanted = Self.normalise(unit), agency = Self.normalise(agencyKey ?? "")
+        guard !agency.isEmpty else { return Result(agencyRecords: [], officials: []) }
+        let officials: [Official] = wanted.isEmpty ? [] : links.compactMap { link in
+            guard Self.normalise(link.unitNumber) == wanted, Self.normalise(link.agencyKey ?? "") == agency,
+                  let profile = profiles[link.officialID] else { return nil }
+            return Official(profile: profile, link: link, records: incidents.filter { $0.subjectID == profile.id })
         }
-        let agencyRecords = agencyID.map { id in incidents.filter { $0.agencyID == id && $0.subjectID == nil } } ?? []
+        let agencyRecords = incidents.filter { $0.subjectID == nil && Self.normalise($0.agencyKey ?? "") == agency }
         return Result(agencyRecords: agencyRecords, officials: officials)
     }
 

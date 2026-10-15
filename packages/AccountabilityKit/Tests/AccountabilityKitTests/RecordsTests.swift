@@ -227,21 +227,22 @@ final class UnitRecordsIndexTests: XCTestCase {
         let cite = SourceCitation(sourceType: .agencyRoster, retrievedAt: Date())
         let agency = UUID()
         let officer = try OfficialProfile(name: "Jane Doe", agencyID: agency, citations: [cite])
-        var confirmed = try PersonLink(officialID: officer.id, unitNumber: "D-756", confidence: 0.6, citations: [cite])
+        var confirmed = try PersonLink(officialID: officer.id, unitNumber: "D-756", agencyKey: "example-pd", confidence: 0.6, citations: [cite])
         try confirmed.moderatorConfirm(additionalCitation: SourceCitation(sourceType: .foiaRelease, retrievedAt: Date()))
-        let inferred = try PersonLink(officialID: officer.id, unitNumber: "D-999", confidence: 0.7, citations: [cite])
+        let inferred = try PersonLink(officialID: officer.id, unitNumber: "D-999", agencyKey: "example-pd", confidence: 0.7, citations: [cite])
         let personal = try IncidentRecord(kind: .decertification, reference: "R-1", status: "decertified", subjectID: officer.id,
-                                          agencyID: agency, citations: [SourceCitation(sourceType: .decertificationRegister, retrievedAt: Date())])
-        let agencyLevel = try IncidentRecord(kind: .officialReport, reference: "Audit 2025-3", agencyID: agency,
+                                          agencyID: agency, agencyKey: "example-pd", citations: [SourceCitation(sourceType: .decertificationRegister, retrievedAt: Date())])
+        let agencyLevel = try IncidentRecord(kind: .officialReport, reference: "Audit 2025-3", agencyID: agency, agencyKey: "example-pd",
                                              citations: [SourceCitation(sourceType: .openDataPortal, retrievedAt: Date())])
         let index = UnitRecordsIndex(ledger: RecordsLedger(incidents: [personal, agencyLevel], profiles: [officer], links: [confirmed, inferred]))
 
-        let hit = index.records(forUnit: "d756", agencyID: agency)
+        let hit = index.records(forUnit: "d756", agencyKey: "Example-PD")
         XCTAssertEqual(hit.officials.map(\.profile.name), ["Jane Doe"])
         XCTAssertEqual(hit.officials[0].records.map(\.reference), ["R-1"])
         XCTAssertEqual(hit.agencyRecords.map(\.reference), ["Audit 2025-3"], "person-linked records are not duplicated as agency records")
-        XCTAssertTrue(index.records(forUnit: "D999", agencyID: agency).officials.isEmpty, "inferred link never surfaces")
-        XCTAssertTrue(index.records(forUnit: "D756", agencyID: UUID()).officials.isEmpty, "wrong agency")
-        XCTAssertTrue(index.records(forUnit: "", agencyID: agency).isEmpty)
+        XCTAssertTrue(index.records(forUnit: "D999", agencyKey: "example-pd").officials.isEmpty, "inferred link never surfaces")
+        XCTAssertTrue(index.records(forUnit: "D756", agencyKey: "other-pd").isEmpty, "same unit number, different agency")
+        XCTAssertTrue(index.records(forUnit: "D756", agencyKey: nil).isEmpty, "no recognised agency ⇒ nothing shown")
+        XCTAssertTrue(index.records(forUnit: "", agencyKey: "example-pd").officials.isEmpty)
     }
 }

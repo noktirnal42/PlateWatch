@@ -45,11 +45,11 @@ public struct RecordCandidate: Sendable, Identifiable, Hashable, Codable {
     public enum AcceptError: Error, Equatable { case alreadyReviewed, communityCitationOnly }
 
     /// Accepts the candidate as a cited record. `subject` is an explicit human choice; this never infers it.
-    public mutating func accept(subject: OfficialProfile.ID?, agencyID: UUID?) throws -> IncidentRecord {
+    public mutating func accept(subject: OfficialProfile.ID?, agencyID: UUID?, agencyKey: String? = nil) throws -> IncidentRecord {
         guard review == .pending else { throw AcceptError.alreadyReviewed }
         guard citation.sourceType != .communityVerified else { throw AcceptError.communityCitationOnly }
         let record = try IncidentRecord(kind: kind, reference: reference, status: status, subjectID: subject,
-                                        agencyID: agencyID, citations: [citation])
+                                        agencyID: agencyID, agencyKey: agencyKey, citations: [citation])
         review = .accepted
         return record
     }
@@ -123,8 +123,8 @@ public struct RecordsLedger: Sendable, Codable, Equatable {
 
     public var pending: [RecordCandidate] { candidates.filter { $0.review == .pending } }
 
-    public mutating func accept(candidateID: RecordCandidate.ID, subject: OfficialProfile.ID?, agencyID: UUID?) throws {
+    public mutating func accept(candidateID: RecordCandidate.ID, subject: OfficialProfile.ID?, agencyID: UUID?, agencyKey: String? = nil) throws {
         guard let i = candidates.firstIndex(where: { $0.id == candidateID }) else { return }
-        incidents.append(try candidates[i].accept(subject: subject, agencyID: agencyID))
+        incidents.append(try candidates[i].accept(subject: subject, agencyID: agencyID, agencyKey: agencyKey))
     }
 }
