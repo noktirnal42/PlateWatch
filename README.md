@@ -49,7 +49,7 @@ on Apple Vision alone. The evaluation document records later configurations sepa
 | Reference server (ingest, moderation, exports, k-anonymous heatmap, agency report) | Builds, 41 tests pass; not deployed publicly |
 | CloudKit public database | Backend + schema written ([cloudkit/](cloudkit/)); **awaiting import/deploy with the developer account** |
 | CoreML models | Optional; not yet published. Apple's built-in vehicle classifier is used instead for now |
-| macOS Hub | Desktop console, snapshot-feed background analysis and Live overlays, favorites/block, USA imports, moderator audit tools and offline help. [Verification and next steps](docs/HUB-HANDOFF-2026-10-14.md). Continuous public video remains pending. |
+| macOS Hub | Desktop console, snapshot-feed background analysis and Live overlays, favorites/block, state-sorted feed list, **evidence-image thumbnails on recorded vehicles** (redacted ≤40 KB crops, click to enlarge), Records & FOIA (fleet FOIA builder + cited public-records directory), USA imports, moderator audit tools and offline help. HLS feeds run continuous background analysis; RTSP awaits the VLCKit fallback. [Verification and next steps](docs/HUB-HANDOFF-2026-10-14.md). |
 | watchOS / CarPlay | Targets build in CI; physical watch alerts and CarPlay remain unverified (CarPlay needs Apple's entitlement) |
 
 [![CI](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml)
