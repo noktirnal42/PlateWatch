@@ -41,7 +41,7 @@ struct RecordsPane: View {
                 Text("Court & lists").tag(4)
                 Text("Directory").tag(1)
                 Text("Programme").tag(2)
-            }.pickerStyle(.segmented).frame(maxWidth: 560)
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
             switch tab {
             case 0: builder
             case 1: directory
