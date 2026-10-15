@@ -217,20 +217,34 @@ struct RecordsCourtListsView: View {
         alert.messageText = "Import \(url.lastPathComponent)"
         alert.informativeText = "Who released this list, and what is in the columns? Use header names exactly as they appear in the file."
         let publisher = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); publisher.placeholderString = "Released by (e.g. Example County DA)"
+        let sourceURL = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); sourceURL.placeholderString = "Published source URL (optional)"
+        let agencyCol = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); agencyCol.placeholderString = "Agency column header (optional)"
         let nameCol = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); nameCol.placeholderString = "Name column header"
         let refCol = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); refCol.placeholderString = "Reference column header (optional)"
         let statusCol = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); statusCol.placeholderString = "Status column header (optional)"
+        // These standard headers are used by the curated exports; other files retain manual mapping.
+        let headers = Set((text.components(separatedBy: .newlines).first ?? "").split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        for (field, header) in [(nameCol, "name"), (agencyCol, "agency"), (refCol, "reference"), (statusCol, "status")] {
+            if headers.contains(header) { field.stringValue = header }
+        }
         let kind = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); kind.addItems(withTitles: ["Brady/Giglio list", "Decertification register"])
-        let stack = NSStackView(views: [kind, publisher, nameCol, refCol, statusCol]); stack.orientation = .vertical
-        stack.frame = NSRect(x: 0, y: 0, width: 320, height: 140)
+        let stack = NSStackView(views: [kind, publisher, sourceURL, nameCol, agencyCol, refCol, statusCol]); stack.orientation = .vertical
+        stack.frame = NSRect(x: 0, y: 0, width: 320, height: 220)
         alert.accessoryView = stack
         alert.addButton(withTitle: "Import"); alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn, !publisher.stringValue.isEmpty, !nameCol.stringValue.isEmpty else { return }
+        let enteredURL = sourceURL.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let citationURL = enteredURL.isEmpty ? nil : URL(string: enteredURL)
+        guard enteredURL.isEmpty || (citationURL?.host != nil && ["http", "https"].contains(citationURL?.scheme?.lowercased() ?? "")) else {
+            notice = "No rows imported: the published source URL must be an HTTP or HTTPS link."; return
+        }
         let k: IncidentRecord.Kind = kind.indexOfSelectedItem == 0 ? .bradyList : .decertification
         let n = workspace.importList(
             csv: text,
-            source: .init(kind: k, title: url.deletingPathExtension().lastPathComponent, releasedBy: publisher.stringValue, url: nil),
-            columns: .init(name: nameCol.stringValue, reference: refCol.stringValue.isEmpty ? nil : refCol.stringValue,
+            source: .init(kind: k, title: url.deletingPathExtension().lastPathComponent, releasedBy: publisher.stringValue, url: citationURL),
+            columns: .init(name: nameCol.stringValue, agency: agencyCol.stringValue.isEmpty ? nil : agencyCol.stringValue, reference: refCol.stringValue.isEmpty ? nil : refCol.stringValue,
                            status: statusCol.stringValue.isEmpty ? nil : statusCol.stringValue))
         notice = "\(n) new row(s) added as pending."
     }

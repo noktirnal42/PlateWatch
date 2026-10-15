@@ -43,6 +43,7 @@ tests must stay green before its status advances.
   webcams, RTSP rework, public traffic cams).
 - **Docs:** [CAMERA-SOURCES.md](CAMERA-SOURCES.md) (status matrix per source).
 - **Test:** `swift test --package-path packages/FeedIngest` + Hub scheme tests (see handoff).
+- **CSV import:** standard header mapping, agency and citation URL fields added; [export/source research](research/BRADY-CSV-EXPORTS-2026-10-14.md) records verified conversions and next sources.
 - **QA follow-up:** see [HUB-QA-2026-10-14.md](HUB-QA-2026-10-14.md) for post-Claude/GLM render fixes, source links and outstanding visual checks.
 - **Status:** 2026-10-14 desktop console builds and runs; favorites/block, shared polite polling,
   Caltrans's scoped robots fallback, selected snapshot analysis in Live, and moderator audit refresh
