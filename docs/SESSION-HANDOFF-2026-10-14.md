@@ -125,7 +125,7 @@ Do **not** re-create the Keychain item from the command line on each run: it res
 
 1. **Merge PR #20** when CI is green; then delete the shared-branch habit — new work on fresh branches from `main`.
 2. **Postgres on this Mac was shutting down** at the end of the session (`FATAL: the database system is shutting down`). Restart it before running the server; the dev DB is `platewatch`.
-3. Hub: video-file/Continuity camera path in the **Live pane is built but only partly exercised**; LLM/MLX assistants are **not built** (must stay on-device; AGENTS.md rule 3).
+3. Hub: the **Live pane** video-file path was exercised 2026-10-15 (an mp4 of the Austin sample frames played with vehicle overlays and stopped cleanly) and the owner confirmed the Continuity camera path works (only test photos pointed at it — little local traffic); LLM/MLX assistants are **not built** (must stay on-device; AGENTS.md rule 3).
 4. **Use my location** shows "permission granted but no position available" on this desktop Mac (no GPS/Wi-Fi fix). Manual lat/lon and Plus Code work.
 5. CloudKit: two-account creator-only test; moderator publish path (server-to-server key).
 6. Legal: counsel (reported) says feed OCR and handheld use are not ALPR "use" — get it in writing and file it (the gate is already relaxed on the owner's instruction); the remaining 23 states + DC were desk-reviewed 2026-10-15 (`research/STATE-ALPR-SWEEP-2026-10-15.md`; no ban found; WA SB 6002 reach unconfirmed); the handheld iOS app now applies the jurisdiction gate (`PlateReadingGate`).

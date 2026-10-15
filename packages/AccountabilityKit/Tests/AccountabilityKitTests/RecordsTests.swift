@@ -277,3 +277,57 @@ final class PeopleFlowTests: XCTestCase {
         XCTAssertEqual(ledger.incidents.count, 1)
     }
 }
+
+final class RosterImportTests: XCTestCase {
+    private let csv = "Name,Rank,Unit,Home Address,Phone,DOB\nJane Doe,Officer,D756,12 Elm St,555-0100,1980-01-01\nRichard Roe,Sergeant,,9 Oak Ave,555-0101,1975-05-05\n,Officer,D1,x,y,z\n"
+    private let source = RosterImporter.Source(title: "Example PD roster", agencyName: "Example PD", agencyKey: "example-pd",
+                                               releasedBy: "Example PD", url: URL(string: "https://pd.example.gov/roster"))
+
+    func testOnlyMappedColumnsAreReadAndNothingPersonalIsKept() throws {
+        let c = try RosterImporter().candidates(fromCSV: csv, source: source, columns: .init(name: "name", role: "rank", unit: "unit"))
+        XCTAssertEqual(c.count, 2, "row without a name skipped")
+        XCTAssertEqual(c[0].excerpt, "Name: Jane Doe; Role: Officer; Unit: D756")
+        let encoded = String(data: try JSONEncoder().encode(c), encoding: .utf8)!
+        for secret in ["Elm St", "555-0100", "1980-01-01", "Oak Ave"] { XCTAssertFalse(encoded.contains(secret), secret) }
+        XCTAssertEqual(c[1].unitNumber, nil)
+        XCTAssertEqual(c[0].citation.sourceType, .agencyRoster)
+        XCTAssertTrue(c.allSatisfy { $0.review == .pending })
+    }
+
+    func testRejectsBadInputs() {
+        XCTAssertThrowsError(try RosterImporter().candidates(fromCSV: csv, source: source, columns: .init(name: "officer")))
+        XCTAssertThrowsError(try RosterImporter().candidates(fromCSV: "Name\n", source: source, columns: .init(name: "name")))
+        var bad = source; bad.sourceType = .communityVerified
+        XCTAssertThrowsError(try RosterImporter().candidates(fromCSV: csv, source: bad, columns: .init(name: "name")))
+    }
+
+    func testAcceptMakesProfileAndHiddenLinkAndIsIdempotent() throws {
+        var ledger = RecordsLedger()
+        let c = try RosterImporter().candidates(fromCSV: csv, source: source, columns: .init(name: "name", role: "rank", unit: "unit"))
+        XCTAssertEqual(ledger.addRoster(c), 2)
+        XCTAssertEqual(ledger.addRoster(c), 0, "re-import skipped")
+        let jane = try ledger.acceptRoster(candidateID: c[0].id)
+        XCTAssertEqual(ledger.profiles.count, 1)
+        XCTAssertEqual(ledger.links.count, 1)
+        XCTAssertFalse(ledger.links[0].canPublish, "a roster row only proposes the link")
+        XCTAssertLessThan(ledger.links[0].confidence, 1)
+        XCTAssertTrue(UnitRecordsIndex(ledger: ledger).records(forUnit: "D756", agencyKey: "example-pd").officials.isEmpty)
+        XCTAssertThrowsError(try ledger.acceptRoster(candidateID: c[0].id), "already reviewed")
+        _ = try ledger.acceptRoster(candidateID: c[1].id)
+        XCTAssertEqual(ledger.profiles.count, 2)
+        XCTAssertEqual(ledger.links.count, 1, "no unit ⇒ no link")
+        XCTAssertEqual(ledger.pendingRoster.count, 0)
+        // Same person from the same source again (new import run) reuses the profile.
+        let again = try RosterImporter().candidates(fromCSV: csv + "Jane Doe,Officer,D800,x,y,z\n", source: source, columns: .init(name: "name", role: "rank", unit: "unit"))
+        ledger.addRoster(again)
+        let janeAgain = try ledger.acceptRoster(candidateID: ledger.pendingRoster[0].id)
+        XCTAssertEqual(janeAgain.id, jane.id)
+        XCTAssertEqual(ledger.profiles.count, 2)
+    }
+
+    func testOlderLedgerFilesStillDecode() throws {
+        let old = #"{"candidates":[],"incidents":[],"profiles":[],"links":[]}"#
+        let l = try JSONDecoder().decode(RecordsLedger.self, from: Data(old.utf8))
+        XCTAssertTrue(l.rosterCandidates.isEmpty)
+    }
+}

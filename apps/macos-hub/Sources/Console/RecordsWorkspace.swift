@@ -108,4 +108,12 @@ final class RecordsWorkspace {
             return added
         } catch { lastError = "Import failed: \(error)"; return 0 }
     }
+
+    func importRoster(csv: String, source: RosterImporter.Source, columns: RosterImporter.Columns) -> Int {
+        do {
+            let added = ledger.addRoster(try RosterImporter().candidates(fromCSV: csv, source: source, columns: columns))
+            lastError = ""
+            return added
+        } catch { lastError = "Roster import failed: \(error)"; return 0 }
+    }
 }

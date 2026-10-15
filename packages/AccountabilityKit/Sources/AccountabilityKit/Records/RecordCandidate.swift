@@ -104,10 +104,22 @@ public struct RecordsLedger: Sendable, Codable, Equatable {
     public var incidents: [IncidentRecord]
     public var profiles: [OfficialProfile]
     public var links: [PersonLink]
+    public var rosterCandidates: [RosterCandidate]
 
     public init(candidates: [RecordCandidate] = [], incidents: [IncidentRecord] = [],
-                profiles: [OfficialProfile] = [], links: [PersonLink] = []) {
+                profiles: [OfficialProfile] = [], links: [PersonLink] = [], rosterCandidates: [RosterCandidate] = []) {
         self.candidates = candidates; self.incidents = incidents; self.profiles = profiles; self.links = links
+        self.rosterCandidates = rosterCandidates
+    }
+
+    /// Tolerates ledgers saved before a field existed (they decode with the missing arrays empty).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        candidates = try c.decodeIfPresent([RecordCandidate].self, forKey: .candidates) ?? []
+        incidents = try c.decodeIfPresent([IncidentRecord].self, forKey: .incidents) ?? []
+        profiles = try c.decodeIfPresent([OfficialProfile].self, forKey: .profiles) ?? []
+        links = try c.decodeIfPresent([PersonLink].self, forKey: .links) ?? []
+        rosterCandidates = try c.decodeIfPresent([RosterCandidate].self, forKey: .rosterCandidates) ?? []
     }
 
     /// Adds new candidates, skipping any whose (kind, reference, citation hash) is already present.

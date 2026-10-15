@@ -25,6 +25,27 @@ struct RecordsPeopleView: View {
                 List(workspace.ledger.profiles, selection: $selected) { p in
                     VStack(alignment: .leading) { Text(p.name).fontWeight(.medium); Text(p.role).font(.caption).foregroundStyle(.secondary) }.tag(p.id)
                 }
+                GroupBox("Import a published roster (CSV)") {
+                    VStack(alignment: .leading) {
+                        Text("Reads only the name, role and unit columns you name; everything else in the file is ignored and not stored. Rows arrive as pending.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Import roster…") { importRoster() }
+                            if !workspace.ledger.pendingRoster.isEmpty {
+                                Text("\(workspace.ledger.pendingRoster.count) pending").font(.caption)
+                            }
+                        }
+                        ForEach(workspace.ledger.pendingRoster.prefix(8)) { c in
+                            HStack {
+                                Text("\(c.name) · \(c.role)\(c.unitNumber.map { " · unit \($0)" } ?? "")").font(.caption).lineLimit(1)
+                                Button("Accept") { _ = try? workspace.ledger.acceptRoster(candidateID: c.id) }.controlSize(.small)
+                                Button("Reject") { workspace.ledger.rejectRoster(candidateID: c.id) }.controlSize(.small)
+                            }
+                        }
+                        if workspace.ledger.pendingRoster.count > 8 { Text("…and \(workspace.ledger.pendingRoster.count - 8) more").font(.caption2) }
+                        if !workspace.lastError.isEmpty { Text(workspace.lastError).font(.caption).foregroundStyle(.red) }
+                    }.padding(4)
+                }
                 GroupBox("Add an official (public capacity)") {
                     VStack(alignment: .leading) {
                         TextField("Name as published", text: $name)
@@ -123,5 +144,36 @@ struct RecordsPeopleView: View {
         guard let url = URL(string: confirmURL), url.scheme?.hasPrefix("http") == true else { message = "An external source URL is required."; return }
         do { try workspace.ledger.confirmLink(id: l.id, citation: SourceCitation(sourceType: confirmType, url: url, retrievedAt: Date())); confirmURL = ""; message = "" }
         catch { message = "\(error)" }
+    }
+
+    private func importRoster() {
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.commaSeparatedText]
+        guard panel.runModal() == .OK, let url = panel.url, let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Import roster \(url.lastPathComponent)"
+        alert.informativeText = "Name the agency, where the roster was published, and which headers hold the name, role and unit. Header names must match the file exactly."
+        func field(_ placeholder: String) -> NSTextField {
+            let f = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24)); f.placeholderString = placeholder; return f
+        }
+        let agency = field("Agency name (e.g. Example Police Department)")
+        let key = field("Agency key as recognised (optional, needed for unit links)")
+        let page = field("URL where this roster is published (required)")
+        let nameCol = field("Name column header"), roleCol = field("Role column header (optional)"), unitCol = field("Unit column header (optional)")
+        let stack = NSStackView(views: [agency, key, page, nameCol, roleCol, unitCol]); stack.orientation = .vertical
+        stack.frame = NSRect(x: 0, y: 0, width: 340, height: 170)
+        alert.accessoryView = stack
+        alert.addButton(withTitle: "Import"); alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let source = URL(string: page.stringValue), source.scheme?.hasPrefix("http") == true,
+              !agency.stringValue.isEmpty, !nameCol.stringValue.isEmpty else {
+            workspace.lastError = "Agency, a source URL and the name column are required."; return
+        }
+        let n = workspace.importRoster(
+            csv: text,
+            source: .init(title: url.deletingPathExtension().lastPathComponent, agencyName: agency.stringValue,
+                          agencyKey: key.stringValue.isEmpty ? nil : key.stringValue, releasedBy: agency.stringValue, url: source),
+            columns: .init(name: nameCol.stringValue, role: roleCol.stringValue.isEmpty ? nil : roleCol.stringValue,
+                           unit: unitCol.stringValue.isEmpty ? nil : unitCol.stringValue))
+        message = "\(n) new roster row(s) added as pending."
     }
 }

@@ -83,8 +83,8 @@ tests must stay green before its status advances.
   `swift test --package-path packages/AccountabilityKit`.
 - **Status:** GSA/city-fleet/auction importers + FOIA generator shipped; 2026-10-15 FOIA tracker, CSV list and
   CourtListener/PACER (budget-guarded) importers, record candidates and the location-free unit-records index landed
-  (local only, `docs/ACCOUNTABILITY-DATA.md`). People tab (operator-side cited links) built. Not built: roster→person importers, second-person moderation, any publication.
-- **Next:** exercise CourtListener/PACER live (free allowance); roster→person importers; read statute text for the FOIA
+  (local only, `docs/ACCOUNTABILITY-DATA.md`). People tab (operator-side cited links) built. Roster CSV importer built. Not built: second-person moderation, any publication.
+- **Next:** exercise CourtListener/PACER live (owner testing, free allowance); read statute text for the FOIA
   deadline table (VA unconfirmed, CA AB 1821 pending).
 
 ## WS5 — Sync & backend

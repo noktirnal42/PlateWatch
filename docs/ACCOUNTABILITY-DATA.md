@@ -147,7 +147,10 @@ program lawful, accurate, and worth defending:
   `PersonMatcher` (suggestions only, confidence always < 1); `UnitRecordsIndex`; `RecordsLedger` people steps
   (`addProfile`, `proposeLink`, `confirmLink`, `attach`, `removeProfile`) behind the Hub **People** tab — a link starts as a
   hidden inference (confidence < 1) and is confirmed only with an additional external citation; records attach to a person
-  only by an explicit choice; removing a person detaches their records.
+  only by an explicit choice; removing a person detaches their records. `RosterImporter` reads a published roster CSV
+  (name, role, optional unit columns only — everything else in the file is ignored and never stored) into pending
+  `RosterCandidate`s; accepting one creates the cited profile and, when a unit and agency key are given, a hidden
+  proposed link.
 - **PACER budget** (`PacerBudget`): spending inside the free quarterly allowance (US$30, PACER's published waiver — a
   setting, confirm on pacer.uscourts.gov) is always allowed; anything above it is allowed only up to the user's
   "allowed above free" dollar limit, **default $0 = never billed**. Estimated cost is checked before each request and the
