@@ -40,6 +40,15 @@ public actor RobotsCache {
     public func isAllowed(_ url: URL) async -> Bool { await decision(for: url).isAllowed }
 
     /// Manual retry invalidates only an unavailable lookup, never a valid Disallow/authentication/rate refusal.
+    /// Decisions for many URLs in one actor hop. Callers with thousands of cameras on one host must not pay a round trip
+    /// (and a queue behind unrelated work) per camera: after the first lookup fills the cache the rest are lookups.
+    public func decisions(for urls: [URL]) async -> [RobotsDecision] {
+        var out: [RobotsDecision] = []
+        out.reserveCapacity(urls.count)
+        for url in urls { out.append(await decision(for: url)) }
+        return out
+    }
+
     public func decision(for url: URL, retryFailure: Bool = false) async -> RobotsDecision {
         guard let host = url.host else { return .unavailable("Invalid camera host.") }
         let port = url.port ?? (url.scheme == "https" ? 443 : 80)

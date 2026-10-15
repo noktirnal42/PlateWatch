@@ -59,7 +59,20 @@ final class FeedRunner: ObservableObject {
         case checking, polling, blockedByRobots, blockedByUser, suspended
         case policyUnavailable(String)
     }
-    @Published private(set) var sourceStates: [UUID: SourceState] = [:]
+    /// Per-camera status. Deliberately **not** `@Published`: thousands of cameras change state in bursts (start-up, a host's
+    /// robots.txt answering), and a publish per camera re-rendered the whole table thousands of times and froze the UI.
+    /// Changes are coalesced into at most one refresh per half second instead.
+    private(set) var sourceStates: [UUID: SourceState] = [:] { didSet { scheduleStateRefresh() } }
+    private var stateRefreshPending = false
+    private func scheduleStateRefresh() {
+        guard !stateRefreshPending else { return }
+        stateRefreshPending = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            self?.stateRefreshPending = false
+            self?.objectWillChange.send()
+        }
+    }
     enum StatusKind: String, CaseIterable, Identifiable {
         case checking = "Checking robots.txt", polling = "Polling", confirmed = "Confirmed (idle)"
         case unavailable = "Policy temporarily unavailable"
@@ -169,10 +182,9 @@ final class FeedRunner: ObservableObject {
                 guard let self, self.generation == run else { return }
                 let pending = sources.filter { !self.blockedIDs.contains($0.id) && self.tasks[$0.id] == nil && self.sourceStates[$0.id] != .suspended }
                 var decisions: [UUID: RobotsDecision] = [:]
-                for source in pending {
-                    decisions[source.id] = await self.robots.decision(for: source.url)
-                    guard !Task.isCancelled, self.generation == run else { return }
-                }
+                let answers = await self.robots.decisions(for: pending.map(\.url))      // one hop for the whole host
+                guard !Task.isCancelled, self.generation == run else { return }
+                for (source, answer) in zip(pending, answers) { decisions[source.id] = answer }
                 for source in pending where !self.blockedIDs.contains(source.id) {
                     switch decisions[source.id] {
                     case .allowed: self.beginPolling(source, run: run)

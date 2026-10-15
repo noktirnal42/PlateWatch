@@ -433,4 +433,16 @@ extension RobotsCacheTests {
         }
         XCTAssertNotNil(PublicAPIPermission.caltransCCTV.citation.url)
     }
+
+    /// Thousands of cameras on one host: one batched call, one robots.txt request, one answer per URL (in order).
+    func testBatchedDecisionsFetchOncePerOriginAndKeepOrder() async {
+        RobotsStubProtocol.requestCount = 0
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+        let urls = (0..<50).map { makeURL(path: $0 % 2 == 0 ? "/cam/\($0)" : "/private/\($0)") }
+        let answers = await cache.decisions(for: urls)
+        XCTAssertEqual(answers.count, 50)
+        XCTAssertEqual(answers.enumerated().filter { $0.element.isAllowed }.map(\.offset), Array(stride(from: 0, to: 50, by: 2)))
+        XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
+    }
 }
