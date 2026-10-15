@@ -12,7 +12,8 @@ enum Hashing {
 /// moderated publication path exists (docs/ACCOUNTABILITY-DATA.md).
 public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
     public let url: URL
-    public init(url: URL) { self.url = url }
+    private let pretty: Bool
+    public init(url: URL, pretty: Bool = true) { self.url = url; self.pretty = pretty }
 
     public func load(default fallback: Value) -> Value {
         guard let data = try? Data(contentsOf: url) else { return fallback }
@@ -23,7 +24,7 @@ public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
     public func save(_ value: Value) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try encoder.encode(value).write(to: url, options: .atomic)
     }

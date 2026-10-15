@@ -48,18 +48,50 @@ final class RecordsWorkspace {
     var ledger: RecordsLedger { didSet { save(ledger, ledgerStore) } }
     var budget: PacerBudget { didSet { save(budget, budgetStore) } }
     var lastError = ""
+    /// Imported open-data rosters by source id (names + titles only; the portal is asked for nothing else).
+    private(set) var rosterSnapshots: [String: RosterSnapshot] = [:]
+    var rosterProgress: [String: Int] = [:]
+    private let directory: URL
 
     private let trackerStore: JSONFileStore<FOIATracker>
     private let ledgerStore: JSONFileStore<RecordsLedger>
     private let budgetStore: JSONFileStore<PacerBudget>
 
     init(directory: URL = RecordsWorkspace.defaultDirectory) {
+        self.directory = directory
         trackerStore = .init(url: directory.appendingPathComponent("foia-requests.json"))
         ledgerStore = .init(url: directory.appendingPathComponent("ledger.json"))
         budgetStore = .init(url: directory.appendingPathComponent("pacer-budget.json"))
         tracker = trackerStore.load(default: FOIATracker())
         ledger = ledgerStore.load(default: RecordsLedger())
         budget = budgetStore.load(default: PacerBudget())
+        for source in RosterCatalog.all {
+            let snap = rosterStore(source.id).load(default: RosterSnapshot(sourceID: source.id, importedAt: .distantPast, asOf: nil, entries: []))
+            if !snap.entries.isEmpty { rosterSnapshots[source.id] = snap }
+        }
+    }
+
+    private func rosterStore(_ id: String) -> JSONFileStore<RosterSnapshot> {
+        JSONFileStore(url: directory.appendingPathComponent("roster-\(id).json"), pretty: false)
+    }
+
+    /// One-click import of a catalogue roster. Returns the entry count (0 on failure; the reason is in `lastError`).
+    func importCatalogRoster(_ source: RosterSource) async -> Int {
+        rosterProgress[source.id] = 0
+        defer { rosterProgress[source.id] = nil }
+        do {
+            let snap = try await RosterFetcher().fetch(source) { n in Task { @MainActor in RecordsWorkspace.shared.rosterProgress[source.id] = n } }
+            try rosterStore(source.id).save(snap)
+            rosterSnapshots[source.id] = snap
+            lastError = ""
+            return snap.entries.count
+        } catch { lastError = "Roster import failed (\(source.title)): \(error)"; return 0 }
+    }
+
+    func addOfficial(_ entry: RosterSnapshot.Entry, from source: RosterSource) -> OfficialProfile? {
+        guard let snap = rosterSnapshots[source.id] else { return nil }
+        do { return try ledger.addProfile(from: entry, snapshot: snap, source: source) }
+        catch { lastError = "\(error)"; return nil }
     }
 
     static var defaultDirectory: URL {

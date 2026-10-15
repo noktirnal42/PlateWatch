@@ -16,6 +16,9 @@ struct RecordsPeopleView: View {
     @State private var confirmURL = ""
     @State private var confirmType: SourceCitation.SourceType = .agencyRoster
     @State private var message = ""
+    @State private var sourceID = RosterCatalog.all[0].id
+    @State private var importing = false
+    @State private var search = ""
 
     private var profile: OfficialProfile? { workspace.ledger.profiles.first { $0.id == selected } }
 
@@ -25,7 +28,8 @@ struct RecordsPeopleView: View {
                 List(workspace.ledger.profiles, selection: $selected) { p in
                     VStack(alignment: .leading) { Text(p.name).fontWeight(.medium); Text(p.role).font(.caption).foregroundStyle(.secondary) }.tag(p.id)
                 }
-                GroupBox("Import a published roster (CSV)") {
+                GroupBox("Police rosters (open data)") { catalogue }
+                GroupBox("Import a roster from a CSV file") {
                     VStack(alignment: .leading) {
                         Text("Reads only the name, role and unit columns you name; everything else in the file is ignored and not stored. Rows arrive as pending.")
                             .font(.caption).foregroundStyle(.secondary)
@@ -175,5 +179,47 @@ struct RecordsPeopleView: View {
             columns: .init(name: nameCol.stringValue, role: roleCol.stringValue.isEmpty ? nil : roleCol.stringValue,
                            unit: unitCol.stringValue.isEmpty ? nil : unitCol.stringValue))
         message = "\(n) new roster row(s) added as pending."
+    }
+
+    private var source: RosterSource { RosterCatalog.source(id: sourceID) ?? RosterCatalog.all[0] }
+
+    @ViewBuilder private var catalogue: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Source", selection: $sourceID) {
+                ForEach(RosterCatalog.all) { s in
+                    Text(workspace.rosterSnapshots[s.id].map { "\(s.title) ✓ \($0.entries.count)" } ?? s.title).tag(s.id)
+                }
+            }.labelsHidden()
+            Text(source.note).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button(workspace.rosterSnapshots[source.id] == nil ? "Import" : "Re-import", systemImage: "arrow.down.circle") {
+                    importing = true; message = ""
+                    let s = source
+                    Task { let n = await workspace.importCatalogRoster(s); message = n > 0 ? "Imported \(n) names from \(s.title)." : ""; importing = false }
+                }.disabled(importing)
+                if importing { ProgressView().controlSize(.small); Text("\(workspace.rosterProgress[source.id] ?? 0) rows…").font(.caption) }
+                Link("Dataset page", destination: source.datasetPage).font(.caption)
+            }
+            Text("Requests only the name and job-title columns from the agency's own open-data portal; pay, age and demographic columns are never downloaded.")
+                .font(.caption2).foregroundStyle(.secondary)
+            if let snap = workspace.rosterSnapshots[source.id] {
+                Text("Imported \(snap.importedAt.formatted(date: .abbreviated, time: .omitted))\(snap.asOf.map { " · as of \($0)" } ?? "")")
+                    .font(.caption2).foregroundStyle(.secondary)
+                TextField("Search this roster by name or title", text: $search)
+                let hits = search.count < 2 ? [] : Array(snap.entries.lazy.filter {
+                    $0.name.localizedCaseInsensitiveContains(search) || $0.role.localizedCaseInsensitiveContains(search) }.prefix(12))
+                ForEach(Array(hits.enumerated()), id: \.offset) { _, e in
+                    HStack {
+                        Text("\(e.name) · \(e.role)").font(.caption).lineLimit(1)
+                        Spacer()
+                        Button("Add as official") { if let p = workspace.addOfficial(e, from: source) { selected = p.id; agencyKey = source.agencyKey } }
+                            .controlSize(.small)
+                    }
+                }
+                if search.count >= 2, hits.isEmpty { Text("No match.").font(.caption) }
+            }
+            if !workspace.lastError.isEmpty { Text(workspace.lastError).font(.caption).foregroundStyle(.red) }
+            if !message.isEmpty { Text(message).font(.caption) }
+        }.padding(4)
     }
 }

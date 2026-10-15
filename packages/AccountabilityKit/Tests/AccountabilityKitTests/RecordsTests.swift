@@ -359,3 +359,64 @@ final class PacerAuthRequestTests: XCTestCase {
         XCTAssertNil((try JSONSerialization.jsonObject(with: cap.last!.httpBody!) as! [String: String])["clientCode"])
     }
 }
+
+final class RosterCatalogTests: XCTestCase {
+    private final class Recorder: HTTPFetching, @unchecked Sendable {
+        var requests: [URLRequest] = []
+        var pages: [Data]
+        init(pages: [Data]) { self.pages = pages }
+        func fetch(_ request: URLRequest) async throws -> (data: Data, status: Int) {
+            requests.append(request)
+            return (pages.isEmpty ? Data("[]".utf8) : pages.removeFirst(), 200)
+        }
+    }
+
+    func testCatalogEntriesAreWellFormedAndMinimal() {
+        XCTAssertGreaterThanOrEqual(RosterCatalog.all.count, 8)
+        XCTAssertEqual(Set(RosterCatalog.all.map(\.id)).count, RosterCatalog.all.count)
+        for s in RosterCatalog.all {
+            XCTAssertTrue(s.agencyKey.hasPrefix("US-\(s.state)/"), s.id)
+            XCTAssertEqual(s.datasetPage.absoluteString, "https://\(s.domain)/d/\(s.datasetID)")
+            XCTAssertEqual(s.requestedFields.count, s.names == .single(s.requestedFields[0]) ? 2 : 3, "name + role only: \(s.id)")
+            let banned = ["salary", "pay", "gender", "sex", "race", "ethnicity", "age", "birth", "address", "phone", "hire"]
+            XCTAssertFalse(s.requestedFields.contains { f in banned.contains { f.lowercased().contains($0) } }, "\(s.id) requests a personal/pay field")
+        }
+    }
+
+    func testFetchUsesLatestValueSelectsOnlyNameAndRoleAndBuildsEntries() async throws {
+        let source = RosterCatalog.source(id: "nypd")!
+        let rec = Recorder(pages: [Data(#"[{"latest":"2025"}]"#.utf8),
+                                   Data(#"[{"first_name":"ROGER","last_name":"HARB","title_description":"POLICE OFFICER"},{"first_name":"","last_name":""}]"#.utf8)])
+        let snap = try await RosterFetcher(fetcher: rec, pause: {}).fetch(source, now: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(snap.asOf, "2025")
+        XCTAssertEqual(snap.entries, [.init(name: "ROGER HARB", role: "POLICE OFFICER")], "blank name skipped")
+        let q = URLComponents(url: rec.requests[1].url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(q.first { $0.name == "$select" }?.value, "first_name,last_name,title_description")
+        XCTAssertTrue(q.first { $0.name == "$where" }!.value!.contains("fiscal_year='2025'"))
+        XCTAssertEqual(rec.requests[1].url?.host, "data.cityofnewyork.us")
+    }
+
+    func testPagingStopsOnAShortPageAndErrorsAbort() async throws {
+        let source = RosterCatalog.source(id: "seattle-pd")!
+        let full = "[" + (0..<RosterFetcher.pageSize).map { #"{"first_name":"A\#($0)","last_name":"B","job_title":"x"}"# }.joined(separator: ",") + "]"
+        let rec = Recorder(pages: [Data(full.utf8), Data(#"[{"first_name":"Z","last_name":"Y","job_title":"t"}]"#.utf8)])
+        let snap = try await RosterFetcher(fetcher: rec, pause: {}).fetch(source)
+        XCTAssertEqual(snap.entries.count, RosterFetcher.pageSize + 1)
+        XCTAssertEqual(rec.requests.count, 2)
+        struct Fail: HTTPFetching { func fetch(_ r: URLRequest) async throws -> (data: Data, status: Int) { (Data(), 429) } }
+        do { _ = try await RosterFetcher(fetcher: Fail(), pause: {}).fetch(source); XCTFail() }
+        catch { XCTAssertEqual(error as? RosterFetcher.FetchError, .http(429)) }
+    }
+
+    func testProfileFromEntryIsCitedToTheDatasetAndReused() throws {
+        let source = RosterCatalog.source(id: "chicago-pd")!
+        let snap = RosterSnapshot(sourceID: source.id, importedAt: Date(timeIntervalSince1970: 0), asOf: nil,
+                                  entries: [.init(name: "AARON, JEFFERY M", role: "LIEUTENANT")])
+        var ledger = RecordsLedger()
+        let p = try ledger.addProfile(from: snap.entries[0], snapshot: snap, source: source)
+        XCTAssertEqual(p.citations[0].sourceType, .openDataPortal)
+        XCTAssertEqual(p.citations[0].url?.absoluteString, "https://data.cityofchicago.org/d/xzkq-xp2w")
+        XCTAssertEqual(try ledger.addProfile(from: snap.entries[0], snapshot: snap, source: source).id, p.id)
+        XCTAssertEqual(ledger.profiles.count, 1)
+    }
+}
