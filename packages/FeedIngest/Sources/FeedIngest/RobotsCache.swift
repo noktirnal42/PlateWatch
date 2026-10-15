@@ -39,26 +39,41 @@ public actor RobotsCache {
 
     public func isAllowed(_ url: URL) async -> Bool { await decision(for: url).isAllowed }
 
-    /// Manual retry invalidates only an unavailable lookup, never a valid Disallow/authentication/rate refusal.
-    /// Decisions for many URLs in one actor hop. Callers with thousands of cameras on one host must not pay a round trip
-    /// (and a queue behind unrelated work) per camera: after the first lookup fills the cache the rest are lookups.
+    /// Take one policy snapshot per origin for the batch, then evaluate every camera path.
+    /// Even a large or slow batch must not refetch an expired failure halfway through the same host.
     public func decisions(for urls: [URL]) async -> [RobotsDecision] {
+        var policies: [String: CachedPolicy] = [:]
         var out: [RobotsDecision] = []
         out.reserveCapacity(urls.count)
-        for url in urls { out.append(await decision(for: url)) }
+        for url in urls {
+            guard let host = url.host else { out.append(.unavailable("Invalid camera host.")); continue }
+            let origin = "\(url.scheme ?? "https")://\(host):\(url.port ?? (url.scheme == "https" ? 443 : 80))"
+            let policy: CachedPolicy
+            if let existing = policies[origin] { policy = existing }
+            else {
+                policy = await lookup(for: url)
+                policies[origin] = policy
+            }
+            out.append(permission(policy, for: url))
+        }
         return out
     }
 
+    /// Manual retry invalidates only an unavailable lookup, never a valid Disallow/authentication/rate refusal.
     public func decision(for url: URL, retryFailure: Bool = false) async -> RobotsDecision {
-        guard let host = url.host else { return .unavailable("Invalid camera host.") }
+        permission(await lookup(for: url, retryFailure: retryFailure), for: url)
+    }
+
+    private func lookup(for url: URL, retryFailure: Bool = false) async -> CachedPolicy {
+        guard let host = url.host else { return CachedPolicy(failure: "Invalid camera host.") }
         let port = url.port ?? (url.scheme == "https" ? 443 : 80)
         let origin = "\(url.scheme ?? "https")://\(host):\(port)"
         if let entry = cache[origin], entry.expiresAt > now() {
             let result = permission(entry.policy, for: url)
             if retryFailure, case .unavailable = result { cache[origin] = nil }
-            else { return result }
+            else { return entry.policy }
         }
-        if let task = inFlight[origin] { return permission(await task.value, for: url) }
+        if let task = inFlight[origin] { return await task.value }
 
         let task = Task { [session, userAgent, maximumAttempts, retryDelay, publicAPIPermissions] in
             var last = CachedPolicy(failure: "Policy request did not complete.")
@@ -101,9 +116,11 @@ public actor RobotsCache {
                     if code == .cancelled { return CachedPolicy(failure: "Policy request cancelled.") }
                     let reason: String
                     switch code {
-                    case .timedOut: reason = "robots.txt request timed out."
+                    case .timedOut:
+                        reason = "Connection to \(url.host ?? "camera host") timed out during the policy lookup. No robots refusal was received; the camera host may also be unreachable."
                     case .notConnectedToInternet, .networkConnectionLost: reason = "Network connection unavailable during robots.txt lookup."
-                    case .cannotFindHost, .dnsLookupFailed: reason = "Could not resolve the robots.txt host."
+                    case .cannotFindHost, .dnsLookupFailed: reason = "Could not resolve \(url.host ?? "camera host") for the policy lookup. Camera images on this host may also be unavailable."
+                    case .cannotConnectToHost: reason = "Could not connect to \(url.host ?? "camera host") for the policy lookup. No robots refusal was received."
                     case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
                          .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid:
                         reason = "The robots.txt host's TLS certificate could not be verified."
@@ -120,7 +137,7 @@ public actor RobotsCache {
         let lifetime = result.refusalStatus != nil ? 600 : (result.failure != nil ? 60 : ttl)
         cache[origin] = .init(policy: result, expiresAt: now().addingTimeInterval(lifetime))
         inFlight[origin] = nil
-        return permission(result, for: url)
+        return result
     }
 
     private func permission(_ cached: CachedPolicy, for url: URL) -> RobotsDecision {
