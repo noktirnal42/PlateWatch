@@ -265,7 +265,8 @@ final class HubController: ObservableObject {
                                                       context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
         framesAnalyzed += 1
         recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6, mayResolveIdentity: source.mayResolveIdentity,
-                        sourceID: source.id.uuidString)
+                        sourceID: source.id.uuidString,
+                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
     }
 
     /// Installs the detector models (registry, or a developer override `Local/<task>.mlmodel`). Best-effort:
@@ -485,7 +486,8 @@ final class HubController: ObservableObject {
             let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: frameContext(contextBox, for: buffer, readPlates: platesAllowed))
             framesAnalyzed += 1
             let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
-            let recorded = recordFleetHits(in: frame, tier: tier)
+            let recorded = recordFleetHits(in: frame, tier: tier,
+                                           source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
             let keys = recorded.agencyKeys.isEmpty ? "" : "; " + recorded.agencyKeys.joined(separator: ", ")
             sendHTTPResponse(on: connection, status: 200,
                              body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(recorded.hits)\(keys); tier: \(tier.rawValue); plates read: \(frame.vehicles.flatMap(\.plates).count))")
@@ -496,10 +498,13 @@ final class HubController: ObservableObject {
 
     /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
     /// endpoint so both apply identical rules. Returns the number of fleet hits.
+    /// `source` is the analysed frame as a bitmap: when present, every recorded hit
+    /// carries an evidence crop of the vehicle (redacted per `EvidenceCrop` policy).
     @discardableResult
     private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier,
                                  geohash6: String? = nil, mayResolveIdentity: Bool = true,
-                                 sourceID: String = "home") -> (hits: Int, agencyKeys: [String]) {
+                                 sourceID: String = "home",
+                                 source: EvidenceCrop.SourceFrame? = nil) -> (hits: Int, agencyKeys: [String]) {
         let geohash6 = geohash6 ?? homeGeohash6
         var hits = 0
         var agencyKeys: [String] = []
@@ -529,9 +534,12 @@ final class HubController: ObservableObject {
             fleetHitsToday += 1
             if let key = identity?.agency?.agencyKey { agencyKeys.append(key) }
             guard let context = modelContext else { continue }
+            let crop = source.flatMap { EvidenceCrop.make(source: $0, vehicle: vehicle, others: frame.vehicles) }
             let dto = SightingSubmissionDTO(
                 capturedAt: frame.timestamp,
                 geohash6: geohash6,
+                cropHashSHA256: crop?.sha256Hex,
+                cropJPEGBase64: crop?.base64,
                 deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
                 fleetConfidence: confidence,
                 plate: vehicle.plates.first?.best.map(PlateDTO.init),
@@ -589,7 +597,8 @@ final class HubController: ObservableObject {
             context: frameContext(contextBox, for: buffer, readPlates: platesAllowed)) else { return nil }
         framesAnalyzed += 1
         let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
-        let recorded = recordFleetHits(in: frame, tier: tier, sourceID: sourceID)
+        let recorded = recordFleetHits(in: frame, tier: tier, sourceID: sourceID,
+                                       source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
         let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             return .init(id: vehicle.id, rect: vehicle.boundingBox,
@@ -623,7 +632,8 @@ final class HubController: ObservableObject {
                     try? fm.removeItem(at: url) // undecodable input, discard
                     continue
                 }
-                recordFleetHits(in: frame, tier: AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))))
+                recordFleetHits(in: frame, tier: AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))),
+                                source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
                 // Rolling source media: hub keeps only fleet-hit crops,
                 // never the raw camera flow (LEGAL-ETHICS).
                 try? fm.removeItem(at: url)
@@ -821,16 +831,19 @@ final class RTSPStreamHandler: @unchecked Sendable {
                         timestamp: timestamp,
                         sequenceNumber: UInt64(frameCount))
                     
-                    Task { @Sendable [weak self] in
+                        Task { @Sendable [weak self] in
                         guard let self else { return }
                         do {
                             let frame = try await pipeline.analyze(
                                 FramePacketLike(pixelBuffer: packet.pixelBuffer),
                                 context: frameContext(contextBox, for: packet.pixelBuffer,
                                                       readPlates: HubController.platesAllowed(forGeohash6: homeGeohash6)))
-                            
+
+                            // The buffer is owned by this closure; wrap it here so a recorded
+                            // hit can crop its evidence image without another cross-actor hop.
+                            let source = EvidenceCrop.SourceFrame(pixelBuffer: packet.pixelBuffer)
                             await MainActor.run {
-                                self.handleFrame(frame, timestamp: timestamp)
+                                self.handleFrame(frame, timestamp: timestamp, source: source)
                             }
                         } catch {
                             print("RTSP analysis error: \(error)")
@@ -862,7 +875,7 @@ final class RTSPStreamHandler: @unchecked Sendable {
         isRunning = false
     }
     
-    private func handleFrame(_ frame: DetectionFrame, timestamp: Date) {
+    private func handleFrame(_ frame: DetectionFrame, timestamp: Date, source: EvidenceCrop.SourceFrame? = nil) {
         guard !frame.vehicles.isEmpty else { return }
         
         var fleetHits = 0
@@ -871,9 +884,12 @@ final class RTSPStreamHandler: @unchecked Sendable {
             if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
                 fleetHits += 1
                 if let context = modelContext {
+                    let crop = source.flatMap { EvidenceCrop.make(source: $0, vehicle: vehicle, others: frame.vehicles) }
                     let dto = SightingSubmissionDTO(
                         capturedAt: timestamp,
                         geohash6: homeGeohash6,
+                        cropHashSHA256: crop?.sha256Hex,
+                        cropJPEGBase64: crop?.base64,
                         deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
                         fleetConfidence: confidence,
                         plate: vehicle.plates.first?.best.map(PlateDTO.init),

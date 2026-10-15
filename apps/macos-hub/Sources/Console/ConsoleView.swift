@@ -7,6 +7,7 @@ import SwiftUI
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
         case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models"
+        case records = "Records & FOIA"
         case moderation = "Moderation", settings = "Settings"
         var id: String { rawValue }
         var icon: String {
@@ -17,6 +18,7 @@ struct ConsoleView: View {
             case .feeds: return "antenna.radiowaves.left.and.right"
             case .cameras: return "video"
             case .models: return "cpu"
+            case .records: return "doc.text.magnifyingglass"
             case .moderation: return "checkmark.shield"
             case .settings: return "gearshape"
             }
@@ -45,6 +47,7 @@ struct ConsoleView: View {
                 case .feeds: FeedsPane(hub: hub)
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
+                case .records: RecordsPane()
                 case .moderation: ModerationPane(onSignOut: { moderator = false; selection = .dashboard })
                 case .settings: SettingsPane(hub: hub, moderator: $moderator)
                 }

@@ -39,6 +39,7 @@ targets:
       - package: VehicleML
       - package: PlateSync
       - package: FeedIngest
+      - package: FleetImporters
 
 packages:
   PlateKit: { path: ../../packages/PlateKit }
@@ -46,3 +47,4 @@ packages:
   VehicleML: { path: ../../packages/VehicleML }
   PlateSync: { path: ../../packages/PlateSync }
   FeedIngest: { path: ../../packages/FeedIngest }
+  FleetImporters: { path: ../../packages/FleetImporters }

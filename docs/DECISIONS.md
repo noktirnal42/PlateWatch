@@ -161,3 +161,27 @@ user-facing copy retitles the scope: "open accountability infrastructure for
 publicly funded fleets and the officials who run them." Renaming technical
 identifiers this early would break CloudKit, signing, and URLs for cosmetic
 gain. Revisit only if the umbrella ever outgrows vehicles+officials.
+
+## 2026-10-14 — Rule 6 amended: on-device identification of recorded officials
+
+**Decision.** The absolute biometric-matching ban of the 2026-10-13 M7
+decision is superseded by a conditional authorization (LEGAL-ETHICS Rule 6):
+face matching is permitted only against a corpus of people who already have
+cited public accountability records (Brady/Giglio, decertification, dockets),
+using cited public photos, computed on-device, never auto-publishing, and
+only in deployments whose jurisdiction has passed counsel review. Private
+individuals remain absolutely out of scope.
+
+**Why.** Surfacing an official's cited public record at the moment they
+appear on camera is the product's core accountability loop — the same
+aggregation-with-provenance the M7 program already authorizes. An outright
+ban made that loop impossible even under conditions that respect the
+statutes; the conditions (recorded subjects only, public photos only,
+on-device, confirmation, jurisdiction gate) address the statutory exposure
+directly instead.
+
+**Commits us to.** `AccountabilityKit` keeps matching code behind the
+jurisdiction/consent gate (off by default, enablement recorded); biometric
+templates never leave the operator's device; matches are labeled inference
+and require moderator confirmation before any publication; the SafetyHold
+takedown/appeal process applies to person links.

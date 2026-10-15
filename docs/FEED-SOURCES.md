@@ -174,7 +174,7 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
   says it does not hold. Iowa bans bots/framing; Arkansas bans embedding and requires the owner's logo; PennDOT limits use to
   showing current traffic. CFAA risk for polling public pages looks low (Van Buren, hiQ — 9th Cir. only) but contract/state-law claims remain.
 - No statute found banning publication of police-vehicle locations; confidential/undercover plates are protected; doxxing laws target home addresses.
-- No face/person/biometric processing anywhere keeps the project outside BIPA/CUBI/RCW 19.375.
+- The feed/analysis pipeline does no face/person/biometric processing (vehicle-class detectors only), which keeps capture and sighting analysis outside BIPA/CUBI/RCW 19.375. Official identification is a separate `AccountabilityKit` path: off by default, on-device only, and gated by LEGAL-ETHICS Rule 6 (counsel review per jurisdiction before enabling).
 
 | Guardrail | Status |
 |---|---|

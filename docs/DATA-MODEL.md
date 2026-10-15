@@ -114,8 +114,10 @@ derived record.
 ### OfficialProfile (M7)
 A public official/employee **in their public capacity**. Fields: name, role,
 agency (reference), public photo URL + retrieval date, `SourceCitation`s
-(≥ 1 mandatory). No home address, no personal contact data, no biometric
-templates — photos are for human verification only (LEGAL-ETHICS Rule 6).
+(≥ 1 mandatory). No home address, no personal contact data. Reference photos
+are cited public images; face embeddings computed from them stay on-device
+and are never persisted or synced (LEGAL-ETHICS Rule 6 conditions). A match
+is stored only as a labeled, confirmed person link — never as biometric data.
 
 ### IncidentRecord (M7)
 A cited public record about an official or agency: kind

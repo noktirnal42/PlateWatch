@@ -32,7 +32,9 @@ assets are in scope. Their families, homes, and off-duty private lives are not.
    agencies retain copyright and campaign/social photos are the photographer's.
    Default: **store the URL, retrieval date, a SHA-256 of the file and a
    thumbnail only where the licence allows — link out, don't re-host.** A photo
-   is stored with its citation and is for human moderator comparison only.
+   is stored with its citation; it may serve as human-comparison material and,
+   where every LEGAL-ETHICS Rule 6 condition holds, as a reference image for
+   on-device identification of officials with cited accountability records.
 3. **Credibility & conduct records** — Brady/Giglio lists released by
    prosecutors (public only where a jurisdiction has released them), **state POST
    decertification lists that a state publishes**, lawsuit dockets, settled
@@ -76,6 +78,12 @@ collected — exactly what Rule 6 forbids. Therefore:
 - A moderator confirming a unit↔person link reviews the **link**, not the
   sighting history; a test asserts that `OfficialProfile`/`PersonLink` types
   have no location field and cannot be constructed from a `Sighting`.
+- The firewall governs what is **stored and published**. The Rule 6
+  on-device identification flow is the operator's own tool at the moment of
+  capture — it may show the operator which cited-record person matched in
+  this frame — but nothing it displays becomes a published person-location
+  fact: published records still carry no sighting location, and
+  residential-hours frames produce no person link at all.
 
 ## Hard guardrails (encoded, not aspirational)
 
@@ -88,20 +96,30 @@ program lawful, accurate, and worth defending:
 - **Provenance or it doesn't exist.** Every person, photo, assignment and
   incident record requires ≥ 1 `SourceCitation` (URL, publisher, retrieval
   date). Un-sourced enrichment is rejected in code (AGENTS.md guardrail 2).
-- **No biometric matching.** Photos are never run through face recognition
-  against sighting frames or anyone's image. Beyond ethics, several states
-  (Illinois BIPA 740 ILCS 14, Texas, Washington) regulate biometric identifiers
-  and some create private rights of action; the exact exemptions differ, so the
-  project's rule is simply *never*. Photos aid human verification; nothing more.
+- **Biometric matching only under the Rule 6 conditions.** Face matching is
+  permitted solely to identify officials who already have cited public
+  accountability records, against cited public photos, computed on-device,
+  never auto-publishing, and only in deployments whose jurisdiction has
+  passed counsel review (LEGAL-ETHICS Rule 6 — Illinois BIPA 740 ILCS 14,
+  Texas CUBI, Washington RCW 19.375 and their analogues regulate biometric
+  identifiers, some with private rights of action; the exemptions differ).
+  Biometric templates stay on the operator's device and are never stored or
+  synced. Every match is labeled inference with a confidence and requires
+  moderator confirmation to publish. Photos still aid human verification;
+  matching never replaces it.
 - **Inference is labeled.** Auto-suggested unit↔person links carry a
   confidence and never auto-publish; publication requires moderator
   confirmation with its own citation.
 - **Allegation ≠ fact.** Lawsuits store docket references, parties, and
   status verbatim; summaries never go beyond the filing. Brady entries are
   stored as released, with the releasing office named.
-- **Anti-abuse.** No scoring or ranking of individuals, no presence alerts on
-  a person, no "leaderboards". Agency-level pattern analysis only (matches
-  the ideas bin). Commentary features stay absent — records tool, not a forum.
+- **Anti-abuse.** No scoring or ranking of individuals, no *published*
+  presence alerts on a person, no per-person live maps, no "leaderboards".
+  The Rule 6 identification flow — an operator's own device surfacing cited
+  records at the moment a confirmed match appears — is not a presence alert
+  and never reaches other users until the confirmation + SafetyHold gates
+  are passed. Agency-level pattern analysis only (matches the ideas bin).
+  Commentary features stay absent — records tool, not a forum.
 - **Takedown & appeal** mirror the `SafetyHold` process: removal requests
   honored for safety harms, logged, and error corrections re-verified against
   the cited source.
