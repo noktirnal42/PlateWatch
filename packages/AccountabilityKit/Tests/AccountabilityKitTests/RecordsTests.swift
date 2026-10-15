@@ -216,8 +216,13 @@ final class CourtTests: XCTestCase {
         let result = try await client.findCases(partyName: "B", loginID: "u", password: "p", now: day)
         XCTAssertEqual(result.map(\.docketNumber), ["1:25-cv-00001"])
         XCTAssertEqual(client.budget.spent(in: day), Decimal(string: "0.10")!)
-        var bad = PacerClient(fetcher: FakeFetcher(responses: ["pacer.login.uscourts.gov/services/cso-auth": (Data("{}".utf8), 200)]))
-        do { _ = try await bad.findCases(partyName: "B", loginID: "u", password: "p"); XCTFail() } catch { XCTAssertEqual(error as? PacerClient.Failure, .authFailed) }
+        let reject = #"{"nextGenCSO":"","loginResult":"13","errorDescription":"Invalid username, password, or client code"}"#
+        var bad = PacerClient(fetcher: FakeFetcher(responses: ["pacer.login.uscourts.gov/services/cso-auth": (Data(reject.utf8), 200)]))
+        do { _ = try await bad.findCases(partyName: "B", loginID: "u", password: "hunter2"); XCTFail() } catch {
+            guard case PacerClient.Failure.authFailed(let why) = error else { return XCTFail("\(error)") }
+            XCTAssertTrue(why.contains("loginResult 13") && why.contains("Invalid username"), "PACER's reason is surfaced: \(why)")
+            XCTAssertFalse(why.contains("hunter2"), "the password never appears in an error")
+        }
         XCTAssertEqual(bad.budget.spent(in: day), 0, "failed auth costs nothing")
     }
 }
@@ -329,5 +334,28 @@ final class RosterImportTests: XCTestCase {
         let old = #"{"candidates":[],"incidents":[],"profiles":[],"links":[]}"#
         let l = try JSONDecoder().decode(RecordsLedger.self, from: Data(old.utf8))
         XCTAssertTrue(l.rosterCandidates.isEmpty)
+    }
+}
+
+final class PacerAuthRequestTests: XCTestCase {
+    private final class Capture: HTTPFetching, @unchecked Sendable {
+        var last: URLRequest?
+        func fetch(_ request: URLRequest) async throws -> (data: Data, status: Int) {
+            last = request
+            return (Data(#"{"nextGenCSO":"tok","loginResult":"0","errorDescription":""}"#.utf8), 200)
+        }
+    }
+
+    func testAuthSendsRedactFlagAndSanitisedClientCode() async throws {
+        let cap = Capture()
+        let client = PacerClient(fetcher: cap)
+        let token = try await client.authenticate(loginID: "u", password: "p", clientCode: "my project, 1")
+        XCTAssertEqual(token, "tok")
+        let body = try JSONSerialization.jsonObject(with: cap.last!.httpBody!) as! [String: String]
+        XCTAssertEqual(body["redactFlag"], "1", "PACER requires the redaction flag")
+        XCTAssertEqual(body["clientCode"], "my-project--1", "no spaces or commas in client codes")
+        XCTAssertEqual(cap.last?.value(forHTTPHeaderField: "Accept"), "application/json")
+        _ = try await client.authenticate(loginID: "u", password: "p", clientCode: nil)
+        XCTAssertNil((try JSONSerialization.jsonObject(with: cap.last!.httpBody!) as! [String: String])["clientCode"])
     }
 }

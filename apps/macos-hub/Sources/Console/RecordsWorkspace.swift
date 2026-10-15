@@ -7,7 +7,7 @@ import Security
 /// repo) and are typed by the user in the Records pane — nothing here reads, logs or transmits them except to the
 /// matching court service.
 enum RecordsCredentials {
-    enum Item: String { case pacerLogin = "pacer-login", pacerPassword = "pacer-password", courtListenerToken = "courtlistener-token" }
+    enum Item: String { case pacerLogin = "pacer-login", pacerPassword = "pacer-password", pacerClientCode = "pacer-client-code", courtListenerToken = "courtlistener-token" }
     private static let service = "org.platewatch.hub.records"
 
     static func read(_ item: Item) -> String? {
@@ -92,12 +92,14 @@ final class RecordsWorkspace {
         }
         var client = PacerClient(budget: budget)
         do {
-            let dockets = try await client.findCases(partyName: partyName, loginID: login, password: password)
+            let dockets = try await client.findCases(partyName: partyName, loginID: login, password: password,
+                                                     clientCode: RecordsCredentials.read(.pacerClientCode))
             budget = client.budget
             let now = Date()
             lastError = ""
             return ledger.add(dockets.map { $0.candidate(retrievedAt: now) })
         } catch PacerClient.Failure.budgetDenied(let reason) { lastError = reason; return 0 }
+        catch PacerClient.Failure.authFailed(let why) { lastError = "PACER sign-in failed (\(why)). Check the username/password at pacer.uscourts.gov, and add a client code — PACER needs one for searches."; return 0 }
         catch { lastError = "PACER: \(error)"; return 0 }
     }
 

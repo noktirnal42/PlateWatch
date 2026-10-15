@@ -80,16 +80,17 @@ public struct PacerClient: Sendable {
         self.budget = budget; self.fetcher = fetcher
     }
 
-    public enum Failure: Error, Equatable { case authFailed, budgetDenied(String), decoding, http(Int) }
+    public enum Failure: Error, Equatable { case authFailed(String), budgetDenied(String), decoding, http(Int) }
 
     /// Searches PCL for cases whose party name matches. Estimated cost: one results page. Returns the dockets and the
     /// updated budget the caller should persist.
-    public mutating func findCases(partyName: String, loginID: String, password: String, now: Date = Date()) async throws -> [CourtDocket] {
+    public mutating func findCases(partyName: String, loginID: String, password: String, clientCode: String? = nil,
+                                   now: Date = Date()) async throws -> [CourtDocket] {
         let estimate = budget.estimate(pages: 1)
         let decision = budget.check(estimatedCost: estimate, on: now)
         if case .denied(let reason) = decision { throw Failure.budgetDenied(reason) }
 
-        let token = try await authenticate(loginID: loginID, password: password)
+        let token = try await authenticate(loginID: loginID, password: password, clientCode: clientCode)
         var req = URLRequest(url: Self.caseFindURL)
         req.httpMethod = "POST"
         req.setValue(token, forHTTPHeaderField: "X-NEXT-GEN-CSO")
@@ -101,16 +102,35 @@ public struct PacerClient: Sendable {
         return try Self.parseCases(data)
     }
 
-    func authenticate(loginID: String, password: String) async throws -> String {
+    /// PACER's documented authentication call: JSON `loginId`, `password`, `redactFlag` (required — the filer attests to
+    /// the redaction rules) and `clientCode` (needed for searches; PACER forbids spaces and commas in it since April 2024).
+    /// Success is `loginResult == "0"` with a token in `nextGenCSO`; failures carry PACER's own `errorDescription`, which
+    /// is surfaced so a bad password, a locked account or a missing client code can be told apart. The password is never
+    /// included in any error text.
+    func authenticate(loginID: String, password: String, clientCode: String?) async throws -> String {
         var req = URLRequest(url: Self.authURL)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["loginId": loginID, "password": password])
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        var body: [String: String] = ["loginId": loginID, "password": password, "redactFlag": "1"]
+        if let code = clientCode?.trimmingCharacters(in: .whitespaces), !code.isEmpty {
+            body["clientCode"] = Self.sanitisedClientCode(code)
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, status) = try await fetcher.fetch(req)
-        guard status == 200,
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = object["nextGenCSO"] as? String, !token.isEmpty else { throw Failure.authFailed }
-        return token
+        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let result = (object?["loginResult"] as? String) ?? (object?["loginResult"] as? Int).map(String.init)
+        let detail = (object?["errorDescription"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        if status == 200, let token = object?["nextGenCSO"] as? String, !token.isEmpty, result == nil || result == "0" { return token }
+        var message = "HTTP \(status)"
+        if let result, result != "0" { message += ", loginResult \(result)" }
+        if let detail { message += ": \(detail)" }
+        throw Failure.authFailed(message)
+    }
+
+    /// PACER rejects spaces and commas in client codes; replace them with "-".
+    static func sanitisedClientCode(_ code: String) -> String {
+        String(code.map { $0 == " " || $0 == "," ? "-" : $0 })
     }
 
     static func parseCases(_ data: Data) throws -> [CourtDocket] {

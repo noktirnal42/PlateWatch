@@ -11,6 +11,7 @@ struct RecordsCourtListsView: View {
     @State private var notice = ""
     @State private var pacerLogin = ""
     @State private var pacerPassword = ""
+    @State private var pacerClientCode = RecordsCredentials.read(.pacerClientCode) ?? ""
     @State private var clToken = ""
     @State private var extraLimit = ""
     @State private var hasPacer = RecordsCredentials.has(.pacerLogin)
@@ -60,6 +61,9 @@ struct RecordsCourtListsView: View {
                                 }
                             }.disabled(pacerLogin.isEmpty || pacerPassword.isEmpty)
                         }
+                        TextField("Client code (needed for searches; no spaces or commas)", text: $pacerClientCode)
+                            .onSubmit { RecordsCredentials.write(pacerClientCode, for: .pacerClientCode) }
+                        Button("Save client code") { RecordsCredentials.write(pacerClientCode, for: .pacerClientCode) }
                         Divider()
                         let now = Date()
                         Text("This quarter: $\(workspace.budget.spent(in: now) as NSDecimalNumber) spent · free allowance $\(workspace.budget.freeAllowanceUSD as NSDecimalNumber) · $\(workspace.budget.remainingFree(on: now) as NSDecimalNumber) free left")

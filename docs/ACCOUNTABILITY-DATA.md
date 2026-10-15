@@ -156,8 +156,10 @@ program lawful, accurate, and worth defending:
   "allowed above free" dollar limit, **default $0 = never billed**. Estimated cost is checked before each request and the
   network is not touched when it would be refused. Credentials are typed by the user into the Keychain
   (`org.platewatch.hub.records`); the code never sees them elsewhere.
-  The PACER/PCL endpoints are written from the public API description and are **UNVERIFIED against a live login**; the
-  CourtListener endpoint likewise (parsers and budget are unit-tested with fakes). First live use: free allowance only.
+  CourtListener search was **verified live by the owner (2026-10-15)**. PACER sign-in followed PACER's documented `cso-auth`
+  call (`loginId`, `password`, required `redactFlag`, `clientCode` for searches); the first live try failed ("auth failed")
+  before `redactFlag`/`clientCode` were sent, and errors now show PACER's `loginResult`/`errorDescription`. The PCL case-search
+  call is still **UNVERIFIED**. First live use: free allowance only.
 - Hub → Records & FOIA → **Requests** and **Court & lists** tabs; Review shows a **cited-records strip** for the selected
   vehicle's unit.
 
