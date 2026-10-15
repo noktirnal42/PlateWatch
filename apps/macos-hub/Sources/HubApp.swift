@@ -19,6 +19,9 @@ struct PlateWatchHubApp: App {
                 ModelConfiguration("PlateWatchHub-fallback", schema: schema, isStoredInMemoryOnly: true)))
         backend = SyncBackends.makeDefault()
         let controller = HubController(context: modelContainer.mainContext)
+        let bridge = HubAgentBridge(hub: controller, context: modelContainer.mainContext)
+        controller.agentBridge = bridge
+        bridge.start()
         _hub = StateObject(wrappedValue: controller)
         let port = UInt16(clamping: UserDefaults.standard.integer(forKey: "hubSnapshotPort"))
         Task { await controller.startSnapshotServer(port: port == 0 ? 8088 : port) }

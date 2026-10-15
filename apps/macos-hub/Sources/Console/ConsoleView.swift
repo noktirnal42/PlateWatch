@@ -64,7 +64,17 @@ struct ConsoleView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .onChange(of: selection) { _, pane in if pane == .feeds { feedsVisited = true } }
+        .onChange(of: selection) { _, pane in
+            if pane == .feeds { feedsVisited = true }
+            hub.agentBridge?.currentPane = String(describing: pane ?? .dashboard)
+        }
+        .onAppear { hub.agentBridge?.currentPane = String(describing: selection ?? .dashboard) }
+        .onDisappear { hub.agentBridge?.currentPane = "closed" }
+        .onReceive(NotificationCenter.default.publisher(for: HubAgentBridge.navigation)) { note in
+            if let key = note.object as? String {
+                selection = Pane.allCases.first { String(describing: $0) == key } ?? selection
+            }
+        }
         .task { moderator = await Task.detached { ModeratorAccess.isEnrolled }.value }
         .navigationTitle(selection?.rawValue ?? "PlateWatch Hub")
         .toolbar {

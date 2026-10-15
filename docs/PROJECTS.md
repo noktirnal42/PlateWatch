@@ -55,6 +55,7 @@ tests must stay green before its status advances.
   own CDN segment fetches are a documented limitation); `.rtsp` states it needs the unbundled VLCKit
   fallback. Oregon/Utah/New Mexico imports added; new hosts remain unconfirmed. Continuous HLS and raw
   RTSP are not yet validated against real streams end-to-end.
+- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.
 - **Next:** follow [HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md): verify a real permitted HLS
   camera end-to-end,
   credentialed US sources, hardware/permission QA and a small camera-quality pilot.

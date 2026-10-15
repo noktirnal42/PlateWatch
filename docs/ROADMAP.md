@@ -119,3 +119,14 @@ first.
 - Public API for journalists w/ rate-limited query access
 - Integration with court-record public data (vehicle appears in filings)
 - Multi-language plates beyond Latin OCR (global expansion)
+
+## Hub agent interfaces and internal agents
+
+- [x] Local MCP tool interface for app-owned feed/records/review/navigation commands; client installer and portable skill.
+- [ ] In-app planner/executor driving the same validated commands, activity journal, budgets and stop control.
+- [ ] On-device Apple Foundation Models agent provider (separate from the existing markings parser).
+- [ ] Local MLX provider using the existing universal Hugging Face store, with missing-volume refusal and pinned/licensed models.
+- [ ] Apple Foundation Models PCC provider: signed entitlement/account/platform and actual-inference validation; approved data boundary.
+- [ ] Consider ACP frontend after a usable internal conversational agent exists.
+
+Implementation and acceptance checks: [AGENT-INTEGRATION.md](AGENT-INTEGRATION.md).

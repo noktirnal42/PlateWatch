@@ -45,6 +45,7 @@ final class HubController: ObservableObject {
     private let gate = RedactionGate(config: .standard)
     private var watchDescriptor: DispatchSourceFileSystemObject?
 
+    var agentBridge: HubAgentBridge?
     private var modelContext: ModelContext?
     /// Hub operator-set location bucket (these are fixed installations —
     /// the geohash-6 of the camera's own location).
@@ -341,7 +342,7 @@ final class HubController: ObservableObject {
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
         guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         // Permissions can be revoked while Vision is processing a frame.
@@ -369,7 +370,7 @@ final class HubController: ObservableObject {
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
         guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         guard !favorites.isBlocked(source.id),
@@ -771,9 +772,10 @@ struct LiveFrameResult: Sendable {
 
 /// The analysis context for one frame: the shared models plus the thorough text path only where the frame has
 /// enough pixels to read lettering (docs/FEED-SOURCES.md §1 — recall collapses below ~480 px).
-func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer, readPlates: Bool) -> AnalysisContext {
+func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer, readPlates: Bool, publicFeed: Bool = false) -> AnalysisContext {
     var context = box.current
     context.readPlates = readPlates
+    context.suppressCameraCaptions = publicFeed
     let longSide = max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))
     context.thorough = AnalysisTier.tier(forLongSide: longSide).thorough
     return context

@@ -138,3 +138,7 @@ open apps/ios/PlateWatch.xcodeproj
 
 AGPL-3.0 — see [LICENSE-AGPL-3.0.txt](LICENSE-AGPL-3.0.txt). Contributions
 welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Agent access
+
+The macOS Hub includes a local authenticated command bridge and a 14-tool stdio MCP adapter for Codex, Claude Code/Desktop and OpenCode. The installer preserves other client settings and installs a portable PlateWatch skill. Agents can inspect feeds/records/queued evidence, set stars and blocks, navigate Live, draft fleet FOIA text and import cited CSVs as pending candidates. Terms approval and moderation remain human operations. [Setup, verification and the planned on-device/PCC/MLX internal-agent architecture](docs/AGENT-INTEGRATION.md).
