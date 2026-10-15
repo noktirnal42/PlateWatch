@@ -43,6 +43,8 @@ tests must stay green before its status advances.
   webcams, RTSP rework, public traffic cams).
 - **Docs:** [CAMERA-SOURCES.md](CAMERA-SOURCES.md) (status matrix per source).
 - **Test:** `swift test --package-path packages/FeedIngest` + Hub scheme tests (see handoff).
+- **CSV import:** standard header mapping, agency and citation URL fields added; [export/source research](research/BRADY-CSV-EXPORTS-2026-10-14.md) records verified conversions and next sources.
+- **QA follow-up:** see [HUB-QA-2026-10-14.md](HUB-QA-2026-10-14.md) for post-Claude/GLM render fixes, source links and outstanding visual checks.
 - **Status:** 2026-10-14 desktop console builds and runs; favorites/block, shared polite polling,
   Caltrans's scoped robots fallback, selected snapshot analysis in Live, and moderator audit refresh
   implemented. Feed browser state survives sidebar navigation; Records & FOIA exposes the fleet FOIA
@@ -81,11 +83,11 @@ tests must stay green before its status advances.
   LEGAL-ETHICS (Rules 2/6), DATA-MODEL (planned entities).
 - **Test:** `swift test --package-path packages/FleetImporters` +
   `swift test --package-path packages/AccountabilityKit`.
-- **Status:** GSA/city-fleet/auction importers + FOIA generator shipped;
-  person-level program **not started** (ethics review is the gate;
-  `AccountabilityKit` types may land first — no collection logic).
-- **Next:** citation-enforced types; roster→person importers; Brady/docket
-  importers; cross-reference chain behind moderator confirmation.
+- **Status:** GSA/city-fleet/auction importers + FOIA generator shipped; 2026-10-15 FOIA tracker, CSV list and
+  CourtListener/PACER (budget-guarded) importers, record candidates and the location-free unit-records index landed
+  (local only, `docs/ACCOUNTABILITY-DATA.md`). People tab (operator-side cited links) built. Roster CSV importer and an eight-source one-click police roster catalogue built. Not built: second-person moderation, any publication.
+- **Next:** exercise CourtListener/PACER live (owner testing, free allowance); read statute text for the FOIA
+  deadline table (VA unconfirmed, CA AB 1821 pending).
 
 ## WS5 — Sync & backend
 

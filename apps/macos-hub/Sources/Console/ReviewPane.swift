@@ -1,3 +1,4 @@
+import AccountabilityKit
 import PlateKit
 import PlateSync
 import SwiftData
@@ -17,6 +18,7 @@ struct ReviewPane: View {
         let area: String
         let unit: String
         let agency: String
+        let agencyKey: String?
         let confidence: Double
         let retries: Int
         let error: String
@@ -29,6 +31,7 @@ struct ReviewPane: View {
             return Row(id: r.persistentModelID, key: r.idempotencyKey, captured: dto?.capturedAt ?? r.createdAt,
                        area: dto?.geohash6 ?? "?", unit: dto?.markings?.unitNumber ?? "—",
                        agency: dto?.markings?.agencyText ?? dto?.identity?.agency?.agencyKey ?? "unresolved",
+                       agencyKey: dto?.identity?.agency?.agencyKey,
                        confidence: dto?.fleetConfidence ?? 0, retries: r.retryCount, error: r.lastError ?? "",
                        thumbnail: dto?.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }.flatMap(NSImage.init(data:)))
         }
@@ -57,6 +60,7 @@ struct ReviewPane: View {
                 TableColumn("Retries") { Text("\($0.retries)") }
                 TableColumn("Last error") { Text($0.error).foregroundStyle(.secondary) }
             }
+            if let row = table.first(where: { $0.id == selection }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding()
@@ -70,15 +74,17 @@ private struct EvidenceThumbnail: View {
 
     var body: some View {
         if let image {
-            Image(nsImage: image)
+            Button { enlarged = true } label: {
+                Image(nsImage: image)
                 .resizable()
                 .scaledToFill()
                 .frame(width: 64, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary))
                 .contentShape(RoundedRectangle(cornerRadius: 5))
-                .onTapGesture { enlarged = true }
-                .help("Click to view full size")
+            }.buttonStyle(.plain)
+                .accessibilityLabel("View fleet vehicle evidence image")
+                .help("Click to view the saved evidence image at full size")
                 .sheet(isPresented: $enlarged) { EvidenceViewer(image: image) }
         } else {
             Image(systemName: "photo")
@@ -110,5 +116,39 @@ private struct EvidenceViewer: View {
         }
         .padding()
         .frame(minWidth: 520, minHeight: 400)
+    }
+}
+
+
+/// Cited public records for the selected vehicle's **unit and agency only**. It is given no place, time or camera, so it
+/// cannot show where anyone was; it shows moderator-confirmed unit↔person links and cited records, never inferences, and
+/// stays empty unless the agency was recognised (unit numbers repeat across agencies).
+private struct UnitRecordsStrip: View {
+    let unit: String
+    let agencyKey: String?
+    @State private var workspace = RecordsWorkspace.shared
+
+    var body: some View {
+        let result = workspace.unitIndex.records(forUnit: unit, agencyKey: agencyKey)
+        if !result.isEmpty {
+            GroupBox("Cited public records for unit \(unit)") {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(result.agencyRecords) { r in recordLine(r, prefix: "Agency") }
+                    ForEach(result.officials, id: \.link.id) { o in
+                        Text("\(o.profile.name) — \(o.profile.role.isEmpty ? "public official" : o.profile.role) (confirmed unit link, cited)").font(.caption.bold())
+                        ForEach(o.records) { r in recordLine(r, prefix: "Record") }
+                    }
+                    Text("Allegation is not fact: each line is the source's own wording and status. Records only — no location or timeline is attached.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
+            }
+        }
+    }
+
+    private func recordLine(_ r: IncidentRecord, prefix: String) -> some View {
+        HStack(spacing: 6) {
+            Text("\(prefix): \(r.kind.rawValue) · \(r.reference)\(r.status.isEmpty ? "" : " · \(r.status)")").font(.caption)
+            if let url = r.citations.first?.url { Link("source", destination: url).font(.caption) }
+        }
     }
 }

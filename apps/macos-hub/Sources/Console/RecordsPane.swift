@@ -36,11 +36,21 @@ struct RecordsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Picker("Records workspace", selection: $tab) {
-                Text("Fleet FOIA draft").tag(0)
-                Text("Public records directory").tag(1)
-                Text("Public-records programme").tag(2)
-            }.pickerStyle(.segmented).frame(maxWidth: 560)
-            if tab == 0 { builder } else if tab == 1 { directory } else { programme }
+                Text("FOIA draft").tag(0)
+                Text("Requests").tag(3)
+                Text("Court & lists").tag(4)
+                Text("People").tag(5)
+                Text("Directory").tag(1)
+                Text("Programme").tag(2)
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
+            switch tab {
+            case 0: builder
+            case 1: directory
+            case 3: RecordsRequestsView()
+            case 4: RecordsCourtListsView()
+            case 5: RecordsPeopleView()
+            default: programme
+            }
         }.padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -191,6 +201,21 @@ struct RecordsPane: View {
                      note: "Authoritative but per-page fees; no bulk automated access — verify every docket against the filing.",
                      citationType: .courtDocket),
 
+        RecordSource(name: "50-a.org — DA adverse credibility lists",
+                     category: .watchdog, states: ["NY"],
+                     url: URL(string: "https://www.50-a.org/credibility")!,
+                     note: "Published NYC prosecutor credibility lists with links to released documents. Verify each entry against its original release; no automatic import.",
+                     citationType: .bradyList),
+        RecordSource(name: "ABC15 — Maricopa County Tier 2 Brady records",
+                     category: .watchdog, states: ["AZ"],
+                     url: URL(string: "https://www.abc15.com/news/local-news/investigations/brady-list/database-mcaos-more-secretive-brady-list")!,
+                     note: "Reporter-obtained public records and an embedded historical list. Preserve the stated release date and Tier 2 distinction; not a current certification decision.",
+                     citationType: .newsReport),
+        RecordSource(name: "Giglio-Brady List — independent aggregator",
+                     category: .watchdog, states: [],
+                     url: URL(string: "https://giglio-bradylist.com/brady-list")!,
+                     note: "Includes citizen reports and other record types, not solely prosecutor-issued Brady entries. Original-document verification required; automated access is unverified (403 during research).",
+                     citationType: .newsReport),
         RecordSource(name: "Invisible Institute — Citizens Police Data Project",
                      category: .watchdog, states: ["IL"],
                      url: URL(string: "https://citizenspolicedataproject.com/")!,

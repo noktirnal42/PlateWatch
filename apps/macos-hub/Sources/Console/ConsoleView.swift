@@ -24,9 +24,10 @@ struct ConsoleView: View {
         }
     }
 
-    @ObservedObject var hub: HubController
+    let hub: HubController
     @Environment(\.openWindow) private var openWindow
     @State private var selection: Pane? = .dashboard
+    @State private var feedsVisited = false
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
 
@@ -40,12 +41,13 @@ struct ConsoleView: View {
             .navigationSplitViewColumnWidth(min: 170, ideal: 200)
         } detail: {
             ZStack {
-                // Keep the browser mounted so native table/grid scroll and every local control survive navigation.
-                // Hidden browser media tasks are explicitly paused by isActive.
-                FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live })
-                    .opacity(selection == .feeds ? 1 : 0)
-                    .allowsHitTesting(selection == .feeds)
-                    .accessibilityHidden(selection != .feeds)
+                // Mount on first visit, then retain browser controls and native scroll on navigation.
+                if selection == .feeds || feedsVisited {
+                    FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live })
+                        .opacity(selection == .feeds ? 1 : 0)
+                        .allowsHitTesting(selection == .feeds)
+                        .accessibilityHidden(selection != .feeds)
+                }
                 Group {
                 switch selection ?? .dashboard {
                 case .dashboard: DashboardPane(hub: hub)
@@ -62,6 +64,7 @@ struct ConsoleView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .onChange(of: selection) { _, pane in if pane == .feeds { feedsVisited = true } }
         .task { moderator = await Task.detached { ModeratorAccess.isEnrolled }.value }
         .navigationTitle(selection?.rawValue ?? "PlateWatch Hub")
         .toolbar {

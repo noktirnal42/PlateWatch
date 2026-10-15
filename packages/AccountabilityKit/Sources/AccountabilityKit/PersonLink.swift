@@ -9,6 +9,9 @@ public struct PersonLink: Sendable, Identifiable, Hashable, Codable {
     public let id: UUID
     public var officialID: OfficialProfile.ID
     public var unitNumber: String
+    /// The agency the unit number belongs to, as `VehicleIdentity.agencyKey` spells it. Unit numbers repeat across
+    /// agencies, so a link without a key is never shown against a recognised vehicle.
+    public var agencyKey: String?
     public var vehicleID: Vehicle.ID?
     /// 0…1. Inferred links must stay below `1` — only a moderator-confirmed,
     /// cited link may claim 1.
@@ -25,6 +28,7 @@ public struct PersonLink: Sendable, Identifiable, Hashable, Codable {
     public init(id: UUID = UUID(),
                 officialID: OfficialProfile.ID,
                 unitNumber: String,
+                agencyKey: String? = nil,
                 vehicleID: Vehicle.ID? = nil,
                 confidence: Double,
                 isModeratorConfirmed: Bool = false,
@@ -47,6 +51,7 @@ public struct PersonLink: Sendable, Identifiable, Hashable, Codable {
         self.id = id
         self.officialID = officialID
         self.unitNumber = unitNumber
+        self.agencyKey = agencyKey
         self.vehicleID = vehicleID
         self.confidence = clamped
         self.isModeratorConfirmed = isModeratorConfirmed

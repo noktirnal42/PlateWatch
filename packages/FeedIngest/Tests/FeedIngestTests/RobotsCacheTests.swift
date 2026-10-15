@@ -6,6 +6,7 @@ import XCTest
 final class RobotsStubProtocol: URLProtocol {
     nonisolated(unsafe) static var responder: ((URLRequest) -> (Int, String, Data))? = nil
     nonisolated(unsafe) static var requestCount = 0
+    nonisolated(unsafe) static var failureCode: URLError.Code?
     /// Extra response headers (e.g. `Server`), reset by tests that set them.
     nonisolated(unsafe) static var extraHeaders: [String: String] = [:]
 
@@ -14,6 +15,9 @@ final class RobotsStubProtocol: URLProtocol {
 
     override func startLoading() {
         Self.requestCount += 1
+        if let code = Self.failureCode {
+            client?.urlProtocol(self, didFailWithError: URLError(code)); return
+        }
         guard let respond = Self.responder else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
@@ -52,7 +56,37 @@ final class RobotsCacheTests: XCTestCase {
 
     override func tearDown() {
         RobotsStubProtocol.responder = nil
+        RobotsStubProtocol.failureCode = nil
         RobotsStubProtocol.requestCount = 0
+    }
+
+    func testBatchUsesOnePolicySnapshotEvenWhenCacheExpiresImmediately() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        RobotsStubProtocol.responder = { _ in
+            (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8))
+        }
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: userAgent,
+                                ttl: 0, maximumAttempts: 1)
+        let answers = await cache.decisions(for: [makeURL(path: "/public/image.jpg"),
+                                                  makeURL(path: "/private/image.jpg"),
+                                                  makeURL(path: "/public/other.jpg")])
+        XCTAssertEqual(answers.map(\.isAllowed), [true, false, true])
+        XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
+        _ = await cache.decision(for: makeURL())
+        XCTAssertEqual(RobotsStubProtocol.requestCount, 2, "A later request still observes cache expiry")
+    }
+
+    func testCaltransTimeoutRemainsUnavailableWithHostDiagnostic() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        RobotsStubProtocol.failureCode = .timedOut
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: userAgent,
+                                publicAPIPermissions: [.caltransCCTV], maximumAttempts: 1)
+        let result = await cache.decision(for: URL(string: "https://cwwp2.dot.ca.gov/data/d8/cctv/image/test.jpg")!)
+        guard case .unavailable(let message) = result else { return XCTFail("Timeout must not bypass policy") }
+        XCTAssertTrue(message.contains("cwwp2.dot.ca.gov"))
+        XCTAssertTrue(message.contains("No robots refusal"))
     }
 
     // MARK: - Basic Allow/Disallow

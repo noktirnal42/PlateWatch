@@ -136,11 +136,66 @@ program lawful, accurate, and worth defending:
 
 ## Status & prerequisites
 
-Citation-gated profile, incident and person-link types exist in `AccountabilityKit`;
-automated person-record collection and cross-reference publication are not implemented.
-The Hub exposes the existing **fleet-only** FOIA draft generator and a labelled
-programme overview. It does not collect officer photos, run face recognition,
-or identify people in live footage.
+**Built (2026-10-15, local to the operator's Mac; nothing syncs or publishes):**
+
+- `AccountabilityKit/Records` — `FOIARequest`/`FOIATracker` (lifecycle, statutory due dates from a table that is
+  **marked unverified**, appeal/follow-up draft, released documents hashed and cited as `foiaRelease`);
+  `RecordCandidate` (every importer's only output: pending, verbatim, cited) and `RecordsLedger` (accept/reject,
+  idempotent re-import); `PublishedListImporter` (a CSV that a public body already published — Brady/Giglio list or POST
+  register — with the releasing office named by the user); `CourtListenerClient` (free RECAP/CourtListener search) and
+  `PacerClient` (user's own PACER account) turning dockets into pending `lawsuit` candidates;
+  `PersonMatcher` (suggestions only, confidence always < 1); `UnitRecordsIndex`; `RecordsLedger` people steps
+  (`addProfile`, `proposeLink`, `confirmLink`, `attach`, `removeProfile`) behind the Hub **People** tab — a link starts as a
+  hidden inference (confidence < 1) and is confirmed only with an additional external citation; records attach to a person
+  only by an explicit choice; removing a person detaches their records. `RosterImporter` reads a published roster CSV
+  (name, role, optional unit columns only — everything else in the file is ignored and never stored) into pending
+  `RosterCandidate`s; accepting one creates the cited profile and, when a unit and agency key are given, a hidden
+  proposed link.
+- **One-click roster catalogue** (`RosterCatalog`, `RosterFetcher`; Hub → Records & FOIA → People → "Police rosters"): eight
+  agency employee lists published on their own governments' Socrata open-data portals — NYPD, Chicago PD, LAPD, Seattle PD,
+  Cincinnati PD, Baton Rouge PD, New Jersey State Police, Vermont Dept. of Public Safety (each probed live 2026-10-15). Pick
+  one, press Import: the Hub pages through the portal (5,000 rows per request, half a second apart) asking **only for the name,
+  job-title and published pay columns** (salary, overtime, other pay — public-employee compensation is a public record; age,
+  gender and ethnicity columns are never requested; pay values are kept verbatim as strings), keeps the latest fiscal/pay year where
+  the dataset has several, and stores the snapshot locally (`records/roster-<id>.json`). Search the snapshot and "Add as
+  official" to make a profile cited to the dataset page (its published pay is kept on the profile), then propose and confirm a unit link as before. The catalogue entry
+  carries a best-effort agency key (`US-<state>/<place>/<service>`) used to prefill links. Names are as the portal prints them
+  (some "LAST, FIRST", some "FIRST LAST" assembled from two columns). These lists are payroll data: they show who is
+  *employed*, not who is *assigned to a given vehicle* — unit numbers still come from FOIA releases or agency pages.
+- **PACER budget** (`PacerBudget`): spending inside the free quarterly allowance (US$30, PACER's published waiver — a
+  setting, confirm on pacer.uscourts.gov) is always allowed; anything above it is allowed only up to the user's
+  "allowed above free" dollar limit, **default $0 = never billed**. Estimated cost is checked before each request and the
+  network is not touched when it would be refused. Credentials are typed by the user into the Keychain
+  (`org.platewatch.hub.records`); the code never sees them elsewhere.
+  CourtListener search was **verified live by the owner (2026-10-15)**. PACER sign-in followed PACER's documented `cso-auth`
+  call (`loginId`, `password`, required `redactFlag`, `clientCode` for searches); the first live try failed ("auth failed")
+  before `redactFlag`/`clientCode` were sent, and errors now show PACER's `loginResult`/`errorDescription`. 2026-10-15: with a real account the call returned **HTTP 502** (PACER's own endpoint answers dummy credentials with a normal
+  "Login Failed" JSON, so the request format is accepted); the client now retries gateway errors once, shows the server's
+  words, and has an optional MFA-code field (`otpCode`, UNVERIFIED name). The PCL case-search call is still **UNVERIFIED**. First live use: free allowance only.
+- **Known lists** (`RecordCatalog`, `RecordSourceFetcher`; Court & lists → "Known lists"): Washington's Criminal Justice Training
+  Commission officer-certification dataset (data.wa.gov, 470 revocation/surrender/hearing cases since 2002, each citing its
+  final order) imports as pending `decertification` candidates with the commission's own wording. A desk survey on 2026-10-15
+  found no prosecutor publishing Brady/Giglio lists as downloads (they appear as PDFs or one-off records releases — use the
+  CSV import), California POST's list page refused our connection, Oregon DPSST offers a search site and a statistics
+  spreadsheet only, Massachusetts POST posts PDFs. The catalogue grows as machine-readable sources are found.
+- Court & lists has a **Pending / Accepted** switch. Accepted records are listed with their status and source; each can be
+  *shown for an agency* (pick a catalogue agency or type its key — it then appears in Review next to that agency's recognised
+  units), *attached to an official* (People), or *sent back to pending*. An accepted record attached to neither is shown
+  nowhere.
+- Hub → Records & FOIA → **Requests** and **Court & lists** tabs; Review shows a **cited-records strip** for the selected
+  vehicle's unit.
+
+**Location firewall, as implemented:** `UnitRecordsIndex.records(forUnit:agencyKey:)` takes only a unit number and the
+recognised agency's key — no sighting, place, time or camera — so nothing it returns can say where or when anyone was
+seen. It returns only moderator-confirmed `PersonLink`s and cited records, never inferences, and nothing at all when the
+agency was not recognised (unit numbers repeat across agencies). Accepting a candidate stores a cited record but does
+**not** link it to a person; that is a separate choice in the People tab. "Confirmed" here means *the operator confirmed
+it with an external citation* on their own Mac — there is no second-person moderation or publication path yet, and none
+of this syncs. Photos, face matching and live identification are still not built.
+
+FOIA deadline table: a 2026-10-15 desk check against secondary sources (AG opinions, state guidance) supported IL, CA, MA,
+WA, CT, NH and the NY acknowledgement rule; TX is a certify-or-produce rule; VA was **not** confirmed; California's 2026
+AB 1821 would change its period. Entries stay `verified: false` until statute text is read; each carries a `checkedNote`.
 
 Next implementation sequence for the records workstream:
 
