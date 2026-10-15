@@ -35,7 +35,8 @@ struct FeedsPane: View {
     private var totalCount: Int { catalogue?.sources.count ?? 0 }
 
     /// Search (every word must match name, host, area or attribution) → filters → sort.
-    private var rows: [PublicFeedSource] {
+    /// Filtering and sorting thousands of cameras is expensive; it runs only when an input changes (`refreshRows`), never per render.
+    private func computeRows() -> [PublicFeedSource] {
         var list = catalogue?.sources ?? []
         list = list.filter { tab == .blocked ? favorites.isBlocked($0.id) : !favorites.isBlocked($0.id) }
         if tab == .favorites { list = list.filter { favorites.contains($0.id) } }
@@ -54,15 +55,21 @@ struct FeedsPane: View {
             case .name: return s.name.lowercased()
             case .host: return (s.url.host ?? "") + " " + s.name.lowercased()
             case .location: return s.geohash6 + " " + s.name.lowercased()
-            case .status: return hub.feedRunner.state(of: s).kind.rawValue + " " + s.name.lowercased()
+            case .status: return runner.state(of: s).kind.rawValue + " " + s.name.lowercased()
             }
         }
-        list.sort { a, b in
-            if favoritesFirst, favorites.contains(a.id) != favorites.contains(b.id) { return favorites.contains(a.id) }
-            return ascending ? key(a) < key(b) : key(a) > key(b)
+        // Decorate once (one key string per camera) instead of rebuilding keys inside every comparison.
+        let ascending = self.ascending, favoritesFirst = self.favoritesFirst
+        var decorated = list.map { (fav: favoritesFirst && favorites.contains($0.id), key: key($0), source: $0) }
+        decorated.sort { a, b in
+            if a.fav != b.fav { return a.fav }
+            return ascending ? a.key < b.key : a.key > b.key
         }
-        return list
+        return decorated.map(\.source)
     }
+
+    @State private var rows: [PublicFeedSource] = []
+    private func refreshRows() { rows = computeRows() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -95,6 +102,18 @@ struct FeedsPane: View {
         }
         .padding()
         .onAppear(perform: reload)
+        .onChange(of: catalogue?.sources.count) { _, _ in refreshRows() }
+        .onChange(of: query) { _, _ in refreshRows() }
+        .onChange(of: hostFilter) { _, _ in refreshRows() }
+        .onChange(of: statusFilter) { _, _ in refreshRows() }
+        .onChange(of: sortKey) { _, _ in refreshRows() }
+        .onChange(of: ascending) { _, _ in refreshRows() }
+        .onChange(of: favoritesFirst) { _, _ in refreshRows() }
+        .onChange(of: favorites.ids) { _, _ in refreshRows() }
+        .onChange(of: favorites.blockedIDs) { _, _ in refreshRows() }
+        // Camera statuses only matter to the list when it is filtered or sorted by status.
+        .onChange(of: runner.status) { _, _ in if statusFilter != nil || sortKey == .status { refreshRows() } }
+        .onChange(of: tab) { _, _ in refreshRows() }
         .onChange(of: tab) { _, value in
             if value == .blocked { query = ""; hostFilter = ""; statusFilter = nil }
         }
@@ -226,7 +245,7 @@ struct FeedsPane: View {
     }
 
     private struct HostBox: Identifiable { let host: FeedHostSummary; var id: String { host.host } }
-    private func reload() { catalogue = try? FeedCatalogue.load(from: hub.feedsFile) }
+    private func reload() { catalogue = try? FeedCatalogue.load(from: hub.feedsFile); refreshRows() }
 }
 
 /// A favorite camera: live thumbnail (refreshed no faster than every 30 s, and never faster than the source's own interval).
