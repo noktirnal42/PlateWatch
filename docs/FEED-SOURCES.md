@@ -2,7 +2,11 @@
 
 > **Current Hub status (2026-10-14):** [continuation / verification](HUB-HANDOFF-2026-10-14.md) and
 > [USA access audit](research/USA-FEEDS-2026-10-14.md) supersede older reachability notes below.
-> Public feeds use refreshed snapshots; continuous web-video analysis is not yet validated.
+> Public feeds use refreshed snapshots; **`.hls` entries now run continuous background analysis**
+> through `FeedIngest.HLSFrameSource` under the same gates as snapshots (robots on the manifest
+> origin, person-confirmed terms, redaction gate, tiering, evidence crops). `.rtsp` entries are
+> honestly marked as needing the VLCKit fallback, which is not bundled. Continuous-video analysis
+> has not yet been verified against a real public HLS camera — that acceptance gate stays open.
 
 
 Reference for the macOS Hub (and any future ingest service) as it grows from handheld capture to **public feeds**:

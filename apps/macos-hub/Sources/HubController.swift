@@ -246,6 +246,8 @@ final class HubController: ObservableObject {
         if let liveFeed, activeFeedSources[liveFeed.id]?.mayBeAnalysed != true { stopLiveFeed() }
         feedRunner.start(catalogue: catalogue, blockedIDs: favorites.blockedIDs) { [weak self] data, source in
             await self?.analyseFeedFrame(data, from: source)
+        } analyseVideoFrame: { [weak self] box, source in
+            await self?.analyseFeedVideoFrame(box.buffer, from: source)
         }
     }
 
@@ -353,6 +355,33 @@ final class HubController: ObservableObject {
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
             liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
             liveFeedStatus = "Background analysis · refreshed at the camera's interval"
+        }
+    }
+
+    /// One decoded frame from a continuous video feed (HLS today, RTSP via a
+    /// future VLCKit path). Same rules, cadence cap and tiering as snapshot
+    /// frames — only the transport differs. The decoder taps ~15 fps; the
+    /// concurrency cap is what bounds the analysis cost.
+    func analyseFeedVideoFrame(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        guard feedAnalysesInFlight < Self.maxFeedAnalyses else { framesDropped += 1; return }
+        feedAnalysesInFlight += 1
+        defer { feedAnalysesInFlight -= 1 }
+        let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
+        let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
+        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+        framesAnalyzed += 1
+        feedFramesAnalyzed += 1
+        guard !favorites.isBlocked(source.id),
+              let current = activeFeedSources[source.id],
+              current.mayBeAnalysed else { return }
+        let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
+                                       mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
+                                       source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
+        if liveFeed?.id == source.id,
+           let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
+            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
+            liveFeedStatus = "Live video analysis · sampled from the stream"
         }
     }
 

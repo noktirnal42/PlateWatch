@@ -3,7 +3,13 @@
 > **2026-10-14 update:** the Hub compiles and runs. [WS2 handoff](HUB-HANDOFF-2026-10-14.md) supersedes
 > historical "does not compile" notes below. Local/Continuity/UVC capture and video-file controls exist;
 > hardware permission/continuous transport validation remains pending. Public feeds are snapshots with
-> background analysis, favorites, reversible blocks and Open in Live overlays. Public HLS is not wired.
+> background analysis, favorites, reversible blocks and Open in Live overlays.
+> **Public HLS is wired:** `.hls` feed entries run continuous background analysis through
+> `FeedIngest.HLSFrameSource` (decoded frames take the same concurrency cap, tier, gate, dedupe,
+> evidence-crop and Live-overlay paths as snapshots; the manifest origin must pass robots and terms
+> are person-confirmed; AVPlayer fetches its own CDN segments — a custom `AVURLAssetResourceLoader`
+> is the future fix for per-segment robots). `.rtsp` entries state honestly that they need the
+> VLCKit fallback (not bundled) instead of being fetched as images.
 
 
 PlateWatch treats *frame sources* as interchangeable: anything that can produce

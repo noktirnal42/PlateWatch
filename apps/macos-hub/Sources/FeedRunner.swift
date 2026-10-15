@@ -1,3 +1,5 @@
+import AVFoundation
+import CoreVideo
 import FeedIngest
 import Foundation
 import SwiftUI
@@ -74,7 +76,9 @@ final class FeedRunner: ObservableObject {
         case .policyUnavailable: return .init(text: "Policy temporarily unavailable", icon: "arrow.clockwise", color: .orange, kind: .unavailable)
         case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
-        case .suspended: return .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .orange, kind: .suspended)
+        case .suspended: return source.kind == .rtsp
+            ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
+            : .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .orange, kind: .suspended)
         case nil: return .init(text: "Confirmed (idle)", icon: "checkmark.circle", color: .secondary, kind: .confirmed)
         }
     }
@@ -85,6 +89,9 @@ final class FeedRunner: ObservableObject {
     private var generation = UUID()
     private var catalogue: FeedCatalogue?
     private var sink: ClosureSink?
+    private var videoSink: ClosureVideoSink?
+    /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
+    private var hlsSources: [UUID: HLSFrameSource] = [:]
     private var blockedIDs: Set<UUID> = []
     private let session: URLSession
     private let robots: RobotsCache
@@ -105,13 +112,20 @@ final class FeedRunner: ObservableObject {
     }
 
     func start(catalogue: FeedCatalogue, blockedIDs: Set<UUID> = [],
-               analyse: @escaping @Sendable @MainActor (Data, PublicFeedSource) async -> Void) {
+               analyse: @escaping @Sendable @MainActor (Data, PublicFeedSource) async -> Void,
+               analyseVideoFrame: (@Sendable @MainActor (PixelBufferBox, PublicFeedSource) async -> Void)? = nil) {
         stop()
         self.catalogue = catalogue
         let run = generation
         self.sink = ClosureSink { [weak self] data, source in
             guard let self, self.mayFetch(source.id, run: run), !Task.isCancelled else { return }
             await analyse(data, source)
+        }
+        self.videoSink = analyseVideoFrame.map { handler in
+            ClosureVideoSink { [weak self] buffer, source in
+                guard let self, self.mayFetch(source.id, run: run), !Task.isCancelled else { return }
+                await handler(buffer, source)
+            }
         }
         self.blockedIDs = blockedIDs
         awaitingTermsCount = catalogue.awaitingTerms.filter { !blockedIDs.contains($0.id) }.count
@@ -131,6 +145,7 @@ final class FeedRunner: ObservableObject {
             blockedIDs.insert(id)
             tasks.removeValue(forKey: id)?.cancel()
             previewTasks.removeValue(forKey: id)?.values.forEach { $0.cancel() }
+            stopHLS(id)
             sourceStates[id] = .blockedByUser
         } else {
             blockedIDs.remove(id)
@@ -173,11 +188,22 @@ final class FeedRunner: ObservableObject {
     }
 
     private func beginPolling(_ source: PublicFeedSource, run: UUID) {
-        guard let sink, tasks[source.id] == nil, !blockedIDs.contains(source.id) else { return }
-        guard source.kind == .snapshotJPEG else {
+        guard tasks[source.id] == nil, !blockedIDs.contains(source.id) else { return }
+        switch source.kind {
+        case .snapshotJPEG:
+            guard sink != nil else { return }
+            beginSnapshotPolling(source, run: run)
+        case .hls:
+            beginHLSPolling(source, run: run)
+        case .rtsp:
+            // Raw RTSP needs an RTP/RTSP client (the VLCKit fallback path in
+            // docs/CAMERA-SOURCES.md); none is bundled. State it, never pretend.
             sourceStates[source.id] = .suspended
-            return
         }
+    }
+
+    private func beginSnapshotPolling(_ source: PublicFeedSource, run: UUID) {
+        guard let sink else { return }
         let id = source.id, robots = self.robots, throttle = self.throttle
         sourceStates[id] = .polling
         let poller = SnapshotPoller(source: source, sink: sink, session: session, gate: { [weak self] url in
@@ -201,6 +227,31 @@ final class FeedRunner: ObservableObject {
     }
 
     private func mayFetch(_ id: UUID, run: UUID) -> Bool { generation == run && !blockedIDs.contains(id) }
+
+    /// Continuous analysis of an `.hls` camera: an `HLSFrameSource` decodes the
+    /// stream and hands sampled frames to the video sink. Policy: the manifest
+    /// origin must pass robots (`checkPolicy` gated `beginPolling`), the source's
+    /// terms must be person-confirmed (`HLSFrameSource.enforceTerms`), and every
+    /// frame flows through the same gate/dedupe/redaction path as snapshots.
+    /// Known limitation (documented, not hidden): AVPlayer itself fetches
+    /// playlist segments/CDN chunks, so those requests are not routed through
+    /// our robots cache; a custom AVAssetResourceLoader is the future fix.
+    private func beginHLSPolling(_ source: PublicFeedSource, run: UUID) {
+        guard let videoSink, !hlsSources.keys.contains(source.id) else {
+            if videoSink == nil { sourceStates[source.id] = .suspended }
+            return
+        }
+        let id = source.id
+        sourceStates[id] = .polling
+        let decoder = HLSFrameSource(source: source)
+        hlsSources[id] = decoder
+        decoder.start(sink: videoSink)
+        updateStatus()
+    }
+
+    private func stopHLS(_ id: UUID) {
+        hlsSources.removeValue(forKey: id)?.stop()
+    }
     private func markRobotsBlocked(_ id: UUID, run: UUID) async {
         guard generation == run, !blockedIDs.contains(id),
               let source = catalogue?.sources.first(where: { $0.id == id }) else { return }
@@ -271,6 +322,10 @@ final class FeedRunner: ObservableObject {
                 self.checkPolicy(for: self.catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(source.url) } ?? [])
             }
             try Task.checkCancellation()
+            if source.kind == .hls {
+                // No single JPEG exists: pull one decoded frame from the stream for the preview tile.
+                return try await Self.hlsPreviewFrame(url: source.url)
+            }
             let (data, response) = try await session.data(from: source.url)
             try Task.checkCancellation()
             guard self.mayFetch(source.id, run: run) else { throw PreviewError.blockedLocally }
@@ -284,13 +339,32 @@ final class FeedRunner: ObservableObject {
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
+    /// One frame from an HLS playlist for preview tiles. AVAssetImageGenerator
+    /// decodes from the manifest (background analysis taps the live decoder
+    /// instead). Fails honestly when the stream is not reachable.
+    static func hlsPreviewFrame(url: URL) async throws -> Data {
+        let asset = AVURLAsset(url: url)
+        guard (try? await asset.load(.isPlayable)) == true else { throw PreviewError.notAnImage }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 640, height: 640)
+        generator.requestedTimeToleranceBefore = .positiveInfinity
+        generator.requestedTimeToleranceAfter = .positiveInfinity
+        let (image, _) = try await generator.image(at: .zero)
+        guard let jpeg = NSBitmapImageRep(cgImage: image).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
+            throw PreviewError.notAnImage
+        }
+        return jpeg
+    }
+
     func stop() {
         generation = UUID()
         tasks.values.forEach { $0.cancel() }; tasks.removeAll()
         hostTasks.values.forEach { $0.cancel() }; hostTasks.removeAll()
         previewTasks.values.forEach { $0.values.forEach { $0.cancel() } }; previewTasks.removeAll()
+        hlsSources.values.forEach { $0.stop() }; hlsSources.removeAll()
         sourceStates.removeAll(); runningCount = 0; awaitingTermsCount = 0
-        catalogue = nil; sink = nil
+        catalogue = nil; sink = nil; videoSink = nil
         status = "Stopped"
     }
 
@@ -305,4 +379,21 @@ private struct ClosureSink: FeedFrameSink {
     let handler: @Sendable @MainActor (Data, PublicFeedSource) async -> Void
     init(_ handler: @escaping @Sendable @MainActor (Data, PublicFeedSource) async -> Void) { self.handler = handler }
     func accept(_ frameData: Data, from source: PublicFeedSource) async { await handler(frameData, source) }
+}
+
+/// A decoded video frame crossing from a decode queue to the MainActor analysis
+/// path. CVPixelBuffer is reference-counted and thread-safe; the box carries the
+/// Sendable annotation the pixel-buffer type itself lacks (same precedent as
+/// `FramePacket`).
+public struct PixelBufferBox: @unchecked Sendable {
+    public let buffer: CVPixelBuffer
+    public init(_ buffer: CVPixelBuffer) { self.buffer = buffer }
+}
+
+/// Adapts `HLSFrameSource`'s `LiveFrameSink` to the runner's video handler.
+private struct ClosureVideoSink: LiveFrameSink {
+    let handler: @Sendable @MainActor (PixelBufferBox, PublicFeedSource) async -> Void
+    func accept(_ pixelBuffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        await handler(PixelBufferBox(pixelBuffer), source)
+    }
 }

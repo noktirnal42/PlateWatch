@@ -45,10 +45,16 @@ tests must stay green before its status advances.
 - **Test:** `swift test --package-path packages/FeedIngest` + Hub scheme tests (see handoff).
 - **Status:** 2026-10-14 desktop console builds and runs; favorites/block, shared polite polling,
   Caltrans's scoped robots fallback, selected snapshot analysis in Live, and moderator audit refresh
-  implemented. Feed browser state survives sidebar navigation; Records & FOIA exposes draft/copy/save.
-  Oregon/Utah/New Mexico imports added; new hosts remain unconfirmed. Local camera/video
-  paths exist; continuous public HLS and raw RTSP are not validated end-to-end.
-- **Next:** follow [HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md): reviewed HLS playback,
+  implemented. Feed browser state survives sidebar navigation; Records & FOIA exposes the fleet FOIA
+  builder, a cited public-records directory and the programme boundary. Merged with the evidence-image
+  work: recorded fleet hits carry redacted vehicle crops (≤40 KB JPEG + SHA-256), shown as Review-pane
+  thumbnails with click-to-enlarge. `.hls` feed entries now run continuous background analysis through
+  `FeedIngest.HLSFrameSource` (same gates/tiering/crops as snapshots; manifest-origin robots; AVPlayer's
+  own CDN segment fetches are a documented limitation); `.rtsp` states it needs the unbundled VLCKit
+  fallback. Oregon/Utah/New Mexico imports added; new hosts remain unconfirmed. Continuous HLS and raw
+  RTSP are not yet validated against real streams end-to-end.
+- **Next:** follow [HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md): verify a real permitted HLS
+  camera end-to-end,
   credentialed US sources, hardware/permission QA and a small camera-quality pilot.
 
 ## WS3 — Recognition & evaluation
