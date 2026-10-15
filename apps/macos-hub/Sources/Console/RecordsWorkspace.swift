@@ -48,6 +48,46 @@ final class RecordsWorkspace {
     var ledger: RecordsLedger { didSet { save(ledger, ledgerStore) } }
     var budget: PacerBudget { didSet { save(budget, budgetStore) } }
     var lastError = ""
+    private(set) var currentCourtQuery = ""
+    private(set) var currentCourtSource = ""
+    private(set) var courtSearchRunning = false
+    private var courtSearchGeneration = UUID()
+    private var currentCourtIDs: Set<UUID> = []
+
+    var currentCourtResults: [RecordCandidate] {
+        ledger.pending.filter { currentCourtIDs.contains($0.id) }
+    }
+
+    /// Search membership is transient; saved candidates and accepted records are never deleted by a search.
+    @discardableResult
+    func runCourtSearch(query: String, source: String,
+                        fetch: () async throws -> [RecordCandidate]) async -> Int {
+        let generation = UUID()
+        courtSearchGeneration = generation
+        currentCourtQuery = query
+        currentCourtSource = source
+        currentCourtIDs = []
+        courtSearchRunning = true
+        lastError = ""
+        defer { if courtSearchGeneration == generation { courtSearchRunning = false } }
+        do {
+            let found = try await fetch()
+            guard courtSearchGeneration == generation else { return 0 }
+            let added = ledger.add(found)
+            // Ledger deduplication retains the original UUID, including when the same search is repeated.
+            let keys = Set(found.map(Self.courtKey))
+            currentCourtIDs = Set(ledger.candidates.filter { keys.contains(Self.courtKey($0)) }.map(\.id))
+            return added
+        } catch {
+            guard courtSearchGeneration == generation else { return 0 }
+            lastError = "\(source): \(error)"
+            return 0
+        }
+    }
+
+    private static func courtKey(_ c: RecordCandidate) -> String {
+        "\(c.kind.rawValue)|\(c.reference)|\(c.citation.excerptHashSHA256 ?? "")"
+    }
     /// Imported open-data rosters by source id (names + titles only; the portal is asked for nothing else).
     private(set) var rosterSnapshots: [String: RosterSnapshot] = [:]
     var rosterProgress: [String: Int] = [:]
@@ -106,33 +146,39 @@ final class RecordsWorkspace {
     /// Index used by the Review pane; rebuilt on demand (the ledger is small).
     var unitIndex: UnitRecordsIndex { UnitRecordsIndex(ledger: ledger) }
 
-    /// Runs a CourtListener search and adds the dockets as pending candidates. Returns how many were new.
+    /// Runs a CourtListener search and replaces the visible search results, preserving saved candidates.
     func searchCourtListener(query: String) async -> Int {
         let client = CourtListenerClient(token: RecordsCredentials.read(.courtListenerToken))
-        do {
+        return await runCourtSearch(query: query, source: "CourtListener") {
             let dockets = try await client.search(query: query)
             let now = Date()
-            lastError = ""
-            return ledger.add(dockets.map { $0.candidate(retrievedAt: now) })
-        } catch { lastError = "CourtListener: \(error)"; return 0 }
+            return dockets.map { $0.candidate(retrievedAt: now) }
+        }
     }
 
-    /// PACER party search with the user's own account. Refuses (without touching the network) when the budget says no.
+    /// PACER party search with the user's own account and existing budget controls.
     func searchPacer(partyName: String, otpCode: String? = nil) async -> Int {
-        guard let login = RecordsCredentials.read(.pacerLogin), let password = RecordsCredentials.read(.pacerPassword) else {
-            lastError = "Add your PACER login in Court sources first."; return 0
+        return await runCourtSearch(query: partyName, source: "PACER") {
+            guard let login = RecordsCredentials.read(.pacerLogin), let password = RecordsCredentials.read(.pacerPassword) else {
+                throw CourtSearchFailure.message("Add your PACER login in Court sources first.")
+            }
+            var client = PacerClient(budget: budget)
+            do {
+                let dockets = try await client.findCases(partyName: partyName, loginID: login, password: password,
+                                                         clientCode: RecordsCredentials.read(.pacerClientCode), otpCode: otpCode)
+                budget = client.budget
+                let now = Date()
+                return dockets.map { $0.candidate(retrievedAt: now) }
+            } catch PacerClient.Failure.budgetDenied(let reason) { throw CourtSearchFailure.message(reason) }
+            catch PacerClient.Failure.authFailed(let why) {
+                throw CourtSearchFailure.message("Sign-in failed (\(why)). Check your PACER credentials and client code.")
+            }
         }
-        var client = PacerClient(budget: budget)
-        do {
-            let dockets = try await client.findCases(partyName: partyName, loginID: login, password: password,
-                                                     clientCode: RecordsCredentials.read(.pacerClientCode), otpCode: otpCode)
-            budget = client.budget
-            let now = Date()
-            lastError = ""
-            return ledger.add(dockets.map { $0.candidate(retrievedAt: now) })
-        } catch PacerClient.Failure.budgetDenied(let reason) { lastError = reason; return 0 }
-        catch PacerClient.Failure.authFailed(let why) { lastError = "PACER sign-in failed (\(why)). Check the username/password at pacer.uscourts.gov, and add a client code — PACER needs one for searches."; return 0 }
-        catch { lastError = "PACER: \(error)"; return 0 }
+    }
+
+    private enum CourtSearchFailure: Error, CustomStringConvertible {
+        case message(String)
+        var description: String { switch self { case .message(let text): text } }
     }
 
     func importList(csv: String, source: PublishedListImporter.Source, columns: PublishedListImporter.Columns) -> Int {
