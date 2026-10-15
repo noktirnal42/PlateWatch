@@ -91,7 +91,9 @@ final class HubController: ObservableObject {
            CommandLine.arguments.indices.contains(index + 1) {
             let keys = Set(CommandLine.arguments[index + 1].split(separator: ",").map(String.init))
             Task {
-                for choice in OpenCatalogue.allCases where keys.contains(choice.key) { await importCatalogue(choice) }
+                for choice in OpenCatalogue.allCases where keys.contains(choice.key) {
+                    await importCatalogue(choice)
+                }
             }
         }
         #endif

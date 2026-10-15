@@ -98,7 +98,7 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
 
     // Older saved catalogues have none of the newer keys: decode them with safe defaults.
     private enum CodingKeys: String, CodingKey {
-        case id, name, url, kind, refreshInterval, geohash6, citation, termsNote, terms, nativeLongSide, locationConfidence
+        case id, name, url, kind, refreshInterval, geohash6, citation, termsNote, state, terms, nativeLongSide, locationConfidence
     }
 
     public init(from decoder: any Decoder) throws {
@@ -111,6 +111,7 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
         geohash6 = try c.decode(String.self, forKey: .geohash6)
         citation = try c.decode(SourceCitation.self, forKey: .citation)
         termsNote = try c.decodeIfPresent(String.self, forKey: .termsNote) ?? ""
+        state = try c.decodeIfPresent(String.self, forKey: .state)
         terms = try c.decodeIfPresent(FeedTerms.self, forKey: .terms) ?? .unknown
         nativeLongSide = try c.decodeIfPresent(Int.self, forKey: .nativeLongSide)
         locationConfidence = try c.decodeIfPresent(LocationConfidence.self, forKey: .locationConfidence) ?? .approximate
