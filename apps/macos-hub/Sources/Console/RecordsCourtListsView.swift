@@ -11,6 +11,8 @@ struct RecordsCourtListsView: View {
     @State private var notice = ""
     @State private var pacerLogin = ""
     @State private var pacerPassword = ""
+    @State private var showAccepted = false
+    @State private var agencyDrafts: [UUID: String] = [:]
     @State private var pacerOTP = ""
     @State private var pacerClientCode = RecordsCredentials.read(.pacerClientCode) ?? ""
     @State private var clToken = ""
@@ -94,7 +96,60 @@ struct RecordsCourtListsView: View {
 
     private var candidates: some View {
         VStack(alignment: .leading) {
-            Text("\(workspace.ledger.pending.count) pending · \(workspace.ledger.incidents.count) accepted records").font(.headline)
+            Picker("", selection: $showAccepted) {
+                Text("\(workspace.ledger.pending.count) pending").tag(false)
+                Text("\(workspace.ledger.incidents.count) accepted").tag(true)
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 300)
+            if showAccepted { accepted } else { pendingList }
+            Text("Accepting stores the record with its citation and hash. Attaching a record to a named official is a separate step in the People tab; a name never links on its own.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Accepted records: attach to an agency (they then appear in Review next to that agency's recognised units), attach to an
+    /// official, or send back to pending.
+    private var accepted: some View {
+        List {
+            if workspace.ledger.incidents.isEmpty {
+                Text("Nothing accepted yet. Accept a pending record and it appears here.").foregroundStyle(.secondary)
+            }
+            ForEach(workspace.ledger.incidents) { r in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(r.kind.rawValue) · \(r.reference)").fontWeight(.medium)
+                    Text(r.status.isEmpty ? "No status published" : r.status).font(.caption).foregroundStyle(.secondary)
+                    let person = workspace.ledger.profiles.first { $0.id == r.subjectID }
+                    Text(person.map { "Attached to \($0.name)" } ?? (r.agencyKey.map { "Shown for agency \($0)" } ?? "Not attached — it won't appear anywhere yet"))
+                        .font(.caption).foregroundStyle(person == nil && r.agencyKey == nil ? .orange : .secondary)
+                    HStack {
+                        Menu("Show for agency…") {
+                            ForEach(RosterCatalog.all) { s in
+                                Button("\(s.agencyName) (\(s.agencyKey))") { try? workspace.ledger.setAgency(incidentID: r.id, agencyKey: s.agencyKey) }
+                            }
+                            Divider()
+                            Button("Clear agency") { try? workspace.ledger.setAgency(incidentID: r.id, agencyKey: nil) }
+                        }.controlSize(.small).fixedSize()
+                        TextField("or type an agency key, e.g. US-MA/boston/police", text: Binding(
+                            get: { agencyDrafts[r.id] ?? "" }, set: { agencyDrafts[r.id] = $0 })).frame(width: 260)
+                        Button("Set") { try? workspace.ledger.setAgency(incidentID: r.id, agencyKey: agencyDrafts[r.id]); agencyDrafts[r.id] = nil }
+                            .controlSize(.small).disabled((agencyDrafts[r.id] ?? "").isEmpty)
+                    }
+                    HStack {
+                        Menu("Attach to official…") {
+                            if workspace.ledger.profiles.isEmpty { Text("Add an official in the People tab first") }
+                            ForEach(workspace.ledger.profiles) { p in
+                                Button(p.name) { try? workspace.ledger.attach(incidentID: r.id, to: p.id) }
+                            }
+                        }.controlSize(.small).fixedSize()
+                        Button("Send back to pending") { workspace.ledger.unaccept(incidentID: r.id) }.controlSize(.small)
+                        if let url = r.citations.first?.url { Link("Source", destination: url).font(.caption) }
+                    }
+                }.padding(.vertical, 2)
+            }
+        }
+    }
+
+    private var pendingList: some View {
+        VStack(alignment: .leading) {
             List {
                 ForEach(workspace.ledger.pending) { c in
                     VStack(alignment: .leading, spacing: 4) {
@@ -110,8 +165,6 @@ struct RecordsCourtListsView: View {
                     }.padding(.vertical, 2)
                 }
             }
-            Text("Accepting stores the record with its citation and hash. Attaching a record to a named official is a separate step in the People tab; a name never links on its own.")
-                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

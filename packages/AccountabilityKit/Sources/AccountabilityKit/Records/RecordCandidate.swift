@@ -186,3 +186,28 @@ public extension RecordsLedger {
         for i in incidents.indices where incidents[i].subjectID == id { incidents[i].subjectID = nil }
     }
 }
+
+
+// MARK: - Working with accepted records
+
+public extension RecordsLedger {
+    /// Sets (or clears) the agency an accepted record is about. Agency-level records — a lawsuit against a city or sheriff's
+    /// office, an audit — show next to that agency's recognised units in Review; the key is `VehicleIdentity.agencyKey`.
+    mutating func setAgency(incidentID: IncidentRecord.ID, agencyKey: String?) throws {
+        guard let i = incidents.firstIndex(where: { $0.id == incidentID }) else { throw PeopleError.unknownIncident }
+        let key = agencyKey?.trimmingCharacters(in: .whitespaces)
+        incidents[i].agencyKey = (key?.isEmpty ?? true) ? nil : key
+    }
+
+    /// Takes an accepted record out of the ledger and puts its source candidate back to pending, so a mistaken acceptance
+    /// is undone rather than lost.
+    mutating func unaccept(incidentID: IncidentRecord.ID) {
+        guard let i = incidents.firstIndex(where: { $0.id == incidentID }) else { return }
+        let record = incidents.remove(at: i)
+        if let c = candidates.firstIndex(where: {
+            $0.review == .accepted && $0.kind == record.kind && $0.reference == record.reference
+                && $0.citation.excerptHashSHA256 == record.citations.first?.excerptHashSHA256 }) {
+            candidates[c].review = .pending
+        }
+    }
+}

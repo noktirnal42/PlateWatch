@@ -466,3 +466,24 @@ final class PacerGatewayTests: XCTestCase {
         XCTAssertNil(f.bodies[1]["otpCode"])
     }
 }
+
+final class AcceptedRecordsTests: XCTestCase {
+    func testAgencyAttachShowsInUnitIndexAndUnacceptRestoresCandidate() throws {
+        var ledger = RecordsLedger()
+        let docket = CourtDocket(source: "courtlistener", caseName: "Roe v. City", docketNumber: "1:24-cv-1", court: "D. Mass.",
+                                 filedOn: Date(timeIntervalSince1970: 0), url: URL(string: "https://www.courtlistener.com/docket/1/"))
+        ledger.add([docket.candidate(retrievedAt: Date(timeIntervalSince1970: 0))])
+        try ledger.accept(candidateID: ledger.candidates[0].id, subject: nil, agencyID: nil)
+        let id = ledger.incidents[0].id
+        XCTAssertTrue(UnitRecordsIndex(ledger: ledger).records(forUnit: "D1", agencyKey: "US-MA/boston/police").agencyRecords.isEmpty)
+        try ledger.setAgency(incidentID: id, agencyKey: " US-MA/boston/police ")
+        XCTAssertEqual(UnitRecordsIndex(ledger: ledger).records(forUnit: "D1", agencyKey: "US-MA/boston/police").agencyRecords.map(\.reference), ["1:24-cv-1 (D. Mass.)"])
+        XCTAssertThrowsError(try ledger.setAgency(incidentID: UUID(), agencyKey: "x"))
+        try ledger.setAgency(incidentID: id, agencyKey: "  ")
+        XCTAssertNil(ledger.incidents[0].agencyKey)
+
+        ledger.unaccept(incidentID: id)
+        XCTAssertTrue(ledger.incidents.isEmpty)
+        XCTAssertEqual(ledger.pending.count, 1, "the candidate is back for another look")
+    }
+}
