@@ -32,7 +32,8 @@ public struct CoreMLDetectorStage: AnalysisStage {
         // Map to sendable values inside the handler (VN types are not Sendable).
         typealias Hit = (label: String, confidence: Double, box: NormalizedBox)
         let threshold = Double(confidenceThreshold)
-        let hits: [Hit] = try await withCheckedThrowingContinuation { cont in
+        let hits: [Hit] = try await withCheckedThrowingContinuation { continuation in
+            let cont = ResumeOnce(continuation)
             let request = VNCoreMLRequest(model: visionModel) { request, error in
                 if let error {
                     cont.resume(throwing: error)
