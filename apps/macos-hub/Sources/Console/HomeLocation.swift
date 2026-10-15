@@ -12,31 +12,45 @@ final class LocationFinder: NSObject, ObservableObject, CLLocationManagerDelegat
 
     override init() { super.init(); manager.delegate = self; manager.desiredAccuracy = kCLLocationAccuracyKilometer }
 
+    private var timeout: Task<Void, Never>?
+
     func request() {
         guard CLLocationManager.locationServicesEnabled() else { status = "Location Services are off (System Settings › Privacy & Security)."; return }
         busy = true; status = "Finding your location…"
-        // An unsigned development build never gets the macOS Location prompt: do not hang silently.
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(12))
-            if busy {
-                busy = false
-                status = "No location available (Location Services needs a signed build). Enter coordinates or a Plus Code below."
+        timeout?.cancel()
+        // Never hang silently: if no fix arrives (no permission prompt on an unsigned build, or no Wi-Fi/GPS data), say so.
+        timeout = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(15))
+            guard !Task.isCancelled, busy else { return }
+            let auth: String
+            switch manager.authorizationStatus {
+            case .notDetermined: auth = "permission not yet granted"
+            case .denied: auth = "permission denied"
+            case .restricted: auth = "restricted"
+            default: auth = "permission granted but no position available"
             }
+            finish("No location fix after 15 s (\(auth)). Check System Settings › Privacy & Security › Location Services, or enter coordinates or a Plus Code below.")
         }
         switch manager.authorizationStatus {
         case .denied, .restricted:
-            busy = false; status = "Location access is denied for PlateWatchHub (System Settings › Privacy & Security › Location Services)."
+            finish("Location access is denied for PlateWatchHub (System Settings › Privacy & Security › Location Services).")
         case .notDetermined: manager.requestWhenInUseAuthorization()
-        default: manager.requestLocation()
+        default: manager.startUpdatingLocation()
         }
+    }
+
+    private func finish(_ message: String) {
+        manager.stopUpdatingLocation()
+        timeout?.cancel(); timeout = nil
+        busy = false; status = message
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let auth = manager.authorizationStatus
         Task { @MainActor in
             switch auth {
-            case .authorizedAlways, .authorized: if busy { self.manager.requestLocation() }
-            case .denied, .restricted: if busy { busy = false; status = "Location access was denied." }
+            case .authorizedAlways, .authorized: if busy { self.manager.startUpdatingLocation() }
+            case .denied, .restricted: if busy { finish("Location access was denied.") }
             default: break
             }
         }
@@ -44,11 +58,17 @@ final class LocationFinder: NSObject, ObservableObject, CLLocationManagerDelegat
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let l = locations.last else { return }
-        Task { @MainActor in busy = false; status = "Using your current location."; onFix?(l.coordinate.latitude, l.coordinate.longitude) }
+        Task { @MainActor in
+            guard busy else { return }
+            finish("Using your current location.")
+            onFix?(l.coordinate.latitude, l.coordinate.longitude)
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Task { @MainActor in busy = false; status = "Could not get a location: \(error.localizedDescription)" }
+        // `kCLErrorLocationUnknown` is transient ("no fix yet"): keep waiting; the timeout reports a persistent failure.
+        if (error as? CLError)?.code == .locationUnknown { return }
+        Task { @MainActor in finish("Could not get a location: \(error.localizedDescription)") }
     }
 }
 
