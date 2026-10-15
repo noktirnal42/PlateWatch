@@ -154,10 +154,11 @@ program lawful, accurate, and worth defending:
 - **One-click roster catalogue** (`RosterCatalog`, `RosterFetcher`; Hub → Records & FOIA → People → "Police rosters"): eight
   agency employee lists published on their own governments' Socrata open-data portals — NYPD, Chicago PD, LAPD, Seattle PD,
   Cincinnati PD, Baton Rouge PD, New Jersey State Police, Vermont Dept. of Public Safety (each probed live 2026-10-15). Pick
-  one, press Import: the Hub pages through the portal (5,000 rows per request, half a second apart) asking **only for the name
-  and job-title columns** (pay, age, gender and ethnicity columns are never requested), keeps the latest fiscal/pay year where
+  one, press Import: the Hub pages through the portal (5,000 rows per request, half a second apart) asking **only for the name,
+  job-title and published pay columns** (salary, overtime, other pay — public-employee compensation is a public record; age,
+  gender and ethnicity columns are never requested; pay values are kept verbatim as strings), keeps the latest fiscal/pay year where
   the dataset has several, and stores the snapshot locally (`records/roster-<id>.json`). Search the snapshot and "Add as
-  official" to make a profile cited to the dataset page, then propose and confirm a unit link as before. The catalogue entry
+  official" to make a profile cited to the dataset page (its published pay is kept on the profile), then propose and confirm a unit link as before. The catalogue entry
   carries a best-effort agency key (`US-<state>/<place>/<service>`) used to prefill links. Names are as the portal prints them
   (some "LAST, FIRST", some "FIRST LAST" assembled from two columns). These lists are payroll data: they show who is
   *employed*, not who is *assigned to a given vehicle* — unit numbers still come from FOIA releases or agency pages.

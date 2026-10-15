@@ -14,6 +14,13 @@ public struct RosterSource: Sendable, Identifiable, Hashable, Codable {
         case single(String)
     }
 
+    /// A published compensation column: its label for display and the portal's field name.
+    public struct PayField: Sendable, Hashable, Codable {
+        public var label: String
+        public var field: String
+        public init(_ label: String, _ field: String) { self.label = label; self.field = field }
+    }
+
     public var id: String
     public var title: String
     public var agencyName: String
@@ -24,6 +31,9 @@ public struct RosterSource: Sendable, Identifiable, Hashable, Codable {
     public var datasetID: String
     public var names: NameFields
     public var roleField: String
+    /// Pay columns the portal publishes for this list (salary, overtime, other pay). Public-employee pay is public record;
+    /// demographic columns (gender, ethnicity, age) are never requested.
+    public var payFields: [PayField]
     /// SoQL `$where` selecting the agency's rows.
     public var filter: String
     /// When set, only rows with the newest value of this column are imported (a fiscal/pay year, a payroll snapshot date).
@@ -34,8 +44,8 @@ public struct RosterSource: Sendable, Identifiable, Hashable, Codable {
     public var datasetPage: URL { URL(string: "https://\(domain)/d/\(datasetID)")! }
     var requestedFields: [String] {
         switch names {
-        case .firstLast(let f, let l): return [f, l, roleField]
-        case .single(let n): return [n, roleField]
+        case .firstLast(let f, let l): return [f, l, roleField] + payFields.map(\.field)
+        case .single(let n): return [n, roleField] + payFields.map(\.field)
         }
     }
 }
@@ -45,37 +55,45 @@ public enum RosterCatalog {
         .init(id: "nypd", title: "New York City — Police Department", agencyName: "New York City Police Department",
               agencyKey: "US-NY/new-york/police", state: "NY", domain: "data.cityofnewyork.us", datasetID: "k397-673e",
               names: .firstLast(first: "first_name", last: "last_name"), roleField: "title_description",
+              payFields: [.init("Base salary", "base_salary"), .init("Pay basis", "pay_basis"), .init("Regular gross paid", "regular_gross_paid"), .init("Overtime paid", "total_ot_paid"), .init("Other pay", "total_other_pay"), .init("Overtime hours", "ot_hours")],
               filter: "agency_name='POLICE DEPARTMENT'", latestBy: "fiscal_year",
               note: "Citywide Payroll Data, latest fiscal year; ~55,000 rows (sworn and civilian). The portal is slow on this one: about 2 minutes."),
         .init(id: "chicago-pd", title: "Chicago — Police Department", agencyName: "Chicago Police Department",
               agencyKey: "US-IL/chicago/police", state: "IL", domain: "data.cityofchicago.org", datasetID: "xzkq-xp2w",
-              names: .single("name"), roleField: "job_titles", filter: "department='CHICAGO POLICE DEPARTMENT'", latestBy: nil,
+              names: .single("name"), roleField: "job_titles",
+              payFields: [.init("Annual salary", "annual_salary"), .init("Pay type", "salary_or_hourly")], filter: "department='CHICAGO POLICE DEPARTMENT'", latestBy: nil,
               note: "Current employee names and titles; ~12,000 rows."),
         .init(id: "lapd", title: "Los Angeles — Police (LAPD)", agencyName: "Los Angeles Police Department",
               agencyKey: "US-CA/los-angeles/police", state: "CA", domain: "controllerdata.lacity.org", datasetID: "g9h8-fvhu",
               names: .firstLast(first: "first_name", last: "last_name"), roleField: "job_title",
+              payFields: [.init("Regular pay", "regular_pay"), .init("Overtime pay", "overtime_pay"), .init("All other pay", "all_other_pay"), .init("Total pay", "total_pay")],
               filter: "fms_department_title='POLICE' AND job_status='ACTIVE'", latestBy: "pay_year",
               note: "City Employee Payroll, latest pay year, active only; ~12,000 rows."),
         .init(id: "seattle-pd", title: "Seattle — Police Department", agencyName: "Seattle Police Department",
               agencyKey: "US-WA/seattle/police", state: "WA", domain: "data.seattle.gov", datasetID: "2khk-5ukd",
               names: .firstLast(first: "first_name", last: "last_name"), roleField: "job_title",
+              payFields: [.init("Hourly rate", "hourly_rate")],
               filter: "department='Seattle Police Department'", latestBy: nil, note: "City of Seattle wage data; ~1,650 rows."),
         .init(id: "cincinnati-pd", title: "Cincinnati — Police Department", agencyName: "Cincinnati Police Department",
               agencyKey: "US-OH/cincinnati/police", state: "OH", domain: "data.cincinnati-oh.gov", datasetID: "wmj4-ygbf",
-              names: .single("name"), roleField: "jobtitle", filter: "deptname='CPD-Department of Police'", latestBy: nil,
+              names: .single("name"), roleField: "jobtitle",
+              payFields: [.init("Annual rate", "annual_rt")], filter: "deptname='CPD-Department of Police'", latestBy: nil,
               note: "City employees with salaries (name and title only imported); ~1,200 rows."),
         .init(id: "baton-rouge-pd", title: "Baton Rouge — Police Department", agencyName: "Baton Rouge Police Department",
               agencyKey: "US-LA/baton-rouge/police", state: "LA", domain: "data.brla.gov", datasetID: "bj3z-jksg",
               names: .firstLast(first: "first_name", last: "last_name"), roleField: "job_title",
+              payFields: [.init("Annual pay", "annual_pay"), .init("Hourly rate", "hrly_rate")],
               filter: "department_name='POLICE DEPARTMENT'", latestBy: nil, note: "City-Parish employees; ~1,200 rows."),
         .init(id: "nj-state-police", title: "New Jersey — State Police", agencyName: "New Jersey State Police",
               agencyKey: "US-NJ/state/state-police", state: "NJ", domain: "data.nj.gov", datasetID: "iqwc-r2w7",
               names: .single("full_name"), roleField: "master_title_desc",
+              payFields: [.init("Salary / hourly rate", "salary_hourly_rate"), .init("YTD regular pay", "master_ytd_regular_pay"), .init("YTD overtime", "master_ytd_overtime_payments"), .init("YTD other pay", "master_ytd_all_other_payments"), .init("YTD earnings", "master_ytd_earnings")],
               filter: "master_department_agency_desc='LAW AND PUBLIC SAFETY' AND master_section_desc like 'STATE POLICE%'",
               latestBy: "as_of_date", note: "YourMoney agency payroll, latest quarter; enlisted, recruits and civilians; ~10,000 rows."),
         .init(id: "vermont-dps", title: "Vermont — Department of Public Safety", agencyName: "Vermont Department of Public Safety",
               agencyKey: "US-VT/state/state-police", state: "VT", domain: "data.vermont.gov", datasetID: "jgqy-2smf",
-              names: .single("name"), roleField: "job_title", filter: "department='Public Safety'", latestBy: nil,
+              names: .single("name"), roleField: "job_title",
+              payFields: [.init("Salary", "salary"), .init("Salary type", "salary_type")], filter: "department='Public Safety'", latestBy: nil,
               note: "State employee list; includes State Police troopers and other DPS staff; ~800 rows."),
     ]
 
@@ -87,7 +105,16 @@ public struct RosterSnapshot: Sendable, Codable, Equatable {
     public struct Entry: Sendable, Codable, Hashable {
         public var name: String
         public var role: String
-        public init(name: String, role: String) { self.name = name; self.role = role }
+        /// Published compensation as `(label, value)` exactly as the portal gives it (not parsed or summed).
+        public var pay: [Pay]
+        public struct Pay: Sendable, Codable, Hashable { public var label: String; public var value: String
+            public init(_ label: String, _ value: String) { self.label = label; self.value = value } }
+        public init(name: String, role: String, pay: [Pay] = []) { self.name = name; self.role = role; self.pay = pay }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name); role = try c.decode(String.self, forKey: .role)
+            pay = try c.decodeIfPresent([Pay].self, forKey: .pay) ?? []
+        }
     }
     public var sourceID: String
     public var importedAt: Date
@@ -103,7 +130,8 @@ public struct RosterSnapshot: Sendable, Codable, Equatable {
     /// the entry to the source/as-of/name/role it came from.
     public func citation(for entry: Entry, source: RosterSource) -> SourceCitation {
         SourceCitation(sourceType: .openDataPortal, url: source.datasetPage, retrievedAt: importedAt,
-                       excerptHashSHA256: Hashing.sha256Hex("\(source.id)|\(asOf ?? "")|\(entry.name)|\(entry.role)"))
+                       excerptHashSHA256: Hashing.sha256Hex("\(source.id)|\(asOf ?? "")|\(entry.name)|\(entry.role)|"
+                                                  + entry.pay.map { "\($0.label)=\($0.value)" }.joined(separator: ";")))
     }
 }
 
@@ -170,7 +198,10 @@ public struct RosterFetcher: Sendable {
                 case .single(let n): name = row[n]?.trimmingCharacters(in: .whitespaces) ?? ""
                 }
                 guard !name.isEmpty else { continue }
-                entries.append(.init(name: name, role: row[source.roleField]?.trimmingCharacters(in: .whitespaces) ?? ""))
+                let pay = source.payFields.compactMap { f in
+                    row[f.field].map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : RosterSnapshot.Entry.Pay(f.label, $0) }
+                }
+                entries.append(.init(name: name, role: row[source.roleField]?.trimmingCharacters(in: .whitespaces) ?? "", pay: pay))
             }
             progress?(entries.count)
             if entries.count > Self.maxRows { throw FetchError.tooLarge }
@@ -188,6 +219,10 @@ public extension RecordsLedger {
     mutating func addProfile(from entry: RosterSnapshot.Entry, snapshot: RosterSnapshot, source: RosterSource) throws -> OfficialProfile {
         let citation = snapshot.citation(for: entry, source: source)
         if let existing = profiles.first(where: { $0.citations.contains { $0.excerptHashSHA256 == citation.excerptHashSHA256 } }) { return existing }
-        return try addProfile(name: entry.name, role: entry.role, citation: citation)
+        var profile = try addProfile(name: entry.name, role: entry.role, citation: citation)
+        profile.compensation = entry.pay.isEmpty ? nil : entry.pay.map { .init(label: $0.label, value: $0.value) }
+        profile.compensationAsOf = snapshot.asOf
+        if let i = profiles.firstIndex(where: { $0.id == profile.id }) { profiles[i] = profile }
+        return profile
     }
 }

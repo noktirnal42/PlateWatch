@@ -21,6 +21,15 @@ public struct OfficialProfile: Sendable, Identifiable, Hashable, Codable {
     public var photos: [CitedPhoto]
     public var citations: [SourceCitation]
     public var status: Status
+    /// Published compensation from the cited payroll source, verbatim (label, value), and the period it covers.
+    public var compensation: [Compensation]?
+    public var compensationAsOf: String?
+
+    public struct Compensation: Sendable, Hashable, Codable {
+        public var label: String
+        public var value: String
+        public init(label: String, value: String) { self.label = label; self.value = value }
+    }
 
     public enum Status: String, Sendable, Codable {
         case active, retired, decertified, unknown

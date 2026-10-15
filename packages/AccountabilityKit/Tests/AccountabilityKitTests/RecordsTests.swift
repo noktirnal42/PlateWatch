@@ -377,21 +377,22 @@ final class RosterCatalogTests: XCTestCase {
         for s in RosterCatalog.all {
             XCTAssertTrue(s.agencyKey.hasPrefix("US-\(s.state)/"), s.id)
             XCTAssertEqual(s.datasetPage.absoluteString, "https://\(s.domain)/d/\(s.datasetID)")
-            XCTAssertEqual(s.requestedFields.count, s.names == .single(s.requestedFields[0]) ? 2 : 3, "name + role only: \(s.id)")
-            let banned = ["salary", "pay", "gender", "sex", "race", "ethnicity", "age", "birth", "address", "phone", "hire"]
-            XCTAssertFalse(s.requestedFields.contains { f in banned.contains { f.lowercased().contains($0) } }, "\(s.id) requests a personal/pay field")
+            XCTAssertEqual(s.requestedFields.count, (s.names == .single(s.requestedFields[0]) ? 2 : 3) + s.payFields.count, "name, role and pay only: \(s.id)")
+            XCTAssertFalse(s.payFields.isEmpty, "every catalogue source publishes pay: \(s.id)")
+            let banned = ["gender", "sex", "race", "ethnicity", "age_", "age", "birth", "dob", "address", "phone", "eeo"]
+            XCTAssertFalse(s.requestedFields.contains { f in banned.contains { f.lowercased().contains($0) } }, "\(s.id) requests a demographic/personal field")
         }
     }
 
     func testFetchUsesLatestValueSelectsOnlyNameAndRoleAndBuildsEntries() async throws {
         let source = RosterCatalog.source(id: "nypd")!
         let rec = Recorder(pages: [Data(#"[{"latest":"2025"}]"#.utf8),
-                                   Data(#"[{"first_name":"ROGER","last_name":"HARB","title_description":"POLICE OFFICER"},{"first_name":"","last_name":""}]"#.utf8)])
+                                   Data(#"[{"first_name":"ROGER","last_name":"HARB","title_description":"POLICE OFFICER","base_salary":"109352.00","pay_basis":"per Annum","total_ot_paid":"30651.33"},{"first_name":"","last_name":""}]"#.utf8)])
         let snap = try await RosterFetcher(fetcher: rec, pause: {}).fetch(source, now: Date(timeIntervalSince1970: 0))
         XCTAssertEqual(snap.asOf, "2025")
-        XCTAssertEqual(snap.entries, [.init(name: "ROGER HARB", role: "POLICE OFFICER")], "blank name skipped")
+        XCTAssertEqual(snap.entries, [.init(name: "ROGER HARB", role: "POLICE OFFICER", pay: [.init("Base salary", "109352.00"), .init("Pay basis", "per Annum"), .init("Overtime paid", "30651.33")])], "blank name skipped; missing pay columns omitted")
         let q = URLComponents(url: rec.requests[1].url!, resolvingAgainstBaseURL: false)!.queryItems!
-        XCTAssertEqual(q.first { $0.name == "$select" }?.value, "first_name,last_name,title_description")
+        XCTAssertTrue(q.first { $0.name == "$select" }!.value!.hasPrefix("first_name,last_name,title_description,base_salary"))
         XCTAssertTrue(q.first { $0.name == "$where" }!.value!.contains("fiscal_year='2025'"))
         XCTAssertEqual(rec.requests[1].url?.host, "data.cityofnewyork.us")
     }
@@ -411,12 +412,20 @@ final class RosterCatalogTests: XCTestCase {
     func testProfileFromEntryIsCitedToTheDatasetAndReused() throws {
         let source = RosterCatalog.source(id: "chicago-pd")!
         let snap = RosterSnapshot(sourceID: source.id, importedAt: Date(timeIntervalSince1970: 0), asOf: nil,
-                                  entries: [.init(name: "AARON, JEFFERY M", role: "LIEUTENANT")])
+                                  entries: [.init(name: "AARON, JEFFERY M", role: "LIEUTENANT", pay: [.init("Annual salary", "165624")])])
         var ledger = RecordsLedger()
         let p = try ledger.addProfile(from: snap.entries[0], snapshot: snap, source: source)
         XCTAssertEqual(p.citations[0].sourceType, .openDataPortal)
         XCTAssertEqual(p.citations[0].url?.absoluteString, "https://data.cityofchicago.org/d/xzkq-xp2w")
         XCTAssertEqual(try ledger.addProfile(from: snap.entries[0], snapshot: snap, source: source).id, p.id)
         XCTAssertEqual(ledger.profiles.count, 1)
+        XCTAssertEqual(p.compensation?.first?.value, "165624")
+        XCTAssertEqual(ledger.profiles[0].compensation?.first?.label, "Annual salary")
+    }
+
+    func testOldSnapshotsAndProfilesWithoutPayStillDecode() throws {
+        let snap = #"{"sourceID":"x","importedAt":"2026-01-01T00:00:00Z","entries":[{"name":"A B","role":"R"}]}"#
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        XCTAssertEqual(try dec.decode(RosterSnapshot.self, from: Data(snap.utf8)).entries[0].pay, [])
     }
 }

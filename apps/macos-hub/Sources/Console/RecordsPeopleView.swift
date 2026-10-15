@@ -83,6 +83,14 @@ struct RecordsPeopleView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(p.name).font(.title3.bold())
                 Text(p.role)
+                if let pay = p.compensation, !pay.isEmpty {
+                    GroupBox("Published pay\(p.compensationAsOf.map { " (\($0))" } ?? "")") {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(pay.enumerated()), id: \.offset) { _, c in Text("\(c.label): \(c.value)").font(.caption) }
+                            Text("As published in the cited payroll dataset; not verified or adjusted.").font(.caption2).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
+                    }
+                }
                 ForEach(Array(p.citations.enumerated()), id: \.offset) { _, c in if let u = c.url { Link(u.absoluteString, destination: u).font(.caption) } }
 
                 GroupBox("Unit links") {
@@ -200,17 +208,23 @@ struct RecordsPeopleView: View {
                 if importing { ProgressView().controlSize(.small); Text("\(workspace.rosterProgress[source.id] ?? 0) rows…").font(.caption) }
                 Link("Dataset page", destination: source.datasetPage).font(.caption)
             }
-            Text("Requests only the name and job-title columns from the agency's own open-data portal; pay, age and demographic columns are never downloaded.")
+            Text("Requests only name, job title and the published pay columns from the agency's own open-data portal; age, gender and ethnicity columns are never downloaded.")
                 .font(.caption2).foregroundStyle(.secondary)
             if let snap = workspace.rosterSnapshots[source.id] {
                 Text("Imported \(snap.importedAt.formatted(date: .abbreviated, time: .omitted))\(snap.asOf.map { " · as of \($0)" } ?? "")")
                     .font(.caption2).foregroundStyle(.secondary)
+                if !source.payFields.isEmpty, snap.entries.first?.pay.isEmpty ?? false {
+                    Text("This snapshot was imported before pay columns were added — Re-import to include pay.").font(.caption2).foregroundStyle(.orange)
+                }
                 TextField("Search this roster by name or title", text: $search)
                 let hits = search.count < 2 ? [] : Array(snap.entries.lazy.filter {
                     $0.name.localizedCaseInsensitiveContains(search) || $0.role.localizedCaseInsensitiveContains(search) }.prefix(12))
                 ForEach(Array(hits.enumerated()), id: \.offset) { _, e in
-                    HStack {
-                        Text("\(e.name) · \(e.role)").font(.caption).lineLimit(1)
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(e.name) · \(e.role)").font(.caption).lineLimit(1)
+                            if !e.pay.isEmpty { Text(e.pay.map { "\($0.label) \($0.value)" }.joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary).lineLimit(2) }
+                        }
                         Spacer()
                         Button("Add as official") { if let p = workspace.addOfficial(e, from: source) { selected = p.id; agencyKey = source.agencyKey } }
                             .controlSize(.small)
