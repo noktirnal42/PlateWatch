@@ -3,7 +3,10 @@
 **Not legal advice.** This is how the software behaves today and why, based on `docs/research/FEED-LEGAL-RESEARCH.md`
 (statute text read where marked VERIFIED, secondary sources otherwise). The statutes change; counsel should confirm
 before anyone relies on this list. Owner position (2026-10-14): PlateWatch is not an ALPR in the usual sense, so it is not
-"ALPR use". That position is recorded here, but it is **not yet confirmed by counsel**, so the software keeps the gate below.
+"ALPR use". **Update (2026-10-15):** the owner reports that counsel's view is that neither OCR of plates on third-party
+public feeds nor handheld use is ALPR "use". That is relayed, not documented: no written opinion is in the repo, so it is
+unverified here and its scope (which states, which designs) is unknown. The software therefore **still ships with the gate
+below**; relaxing it is a code change (see "Gaps to close") that should cite the written opinion.
 
 ## What "plate reading off" means
 
@@ -49,14 +52,13 @@ Plus the **30 km border margin** around each of these.
 | Florida | Only a transportation-department permit action for law-enforcement readers on state rights-of-way; no general ban. |
 | Texas | A state directive on permits for law-enforcement readers; no private-use statute found. |
 
-## On by default, not yet researched
+## On by default, desk-reviewed 2026-10-15
 
 Alaska, Arizona, Delaware, District of Columbia, Hawaii, Indiana, Louisiana, Massachusetts, Michigan, Mississippi, Missouri,
 Nevada, New York, North Dakota, Ohio, Oklahoma, Pennsylvania, Rhode Island, South Carolina, South Dakota, Washington,
-West Virginia, Wisconsin, Wyoming.
-
-"On" here means only that nothing in the research found a general ban; **these were not researched**. Treat them as unknown
-until counsel reviews them.
+West Virginia, Wisconsin, Wyoming. No general private-use ban found; details, citations and a watch-list of pending bills
+are in [`research/STATE-ALPR-SWEEP-2026-10-15.md`](research/STATE-ALPR-SWEEP-2026-10-15.md). Secondary sources only; statute text
+not read. **Washington** enacted a Driver Privacy Act (SB 6002, March 2026) whose reach to private operators is unconfirmed.
 
 ## Outside the United States
 
@@ -65,8 +67,8 @@ and fleet detection, but not plate reading.
 
 ## Gaps to close
 
-- The handheld iPhone app applies the same gate (`PlateReadingGate`, per frame, from the phone's coarse location or an imported photo's own GPS; unknown location ⇒ plates off). The Watch app does no analysis. Counsel has not yet said whether handheld use falls under these statutes; the gate is the conservative default.
-- Counsel questions: does reading plates on a third-party feed count as ALPR "use"? Does an on-device, discard-immediately
-  design change the answer? Do the four "pending counsel" states really apply? (`docs/research/FEED-LEGAL-RESEARCH.md`.)
+- The handheld iPhone app applies the same gate (`PlateReadingGate`, per frame, from the phone's coarse location or an imported photo's own GPS; unknown location ⇒ plates off). The Watch app does no analysis. Counsel reportedly says handheld use is not ALPR "use" (see top); the gate stays until that is in writing.
+- Counsel (reported, 2026-10-15): feed OCR and handheld use are not ALPR "use". Still to get in writing: does it hold in Maine and
+  New Hampshire (statutes read as VERIFIED above)? Does the on-device, discard-immediately design matter? Do the four "pending counsel" states apply? (`docs/research/FEED-LEGAL-RESEARCH.md`.)
 - The state lists live in `packages/PlateKit/Sources/PlateKit/Identity/JurisdictionPolicy.swift`
   (`platesRestricted`, `platesPendingCounsel`). Change them there, update this page, and run the PlateKit tests.
