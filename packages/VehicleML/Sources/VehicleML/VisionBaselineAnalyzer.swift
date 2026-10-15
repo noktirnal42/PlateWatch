@@ -19,7 +19,8 @@ enum VisionTextRunner {
                           regionOfInterest: CGRect? = nil,
                           maxCandidates: Int = 1,
                           minimumTextHeight: Float = 0) async throws -> [RawTextHit] {
-        try await withCheckedThrowingContinuation { cont in
+        try await withCheckedThrowingContinuation { continuation in
+            let cont = ResumeOnce(continuation)
             let request = VNRecognizeTextRequest { request, error in
                 if let error { cont.resume(throwing: error); return }
                 let hits: [RawTextHit] = ((request.results as? [VNRecognizedTextObservation]) ?? [])
@@ -49,7 +50,8 @@ extension VisionTextRunner {
     static func recognize(in image: CGImage,
                           level: VNRequestTextRecognitionLevel,
                           minimumTextHeight: Float = 0) async throws -> [RawTextHit] {
-        try await withCheckedThrowingContinuation { cont in
+        try await withCheckedThrowingContinuation { continuation in
+            let cont = ResumeOnce(continuation)
             let request = VNRecognizeTextRequest { request, error in
                 if let error { cont.resume(throwing: error); return }
                 cont.resume(returning: ((request.results as? [VNRecognizedTextObservation]) ?? []).map {
