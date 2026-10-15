@@ -28,6 +28,7 @@ struct ConsoleView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var selection: Pane? = .dashboard
     @State private var feedsVisited = false
+    @AppStorage("hubAppearance") private var appearance = "system"
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
 
@@ -83,6 +84,7 @@ struct ConsoleView: View {
                     .help("Feed status, favorites, blocks and Live analysis (⌘?)")
             }
         }
+        .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
         .frame(minWidth: 1000, minHeight: 600)
     }
 }
@@ -221,12 +223,22 @@ struct SettingsPane: View {
     @Binding var moderator: Bool
     @AppStorage("hubGeohash6") private var geohash = ""
     @AppStorage("hubSnapshotPort") private var port = 8088
+    @AppStorage("hubAppearance") private var appearance = "system"
     @State private var server = ""
     @State private var token = ""
     @State private var note = ""
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Color scheme", selection: $appearance) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }.pickerStyle(.segmented)
+                Text("Applies to the Hub console. Your Mac’s appearance stays unchanged.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HomeLocationSection(hub: hub, geohash: $geohash)
             Section("Hub") {
                 TextField("Preferred snapshot port", value: $port, format: .number.grouping(.never))

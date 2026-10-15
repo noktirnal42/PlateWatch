@@ -136,7 +136,24 @@ struct HubStatusView: View {
 
 private struct HubWindowCommands: Commands {
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("hubAppearance") private var appearance = "system"
+    private let destinations: [ConsoleView.Pane] = [.dashboard, .live, .feeds, .cameras, .review, .models, .records, .settings]
     var body: some Commands {
+        CommandMenu("Navigate") {
+            ForEach(Array(destinations.enumerated()), id: \.element.id) { index, pane in
+                Button(pane.rawValue, systemImage: pane.icon) {
+                    openWindow(id: "console")
+                    NotificationCenter.default.post(name: HubAgentBridge.navigation, object: String(describing: pane))
+                }.keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+            }
+        }
+        CommandMenu("Appearance") {
+            Picker("Color scheme", selection: $appearance) {
+                Text("System").tag("system")
+                Text("Light").tag("light")
+                Text("Dark").tag("dark")
+            }
+        }
         CommandGroup(replacing: .help) {
             Button("PlateWatch Hub Help") { openWindow(id: "hub-help") }
                 .keyboardShortcut("?", modifiers: .command)

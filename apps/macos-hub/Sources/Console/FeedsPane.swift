@@ -217,13 +217,12 @@ struct FeedsPane: View {
                         Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                     .padding(.vertical, 3)
-                    .help("\(source.name)\n\(source.url.host ?? "")")
-                }.width(min: 150, ideal: 250)
-                TableColumn("Location") { Text($0.geohash6.isEmpty ? "unknown" : $0.geohash6).monospaced() }.width(70)
+                    .help("\(source.name)\n\(source.url.host ?? "")\nArea: \(source.geohash6)")
+                }.width(min: 120, ideal: 180, max: 360)
                 TableColumn("Status") { s in
                     let state = hub.feedRunner.state(of: s)
                     Label(state.text, systemImage: state.icon).foregroundStyle(state.color).lineLimit(1).help(state.text)
-                }.width(min: 110, ideal: 155)
+                }.width(120)
             }
             .frame(minWidth: 430)
             CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
