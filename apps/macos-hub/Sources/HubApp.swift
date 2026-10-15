@@ -31,13 +31,18 @@ struct PlateWatchHubApp: App {
                 .modelContainer(modelContainer)
                 .onAppear { hub.attach(context: modelContainer.mainContext) }
         }
-        .defaultSize(width: 1080, height: 680)
+        .defaultSize(width: 1180, height: 740)
+        .commands { HubWindowCommands() }
 
         MenuBarExtra("PlateWatch Hub", systemImage: "antenna.radiowaves.left.and.right") {
             HubStatusView(hub: hub)
         }
         .menuBarExtraStyle(.window)
         .modelContainer(modelContainer)
+
+        Window("PlateWatch Hub Help", id: "hub-help") {
+            HubHelpView()
+        }.defaultSize(width: 660, height: 650)
 
         // Feed terms review window
         Window("Feed terms", id: "feeds-review") {
@@ -122,6 +127,20 @@ struct HubStatusView: View {
             Text(label).foregroundStyle(.secondary)
             Spacer()
             Text(value).monospaced()
+        }
+    }
+}
+
+private struct HubWindowCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+    var body: some Commands {
+        CommandGroup(replacing: .help) {
+            Button("PlateWatch Hub Help") { openWindow(id: "hub-help") }
+                .keyboardShortcut("?", modifiers: .command)
+        }
+        CommandGroup(after: .newItem) {
+            Button("Show PlateWatch Console") { openWindow(id: "console") }
+                .keyboardShortcut("0", modifiers: .command)
         }
     }
 }

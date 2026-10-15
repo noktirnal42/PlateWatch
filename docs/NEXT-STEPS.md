@@ -287,22 +287,13 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
    the same state rules? (The jurisdiction gate is not applied to handheld capture yet.)
 9. ~~Model release follow-ups~~ — **done**: `.aar` install wired and extraction hardened (symlinks / escape rejected); registry pins the published SHAs (`aa` output is not byte-reproducible, so always re-hash the uploaded asset).
 
-## 11. Desktop console (macOS Hub as the full control app) — 2026-10-14
+## 11. Desktop console — current continuation (2026-10-14)
 
-Decision (owner): the macOS Hub is the **full desktop GUI console** for everything — web feeds, iPhone/Continuity and Wi‑Fi/IP
-cameras, files and video, the ML/LLM pipeline, review, and **moderation (moderators only)**.
+[HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md) is the current WS2 implementation, verification and next-action guide.
+The Hub now builds and runs as a desktop console, with local camera/video controls, snapshot-feed Live overlays,
+favorites and reversible local blocks, per-path robots checks, Caltrans's cited 5xx exception, USA catalogue additions,
+moderator-only queue/takedown/audit tools, source-aware analysis and offline help. Earlier "Hub does not compile" and
+"audit pane planned" notes above are historical. Continuous public HLS/raw RTSP and physical camera/location permissions
+remain unverified; do not mark them complete based on code presence. New host terms and developer credentials are human gates.
 
-Shipped (slice 1): regular windowed app (`apps/macos-hub/Sources/Console/`) with a sidebar — Dashboard, Public feeds (catalogue table,
-terms status), Cameras & ingest (snapshot endpoint, watched folder, RTSP start/stop, detected local cameras), Models, Settings — plus a
-**Moderation** pane that exists only while a moderator token is in the Keychain. Moderation talks to the server's JSON API
-(`/moderator/api/…`: `MODERATOR_TOKEN` + `X-PlateWatch-Moderator` header; never exposes plates). Enrolment is offered only when
-`defaults write org.platewatch.PlateWatchHub moderatorEnrollment -bool true`. The UI gate is not a security boundary; the server is.
-
-Next slices: live capture from local/Continuity cameras into the pipeline; video-file ingest; live frame viewer with detection overlays;
-per-source status (robots-blocked/403/429); detections/outbox review pane; CloudKit moderation source (needs server-to-server key);
-LLM/MLX assistants (on-device only; no frame uploads, AGENTS.md rule 3).
-
-Also shipped 2026-10-14: Settings → **Home location** (Use my location, latitude/longitude, Plus Code; Plus Code decoder in
-`PlateKit.PlusCode`), the plate-reading jurisdiction list ([PLATE-READING-JURISDICTIONS.md](PLATE-READING-JURISDICTIONS.md)),
-five more camera catalogues (`CameraCatalogueImporters`), camera preview, per-host request pacing, and the S3 `robots.txt` fix.
-Open: Location Services needs a signed build (unsigned dev builds get no prompt — use coordinates or a Plus Code).
+The [USA feed audit](research/USA-FEEDS-2026-10-14.md) covers the requested AZ/NV/NM/CO/UT/AL sources, plus Oregon and existing imports.

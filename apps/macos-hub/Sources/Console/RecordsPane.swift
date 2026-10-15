@@ -2,174 +2,121 @@ import AppKit
 import FleetImporters
 import PlateKit
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Records & FOIA: the public-records side of the mission. Two tools:
-///
-/// 1. **FOIA requests** — drafts a fleet-focused public-records letter with
-///    `FOIARequestGenerator` (text only; nothing is sent anywhere). The
-///    generator's guardrails are encoded upstream: it never asks for employee
-///    names, home addresses, or driver records, and unit numbers are
-///    validated so the letter cannot carry personal information.
-/// 2. **Public records directory** — curated, cited starting points for
-///    researching agencies and officials (rosters, decertification registers,
-///    court dockets, watchdog datasets). Every record imported from these
-///    sources must carry a `SourceCitation` (AGENTS.md guardrail 2).
+/// Exposes the existing fleet-only request generator, a cited directory of
+/// public-records starting points, and the person-records programme boundary.
+/// Person-record collection is a separate, cited review pipeline (M7).
 struct RecordsPane: View {
-    enum Section: String, CaseIterable, Identifiable {
-        case foia = "FOIA requests", directory = "Public records directory"
-        var id: String { rawValue }
-    }
-
-    @State private var section: Section = .foia
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Picker("Section", selection: $section) {
-                ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding([.top, .horizontal])
-            switch section {
-            case .foia: FOIADraftView()
-            case .directory: RecordsDirectory()
-            }
-        }
-        .padding(.bottom)
-    }
-}
-
-// MARK: - FOIA drafts
-
-private struct FOIADraftView: View {
-    @State private var agencyName = ""
-    @State private var stateName = ""
-    @State private var recordsURL = ""
+    @State private var tab = 0
+    @State private var agency = ""
+    @State private var state = ""
     @State private var units = ""
-    @State private var scope = FOIARequestGenerator.Scope()
-    @State private var draft: FOIARequestGenerator.Draft?
-    @State private var status = ""
+    @State private var inventory = true
+    @State private var assignments = true
+    @State private var policy = true
+    @State private var retention = true
+    @State private var contracts = false
+    @State private var notice = ""
 
-    private let generator = FOIARequestGenerator()
+    private var canDraft: Bool {
+        !agency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (inventory || assignments || policy || retention || contracts)
+    }
+    private var draft: FOIARequestGenerator.Draft {
+        FOIARequestGenerator().draft(target: .init(agencyName: agency.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                  stateName: state.isEmpty ? nil : state),
+                                    units: units.components(separatedBy: CharacterSet(charactersIn: ",;\n")),
+                                    scope: .init(fleetInventory: inventory, unitVehicleLinks: assignments,
+                                                 alprPolicy: policy, alprRetention: retention,
+                                                 alprVendorContracts: contracts))
+    }
+    private var text: String { "Subject: \(draft.subject)\n\n\(draft.body)" }
 
     var body: some View {
-        HSplitView {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("Records workspace", selection: $tab) {
+                Text("Fleet FOIA draft").tag(0)
+                Text("Public records directory").tag(1)
+                Text("Public-records programme").tag(2)
+            }.pickerStyle(.segmented).frame(maxWidth: 560)
+            if tab == 0 { builder } else if tab == 1 { directory } else { programme }
+        }.padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var builder: some View {
+        HStack(alignment: .top, spacing: 16) {
             Form {
-                Section("Agency") {
-                    TextField("Agency name (e.g. Waltham Police Department)", text: $agencyName)
-                    TextField("State (optional)", text: $stateName)
-                    TextField("Records portal URL (optional)", text: $recordsURL)
+                Section("Agency & scope") {
+                    TextField("Public agency", text: $agency).help("Name of the public agency receiving this request")
+                    TextField("State (optional)", text: $state)
+                    TextField("Unit numbers (optional)", text: $units)
+                        .help("Separate public fleet unit numbers with commas; names and addresses are not valid unit numbers")
+                    Toggle("Fleet inventory", isOn: $inventory)
+                    Toggle("Unit-to-vehicle records", isOn: $assignments)
+                    Toggle("ALPR policy", isOn: $policy)
+                    Toggle("Retention & deletion records", isOn: $retention)
+                    Toggle("Vendor contracts", isOn: $contracts)
                 }
-                Section("Scope") {
-                    Toggle("Fleet inventory (units, make, model, plate)", isOn: $scope.fleetInventory)
-                    Toggle("Unit ↔ vehicle links", isOn: $scope.unitVehicleLinks)
-                    Toggle("ALPR usage policy", isOn: $scope.alprPolicy)
-                    Toggle("ALPR retention schedules + deletion logs", isOn: $scope.alprRetention)
-                    Toggle("ALPR vendor contracts", isOn: $scope.alprVendorContracts)
-                }
-                Section("Observed unit numbers (optional)") {
-                    TextField("e.g. D756, K9-2, 4471", text: $units)
-                    Text("Validated to unit identifiers (1–12 of A–Z 0–9 - /). Names, plates with spaces, and anything else is rejected so the letter cannot carry personal information.")
+                Section {
+                    Text("This existing template requests fleet and policy records. It excludes employee names, private contact details and DMV records. Requester details remain placeholders.")
                         .font(.caption).foregroundStyle(.secondary)
+                    Text("Draft only. Review, personalize and file it yourself through the agency's records portal.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Link("FOIA documentation", destination: URL(string: "https://github.com/noktirnal42/PlateWatch/blob/main/docs/FOIA.md")!)
                 }
-                Button("Draft request") { makeDraft() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(agencyName.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .formStyle(.grouped)
-            .frame(minWidth: 380, maxWidth: 480)
-
-            VStack(alignment: .leading, spacing: 8) {
-                if let draft {
-                    LabeledContent("Subject", value: draft.subject)
-                    TextEditor(text: .constant(bodyText(draft)))
-                        .font(.system(size: 12, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                    HStack {
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(bodyText(draft), forType: .string)
-                            status = "Copied."
-                        }
-                        Button("Save as .txt") { save(draft) }
-                        Button("MuckRock") { NSWorkspace.shared.open(URL(string: "https://www.muckrock.com/")!) }
-                        Spacer()
-                        if !draft.rejectedUnits.isEmpty {
-                            Text("Rejected as personal data: \(draft.rejectedUnits.joined(separator: ", "))")
-                                .font(.caption).foregroundStyle(.orange)
-                        }
-                        if !status.isEmpty {
-                            Text(status).font(.caption).foregroundStyle(.secondary)
-                        }
+            }.formStyle(.grouped)
+                .frame(minWidth: 300, idealWidth: 360, maxWidth: 420, maxHeight: .infinity, alignment: .top)
+            Divider()
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Request preview", systemImage: "doc.text").font(.headline)
+                    Spacer()
+                    Button("Copy draft", systemImage: "doc.on.doc") {
+                        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+                        notice = "Draft copied. Nothing has been submitted."
+                    }.disabled(!canDraft).help("Copy the text with requester placeholders for your review")
+                    Button("Save draft…", systemImage: "square.and.arrow.down") { save() }
+                        .disabled(!canDraft).help("Save a plain-text draft; this does not send a records request")
+                }
+                if canDraft {
+                    if !draft.rejectedUnits.isEmpty {
+                        Label("Excluded invalid unit entries: \(draft.rejectedUnits.joined(separator: ", "))", systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange)
                     }
-                    Text("The draft is text only — nothing is sent anywhere. Review, fill in your contact block, and file through the agency's portal or MuckRock.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    ScrollView { Text(text).font(.system(.body, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(12) }
+                        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
                 } else {
-                    ContentUnavailableView("No draft yet",
-                                           systemImage: "doc.text.magnifyingglass",
-                                           description: Text("Enter an agency, choose the record categories, and draft a public-records request."))
+                    ContentUnavailableView("Draft a fleet records request", systemImage: "doc.badge.plus",
+                                           description: Text("Enter an agency and choose at least one record category. Your identity is never filled in automatically."))
                 }
-            }
-            .padding()
-            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                if !notice.isEmpty { Text(notice).font(.caption).foregroundStyle(.secondary) }
+            }.frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Public records directory
+
+    private struct RecordSource: Identifiable, Hashable {
+        enum Category: String, CaseIterable, Identifiable {
+            case rosters = "Rosters & agency directories"
+            case decertification = "Decertification registers (state POST)"
+            case dockets = "Court dockets & case records"
+            case watchdog = "Watchdog & research datasets"
+            var id: String { rawValue }
         }
+
+        let id = UUID()
+        var name: String
+        var category: Category
+        /// States the source covers; empty = national.
+        var states: [String]
+        var url: URL
+        var note: String
+        /// The citation type an import from this source must carry.
+        var citationType: SourceCitation.SourceType
     }
-
-    /// The body with a filled-in contact block so the letter is ready to paste.
-    private func bodyText(_ draft: FOIARequestGenerator.Draft) -> String {
-        draft.body
-    }
-
-    private func makeDraft() {
-        let target = FOIARequestGenerator.Target(
-            agencyName: agencyName.trimmingCharacters(in: .whitespaces),
-            recordsOfficeURL: URL(string: recordsURL.trimmingCharacters(in: .whitespaces)),
-            stateName: stateName.trimmingCharacters(in: .whitespaces).isEmpty ? nil : stateName.trimmingCharacters(in: .whitespaces))
-        draft = generator.draft(target: target,
-                                units: units.split(whereSeparator: { ",; ".contains($0) }).map(String.init),
-                                scope: scope)
-        status = ""
-    }
-
-    private func save(_ draft: FOIARequestGenerator.Draft) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "\(draft.subject).txt".replacingOccurrences(of: ":", with: "-")
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try bodyText(draft).write(to: url, atomically: true, encoding: .utf8)
-            status = "Saved \(url.lastPathComponent)."
-        } catch {
-            status = "Save failed: \(error.localizedDescription)"
-        }
-    }
-}
-
-// MARK: - Public records directory
-
-private struct RecordSource: Identifiable, Hashable {
-    enum Category: String, CaseIterable, Identifiable {
-        case rosters = "Rosters & agency directories"
-        case decertification = "Decertification registers (state POST)"
-        case dockets = "Court dockets & case records"
-        case watchdog = "Watchdog & research datasets"
-        var id: String { rawValue }
-    }
-
-    let id = UUID()
-    var name: String
-    var category: Category
-    /// States the source covers; empty = national.
-    var states: [String]
-    var url: URL
-    var note: String
-    /// The citation type an import from this source must carry.
-    var citationType: SourceCitation.SourceType
-}
-
-private struct RecordsDirectory: View {
-    @State private var query = ""
 
     /// Curated starting points — verify each source's current location and
     /// terms before importing; every imported record needs a SourceCitation.
@@ -261,6 +208,8 @@ private struct RecordsDirectory: View {
                      citationType: .fleetRegistry),
     ]
 
+    @State private var query = ""
+
     private var grouped: [(RecordSource.Category, [RecordSource])] {
         let filtered = query.isEmpty
             ? Self.sources
@@ -275,18 +224,17 @@ private struct RecordsDirectory: View {
         }
     }
 
-    var body: some View {
+    private var directory: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Filter directory (name, state, note)", text: $query)
                     .textFieldStyle(.roundedBorder)
             }
-            .padding(.horizontal)
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(grouped, id: \.0) { category, items in
-                        Text(category.rawValue).font(.headline).padding(.horizontal)
+                        Text(category.rawValue).font(.headline)
                         ForEach(items) { source in
                             HStack(alignment: .top, spacing: 10) {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -307,16 +255,46 @@ private struct RecordsDirectory: View {
                                 Button("Open") { NSWorkspace.shared.open(source.url) }
                                     .buttonStyle(.bordered)
                             }
-                            .padding(.horizontal)
                         }
                     }
                     Text("Starting points, not endorsements: verify each source's current location, terms and license before importing. The National Decertification Index is not public — use the state registers above. Every imported record must carry a SourceCitation, and docket allegations are stored verbatim, never stated as fact (docs/ACCOUNTABILITY-DATA.md).")
                         .font(.caption).foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .padding(.bottom)
                 }
             }
         }
-        .padding(.top)
+    }
+
+    // MARK: - Programme boundary
+
+    private var programme: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Label("Public records, with evidence", systemImage: "doc.text.magnifyingglass").font(.largeTitle.bold())
+                Text("Planned collection workflow — automated person-record ingestion is not running.")
+                    .foregroundStyle(.secondary)
+                GroupBox("Sources") {
+                    Text("Agency rosters and employee lists; official bios and award announcements; agency-published social posts; released Brady/Giglio lists and decertification registers; court dockets, filings and outcomes; public-records responses.")
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                }
+                GroupBox("Cross-reference, then review") {
+                    Text("Find candidate links using published names, agencies, roles, identifiers and dates. Keep the original URL, publisher, retrieval date, excerpt and case status for every claim. Name-only matches remain ambiguous; a moderator confirms each person/record link before publication. Allegations, findings and outcomes remain distinct.")
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                }
+                GroupBox("Photos & camera boundary") {
+                    Text("Official photo links can accompany a cited profile for human reference, subject to rights. Where every LEGAL-ETHICS Rule 6 condition holds (cited accountability records, cited public photos, on-device matching, human confirmation, counsel-reviewed jurisdiction gate), an operator's own Hub may identify officials with cited records — off by default and never auto-publishing. Private individuals are never enrolled or matched; biometric templates never leave the device. Vehicle detections do not identify occupants. Person records have no sightings map, location timeline or presence alerts.")
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                }
+                Link("Records programme & implementation plan", destination: URL(string: "https://github.com/noktirnal42/PlateWatch/blob/main/docs/ACCOUNTABILITY-DATA.md")!)
+                Link("Source and moderation rules", destination: URL(string: "https://github.com/noktirnal42/PlateWatch/blob/main/docs/LEGAL-ETHICS.md")!)
+            }.padding(8)
+        }
+    }
+
+    private func save() {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "PlateWatch-public-records-draft.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try text.write(to: url, atomically: true, encoding: .utf8); notice = "Draft saved. Nothing has been submitted." }
+        catch { notice = "Could not save draft: \(error.localizedDescription)" }
     }
 }

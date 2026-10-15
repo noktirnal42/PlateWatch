@@ -41,6 +41,22 @@ targets:
       - package: FeedIngest
       - package: FleetImporters
 
+  PlateWatchHubTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/FeedRunner.swift
+      - Sources/Console/FeedPreferences.swift
+      - Sources/Console/ModeratorAccess.swift
+      - Sources/Console/ModerationStore.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: FeedIngest
+      - package: PlateKit
+
 packages:
   PlateKit: { path: ../../packages/PlateKit }
   CaptureKit: { path: ../../packages/CaptureKit }
@@ -48,3 +64,12 @@ packages:
   PlateSync: { path: ../../packages/PlateSync }
   FeedIngest: { path: ../../packages/FeedIngest }
   FleetImporters: { path: ../../packages/FleetImporters }
+
+schemes:
+  PlateWatchHub:
+    build:
+      targets:
+        PlateWatchHub: all
+    test:
+      targets: [PlateWatchHubTests]
+      parallelizable: false

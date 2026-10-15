@@ -81,15 +81,14 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 ## M6 — Remote camera sources & public feeds (macOS Hub)
 Sources: [CAMERA-SOURCES.md](CAMERA-SOURCES.md). Every source feeds the same
 `RedactionGate` — widening coverage must never widen what persists.
-- ⬜ Continuity Camera (iPhone as webcam) + UVC webcam enumeration with a
-  camera picker in the Hub (AVCaptureDevice `DiscoverySession`)
-- ⬜ RTSP ingest rework — current `RTSPStreamHandler` uses `AVAssetReader` on
-  an `rtsp://` URL (cannot open live streams) and calls a removed
-  `RedactionGate` API (Hub does not compile); plan: HLS via
-  `AVPlayerItemVideoOutput` first, VLCKit (LGPL) as fallback
-- ⬜ Public traffic-cam feeds: `PublicFeedSource` + polite poller (HLS /
-  snapshot JPEG; state 511 catalogs, USA first), citations per feed
-- ⬜ Per-source recorded fixtures so CI never depends on live cameras
+- ✅ Continuity/UVC camera enumeration and Live controls implemented; physical-device permission and analysis QA remains open.
+- ⬜ RTSP ingest rework — compiles, but the existing AVAssetReader path is unsuitable for raw RTSP/live HLS.
+  Wire reviewed HLS through AVPlayer playback/frame sampling first; VLCKit remains a separate licensed fallback.
+- ✅ Public snapshot feeds: cited catalogues, terms/robots checks, shared polite pacing, source-specific jurisdiction/resolution rules.
+- ✅ Favorites, reversible local blocks, and selected snapshot analysis overlays in Live.
+- ✅ Offline help, native desktop toolbar/sidebar and primary glass action; UI/hardware coverage tracked in the [Hub handoff](HUB-HANDOFF-2026-10-14.md).
+- ✅ Offline importer/poller/policy fixtures and hostless Hub regressions in CI.
+- ⬜ Validated continuous public-video playback and sampled analysis, including CDN/segment policy and cancellation tests.
 
 ## M7 — Accountability records (people & vehicles cross-reference)
 Sources: [ACCOUNTABILITY-DATA.md](ACCOUNTABILITY-DATA.md),

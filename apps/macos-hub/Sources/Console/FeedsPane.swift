@@ -1,28 +1,15 @@
 import FeedIngest
 import SwiftUI
 
-/// The person's starred cameras, persisted locally (UserDefaults) by camera id.
-@MainActor
-final class FeedFavorites: ObservableObject {
-    @Published private(set) var ids: Set<UUID>
-    private let key = "hubFavoriteFeeds"
-
-    init() {
-        ids = Set((UserDefaults.standard.stringArray(forKey: "hubFavoriteFeeds") ?? []).compactMap(UUID.init(uuidString:)))
-    }
-    func contains(_ id: UUID) -> Bool { ids.contains(id) }
-    func toggle(_ id: UUID) {
-        if ids.contains(id) { ids.remove(id) } else { ids.insert(id) }
-        UserDefaults.standard.set(ids.map(\.uuidString), forKey: key)
-    }
-}
-
 struct FeedsPane: View {
-    enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites"; var id: String { rawValue } }
+    enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites", blocked = "Blocked"; var id: String { rawValue } }
     enum SortKey: String, CaseIterable, Identifiable { case name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
 
     @ObservedObject var hub: HubController
+    let isActive: Bool
+    var onOpenLive: () -> Void
     @ObservedObject private var favorites: FeedFavorites
+    @ObservedObject private var runner: FeedRunner
     @State private var catalogue: FeedCatalogue?
     @State private var tab: Tab = .all
     @State private var query = ""
@@ -31,10 +18,17 @@ struct FeedsPane: View {
     @State private var sortKey: SortKey = .name
     @State private var ascending = true
     @State private var favoritesFirst = false
+    @State private var termsExpanded = false
     @State private var reviewing: FeedHostSummary?
     @State private var selected: Set<UUID> = []
 
-    init(hub: HubController) { self.hub = hub; _favorites = ObservedObject(wrappedValue: hub.favorites) }
+    init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void) {
+        self.hub = hub
+        self.isActive = isActive
+        self.onOpenLive = onOpenLive
+        _favorites = ObservedObject(wrappedValue: hub.favorites)
+        _runner = ObservedObject(wrappedValue: hub.feedRunner)
+    }
 
     private var hosts: [FeedHostSummary] { catalogue?.hosts() ?? [] }
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
@@ -43,6 +37,7 @@ struct FeedsPane: View {
     /// Search (every word must match name, host, area or attribution) → filters → sort.
     private var rows: [PublicFeedSource] {
         var list = catalogue?.sources ?? []
+        list = list.filter { tab == .blocked ? favorites.isBlocked($0.id) : !favorites.isBlocked($0.id) }
         if tab == .favorites { list = list.filter { favorites.contains($0.id) } }
         if !hostFilter.isEmpty { list = list.filter { $0.url.host == hostFilter } }
         if let statusFilter { list = list.filter { hub.feedRunner.state(of: $0).kind == statusFilter } }
@@ -74,8 +69,9 @@ struct FeedsPane: View {
             HStack {
                 Picker("", selection: $tab) {
                     Text("All feeds (\(totalCount))").tag(Tab.all)
-                    Text("★ Favorites (\(favorites.ids.count))").tag(Tab.favorites)
-                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 340)
+                    Text("★ Favorites (\(favorites.ids.subtracting(favorites.blockedIDs).count))").tag(Tab.favorites)
+                    Text("⦸ Blocked (\(favorites.blockedIDs.count))").tag(Tab.blocked)
+                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 490)
                 Spacer()
                 FeedStatusRow(runner: hub.feedRunner)
                 Menu("Add cameras") {
@@ -87,16 +83,21 @@ struct FeedsPane: View {
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
-            if tab == .all { controls }
+            if tab != .favorites { controls }
             if tab == .favorites { favoritesGrid } else { listAndPreview }
-            if tab == .all {
-                Text("\(rows.count) of \(totalCount) cameras. robots.txt is honoured; one request per camera per refresh interval.")
+            if tab != .favorites {
+                Text(tab == .blocked
+                     ? "Blocked cameras are saved on this Mac and receive no polling or preview requests. Use ↶ to unblock."
+                     : "\(rows.count) of \(totalCount) cameras. Use ☆ to favorite or ⦸ to block a missing feed. Requests share a one-per-host-per-second budget.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding()
         .onAppear(perform: reload)
-        .onChange(of: hub.feedRunner.status) { _, _ in reload() }
+        .onChange(of: tab) { _, value in
+            if value == .blocked { query = ""; hostFilter = ""; statusFilter = nil }
+        }
+        .onChange(of: hub.importStatus) { _, _ in reload() }
         .sheet(item: Binding(get: { reviewing.map(HostBox.init) }, set: { reviewing = $0?.host })) { box in
             TermsReviewSheet(hub: hub, host: box.host, sample: catalogue?.sources.first { $0.url.host == box.host.host }) {
                 reviewing = nil; reload()
@@ -107,22 +108,41 @@ struct FeedsPane: View {
     // MARK: Pieces
 
     private var termsBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Cameras are not polled until you review and confirm each image host's terms.", systemImage: "hand.raised")
-                .font(.headline)
-            ForEach(needReview, id: \.host) { h in
-                HStack {
-                    Text(h.host).monospaced()
-                    Text("\(h.totalCount - h.confirmedCount) of \(h.totalCount) cameras waiting").foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Review terms…") { reviewing = h }.buttonStyle(.borderedProminent)
-                }
-            }
+        DisclosureGroup(isExpanded: $termsExpanded) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Imports add metadata only. Review and confirm each image host's terms before polling.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(needReview, id: \.host) { h in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(h.host).monospaced()
+                                Text("\(h.totalCount - h.confirmedCount) cameras waiting").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Review terms…") { reviewing = h }
+                        }
+                        Divider()
+                    }
+                }.padding(.top, 8)
+            }.frame(maxHeight: 220)
+        } label: {
+            Label("\(needReview.count) hosts awaiting terms review · \(needReview.reduce(0) { $0 + $1.totalCount - $1.confirmedCount }) cameras inactive", systemImage: "hand.raised")
+                .font(.callout.weight(.medium))
         }
-        .padding(12).background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+        .padding(12)
+        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+        .help("Expand to review newly imported image hosts; no camera is polled before approval")
     }
 
     private var controls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) { searchControl; sourceControl; statusControl }
+            HStack(spacing: 10) { sortControl; Spacer() }
+        }
+    }
+
+    private var searchControl: some View {
         HStack(spacing: 10) {
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -130,19 +150,31 @@ struct FeedsPane: View {
                 if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary) }
             }
             .padding(6).background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8)).frame(maxWidth: 300)
-            Picker("Source", selection: $hostFilter) {
-                Text("All sources").tag("")
-                ForEach(hosts, id: \.host) { Text("\($0.host) (\($0.totalCount))").tag($0.host) }
-            }.frame(maxWidth: 260)
-            Picker("Status", selection: $statusFilter) {
-                Text("Any status").tag(FeedRunner.StatusKind?.none)
-                ForEach(FeedRunner.StatusKind.allCases) { Text($0.rawValue).tag(FeedRunner.StatusKind?.some($0)) }
-            }.frame(maxWidth: 200)
-            Spacer()
+        }
+        .help("Every search word must match the camera's name, host, area or attribution")
+    }
+
+    private var sourceControl: some View {
+        Picker("Source", selection: $hostFilter) {
+            Text("All sources").tag("")
+            ForEach(hosts, id: \.host) { Text("\($0.host) (\($0.totalCount))").tag($0.host) }
+        }.frame(maxWidth: 260).help("Filter cameras by their image host")
+    }
+
+    private var statusControl: some View {
+        Picker("Status", selection: $statusFilter) {
+            Text("Any status").tag(FeedRunner.StatusKind?.none)
+            ForEach(FeedRunner.StatusKind.allCases) { Text($0.rawValue).tag(FeedRunner.StatusKind?.some($0)) }
+        }.frame(maxWidth: 200).help("Filter by terms, robots policy, polling or local block status")
+    }
+
+    private var sortControl: some View {
+        HStack(spacing: 10) {
             Picker("Sort", selection: $sortKey) { ForEach(SortKey.allCases) { Text($0.rawValue).tag($0) } }.frame(maxWidth: 150)
             Button { ascending.toggle() } label: { Image(systemName: ascending ? "arrow.up" : "arrow.down") }
-                .help(ascending ? "Ascending" : "Descending")
-            Toggle("★ first", isOn: $favoritesFirst).toggleStyle(.checkbox)
+                .help(ascending ? "Ascending; click for descending" : "Descending; click for ascending")
+            Toggle("Favorites first", isOn: $favoritesFirst).toggleStyle(.checkbox)
+                .help("Place starred cameras before the selected sort order")
         }
     }
 
@@ -155,6 +187,9 @@ struct FeedsPane: View {
                             .foregroundStyle(favorites.contains(s.id) ? Color.yellow : Color.secondary)
                     }.buttonStyle(.plain).help(favorites.contains(s.id) ? "Remove from favorites" : "Add to favorites")
                 }.width(28)
+                TableColumn("") { s in
+                    FeedBlockButton(hub: hub, preferences: favorites, source: s)
+                }.width(28)
                 TableColumn("Camera") { Text($0.name) }
                 TableColumn("Host") { Text($0.url.host ?? "") }
                 TableColumn("Location") { Text($0.geohash6.isEmpty ? "unknown" : $0.geohash6).monospaced() }.width(70)
@@ -164,25 +199,25 @@ struct FeedsPane: View {
                 }
             }
             .frame(minWidth: 460)
-            CameraPreviewPanel(hub: hub, favorites: favorites,
+            CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
                                source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } })
                 .frame(minWidth: 300, idealWidth: 380)
         }
     }
 
     private var favoritesGrid: some View {
-        let favs = (catalogue?.sources ?? []).filter { favorites.contains($0.id) }.sorted { $0.name < $1.name }
+        let favs = (catalogue?.sources ?? []).filter { favorites.contains($0.id) && !favorites.isBlocked($0.id) }.sorted { $0.name < $1.name }
         return Group {
             if favs.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "star").font(.largeTitle).foregroundStyle(.secondary)
                     Text("No favorites yet").font(.headline)
-                    Text("Click the ☆ next to a camera in All feeds to pin it here with a live thumbnail.").foregroundStyle(.secondary)
+                    Text("Click ☆ in All feeds to pin a camera here. Blocked favorites are hidden; unblock them in the Blocked tab to restore them.").foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
-                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0) }
+                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, isActive: isActive, onOpenLive: onOpenLive) }
                     }.padding(.bottom, 8)
                 }
             }
@@ -198,8 +233,11 @@ struct FavoriteTile: View {
     @ObservedObject var hub: HubController
     @ObservedObject var favorites: FeedFavorites
     let source: PublicFeedSource
+    let isActive: Bool
+    var onOpenLive: () -> Void
     @State private var image: NSImage?
     @State private var message = ""
+    @State private var policyRetryDelay: TimeInterval?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -213,16 +251,29 @@ struct FavoriteTile: View {
                 Spacer()
                 Button { favorites.toggle(source.id) } label: { Image(systemName: "star.fill").foregroundStyle(.yellow) }
                     .buttonStyle(.plain).help("Remove from favorites")
+                    .accessibilityLabel("Remove \(source.name) from favorites")
+                FeedBlockButton(hub: hub, preferences: favorites, source: source)
             }
+            Button("Open in Live", systemImage: "play.rectangle") {
+                hub.openFeedInLive(source); onOpenLive()
+            }.help("Open this camera's analysed snapshots in Live")
+                .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
             Text(source.url.host ?? "").font(.caption2).foregroundStyle(.secondary).monospaced()
         }
-        .task(id: source.id) {
+        .task(id: "\(source.id)-\(isActive)") {
+            guard isActive else { image = nil; return }
             while !Task.isCancelled {
+                policyRetryDelay = nil
                 do {
                     let data = try await hub.feedRunner.fetchPreview(of: source)
+                    guard !Task.isCancelled, !favorites.isBlocked(source.id) else { return }
                     if let img = NSImage(data: data) { image = img; message = "" }
-                } catch { image = nil; message = error.localizedDescription }
-                try? await Task.sleep(for: .seconds(max(source.refreshInterval, 30)))
+                    else { image = nil; message = "Image unavailable. Use ⦸ to block this camera." }
+                } catch {
+                    image = nil; message = error.localizedDescription
+                    policyRetryDelay = (error as? FeedRunner.PreviewError)?.policyRetryDelay
+                }
+                try? await Task.sleep(for: .seconds(policyRetryDelay ?? max(source.refreshInterval, 30)))
             }
         }
     }
@@ -232,10 +283,13 @@ struct FavoriteTile: View {
 struct CameraPreviewPanel: View {
     @ObservedObject var hub: HubController
     @ObservedObject var favorites: FeedFavorites
+    let isActive: Bool
+    var onOpenLive: () -> Void
     let source: PublicFeedSource?
     @State private var image: NSImage?
     @State private var fetchedAt: Date?
     @State private var message = ""
+    @State private var policyRetryDelay: TimeInterval?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -247,8 +301,12 @@ struct CameraPreviewPanel: View {
                         Image(systemName: favorites.contains(source.id) ? "star.fill" : "star")
                             .foregroundStyle(favorites.contains(source.id) ? Color.yellow : Color.secondary)
                     }.buttonStyle(.plain).help("Favorite")
+                        .accessibilityLabel("Favorite \(source.name)")
+                    FeedBlockButton(hub: hub, preferences: favorites, source: source)
                 }
                 Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
+                Label("Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: "photo")
+                    .font(.caption).foregroundStyle(.secondary)
                 ZStack {
                     Rectangle().fill(.black.opacity(0.85))
                     if let image { Image(nsImage: image).resizable().scaledToFit() }
@@ -256,10 +314,17 @@ struct CameraPreviewPanel: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 200)
                 HStack {
-                    if let fetchedAt { Text("Updated \(fetchedAt, format: .dateTime.hour().minute().second())").font(.caption).foregroundStyle(.secondary) }
+                    if let fetchedAt { Text("Fetched \(fetchedAt, format: .dateTime.hour().minute().second())").font(.caption).foregroundStyle(.secondary) }
                     Spacer()
-                    Button("Refresh now") { Task { await load(source) } }
+                    Button("Refresh now") { Task { await load(source, retryFailedPolicy: true) } }
+                        .disabled(favorites.isBlocked(source.id))
                 }
+                Button("Open in Live", systemImage: "play.rectangle") {
+                    hub.openFeedInLive(source); onOpenLive()
+                }
+                .modifier(HubPrimaryAction())
+                .help("Show this camera's analysed snapshots and vehicle overlays in Live")
+                .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
                 if !source.mayBeAnalysed {
                     Text("Confirm this host's terms (Review terms…) to view and poll its cameras.").font(.caption).foregroundStyle(.orange)
                 }
@@ -269,20 +334,45 @@ struct CameraPreviewPanel: View {
             }
         }
         .padding()
-        .task(id: source?.id) {
+        .task(id: source.map { "\($0.id)-\(favorites.isBlocked($0.id))-\(isActive)" }) {
             image = nil; fetchedAt = nil; message = ""
-            guard let source else { return }
+            guard isActive, let source else { return }
+            guard !favorites.isBlocked(source.id) else { message = "Blocked on this Mac. Unblock this camera to view it again."; return }
             while !Task.isCancelled {
                 await load(source)
-                try? await Task.sleep(for: .seconds(max(source.refreshInterval, 10)))
+                try? await Task.sleep(for: .seconds(policyRetryDelay ?? max(source.refreshInterval, 10)))
             }
         }
     }
 
-    private func load(_ source: PublicFeedSource) async {
+    private func load(_ source: PublicFeedSource, retryFailedPolicy: Bool = false) async {
+        policyRetryDelay = nil
         do {
-            let data = try await hub.feedRunner.fetchPreview(of: source)
+            let data = try await hub.feedRunner.fetchPreview(of: source, retryFailedPolicy: retryFailedPolicy)
+            guard !Task.isCancelled, !favorites.isBlocked(source.id), self.source?.id == source.id else { return }
             if let img = NSImage(data: data) { image = img; fetchedAt = Date(); message = "" }
-        } catch { message = error.localizedDescription; image = nil }
+            else { image = nil; message = "The camera returned an unavailable or unreadable image. You can block it using ⦸ above." }
+        } catch {
+            guard !Task.isCancelled, self.source?.id == source.id else { return }
+            message = error.localizedDescription; image = nil
+            policyRetryDelay = (error as? FeedRunner.PreviewError)?.policyRetryDelay
+        }
+    }
+}
+
+/// Reversible local exclusion; no terms changes and no change to the upstream camera.
+struct FeedBlockButton: View {
+    @ObservedObject var hub: HubController
+    @ObservedObject var preferences: FeedFavorites
+    let source: PublicFeedSource
+
+    var body: some View {
+        Button { hub.toggleFeedBlock(source.id) } label: {
+            Image(systemName: preferences.isBlocked(source.id) ? "arrow.uturn.backward.circle" : "nosign")
+                .foregroundStyle(preferences.isBlocked(source.id) ? Color.orange : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(preferences.isBlocked(source.id) ? "Unblock camera on this Mac" : "Block camera on this Mac (stops polling and previews)")
+        .accessibilityLabel("\(preferences.isBlocked(source.id) ? "Unblock" : "Block") \(source.name)")
     }
 }
