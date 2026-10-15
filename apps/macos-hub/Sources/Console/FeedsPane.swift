@@ -81,7 +81,6 @@ struct FeedsPane: View {
                     Text("⦸ Blocked (\(favorites.blockedIDs.count))").tag(Tab.blocked)
                 }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 490)
                 Spacer()
-                FeedStatusRow(runner: hub.feedRunner)
                 Menu("Add cameras") {
                     Button("Texas — Austin traffic cameras (about 820)") { Task { await hub.importAustinCameras(); reload() } }
                     ForEach(HubController.OpenCatalogue.allCases) { c in
@@ -90,6 +89,8 @@ struct FeedsPane: View {
                 }
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
+            FeedStatusRow(runner: hub.feedRunner)
+                .font(.caption).foregroundStyle(.secondary)
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
             if tab != .favorites { controls }
             if tab == .favorites { favoritesGrid } else { listAndPreview }
@@ -210,18 +211,24 @@ struct FeedsPane: View {
                 TableColumn("") { s in
                     FeedBlockButton(hub: hub, preferences: favorites, source: s)
                 }.width(28)
-                TableColumn("Camera") { Text($0.name) }
-                TableColumn("Host") { Text($0.url.host ?? "") }
+                TableColumn("Camera / source") { source in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(source.name).lineLimit(1)
+                        Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .padding(.vertical, 3)
+                    .help("\(source.name)\n\(source.url.host ?? "")")
+                }.width(min: 150, ideal: 250)
                 TableColumn("Location") { Text($0.geohash6.isEmpty ? "unknown" : $0.geohash6).monospaced() }.width(70)
                 TableColumn("Status") { s in
                     let state = hub.feedRunner.state(of: s)
-                    Label(state.text, systemImage: state.icon).foregroundStyle(state.color)
-                }
+                    Label(state.text, systemImage: state.icon).foregroundStyle(state.color).lineLimit(1).help(state.text)
+                }.width(min: 110, ideal: 155)
             }
-            .frame(minWidth: 460)
+            .frame(minWidth: 430)
             CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
                                source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } })
-                .frame(minWidth: 300, idealWidth: 380)
+                .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
         }
     }
 

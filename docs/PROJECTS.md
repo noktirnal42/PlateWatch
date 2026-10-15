@@ -55,6 +55,7 @@ tests must stay green before its status advances.
   own CDN segment fetches are a documented limitation); `.rtsp` states it needs the unbundled VLCKit
   fallback. Oregon/Utah/New Mexico imports added; new hosts remain unconfirmed. Continuous HLS and raw
   RTSP are not yet validated against real streams end-to-end.
+- **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Compact-window/Light Mode/keyboard checks remain open.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
 - **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.
 - **Next:** follow [HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md): verify a real permitted HLS

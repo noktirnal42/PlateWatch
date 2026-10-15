@@ -89,13 +89,16 @@ struct ConsoleView: View {
 
 private struct Stat: View {
     let title: String, value: String
+    var icon = "chart.bar"
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: icon).font(.title3).foregroundStyle(.tint)
             Text(value).font(.system(.title, design: .rounded).monospacedDigit()).bold()
             Text(title).font(.caption).foregroundStyle(.secondary)
         }
-        .padding(12).frame(minWidth: 140, alignment: .leading)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -105,23 +108,31 @@ struct DashboardPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Fleet activity, on this Mac").font(.largeTitle.bold())
+                    Text("Your fleet observatory").font(.largeTitle.bold())
                     Text("On-device analysis · fleet-only evidence · counts for this session")
                         .foregroundStyle(.secondary)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
-                    Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)")
-                    Stat(title: "Public feed frames", value: "\(hub.feedFramesAnalyzed)")
-                    Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)")
-                    Stat(title: "Frames skipped (busy)", value: "\(hub.framesDropped)")
-                    Stat(title: "Outbox pending", value: "\(hub.pendingCount)")
+                    Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)", icon: "viewfinder")
+                    Stat(title: "Public feed frames", value: "\(hub.feedFramesAnalyzed)", icon: "antenna.radiowaves.left.and.right")
+                    Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)", icon: "car.side")
+                    Stat(title: "Skipped while busy", value: "\(hub.framesDropped)", icon: "pause.circle")
+                    Stat(title: "Outbox pending", value: "\(hub.pendingCount)", icon: "tray.and.arrow.up")
                 }
+                HStack(spacing: 12) {
+                    dashboardAction("Browse cameras", icon: "antenna.radiowaves.left.and.right", pane: "feeds")
+                    dashboardAction("Review evidence", icon: "tray.full", pane: "review")
+                    dashboardAction("Records & FOIA", icon: "doc.text.magnifyingglass", pane: "records")
+                }.buttonStyle(.bordered)
                 GroupBox("Sources") {
                     VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Analysis", value: hub.modelStatus)
                         LabeledContent("Snapshot server", value: hub.snapshotServerStatus)
                         LabeledContent("RTSP streams", value: hub.rtspServerStatus)
-                        LabeledContent("Ingest folder", value: hub.ingestFolder.path)
+                        LabeledContent("Ingest folder") {
+                            Text(hub.ingestFolder.lastPathComponent).help(hub.ingestFolder.path)
+                                .textSelection(.enabled)
+                        }
                         FeedStatusRow(runner: hub.feedRunner)
                     }.padding(4)
                 }
@@ -131,8 +142,14 @@ struct DashboardPane: View {
                          : "Off: no home location set (or none we can place in the US). Set the home location in Settings.")
                         .padding(4)
                 }
-            }.padding()
+            }.padding(24)
         }
+    }
+
+    private func dashboardAction(_ title: String, icon: String, pane: String) -> some View {
+        Button(title, systemImage: icon) {
+            NotificationCenter.default.post(name: HubAgentBridge.navigation, object: pane)
+        }.help("Open \(title.lowercased())")
     }
 }
 
