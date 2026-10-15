@@ -305,16 +305,27 @@ final class RealWorldRegressionTests: XCTestCase {
 
     private func hint(_ lat: Double, _ lon: Double) -> IdentityResolver.LocationHint { .init(latitude: lat, longitude: lon) }
 
-    func testPlateRecognitionIsDisabledInRestrictedStatesAndNearTheirBorders() {
-        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26)), "Portland, ME")
-        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(43.21, -71.54)), "Concord, NH")
-        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(42.70, -71.16)), "Lawrence MA is ~10 km from NH: fail closed")
-        XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(34.75, -92.29)), "Little Rock, AR (pending counsel)")
+    private let conservative = JurisdictionPolicy.platesConservativeStates
+
+    /// The mechanism (state lookup + border margin) still works when states are supplied, e.g. if counsel's view changes.
+    func testConservativeListDisablesRestrictedStatesAndNearTheirBorders() {
+        func may(_ lat: Double, _ lon: Double) -> Bool {
+            JurisdictionPolicy.mayReadPlates(near: hint(lat, lon), disabledStates: conservative)
+        }
+        XCTAssertFalse(may(43.66, -70.26), "Portland, ME")
+        XCTAssertFalse(may(43.21, -71.54), "Concord, NH")
+        XCTAssertFalse(may(42.70, -71.16), "Lawrence MA is ~10 km from NH: fail closed")
+        XCTAssertFalse(may(34.75, -92.29), "Little Rock, AR (pending counsel)")
+        XCTAssertTrue(may(44.98, -93.27), "Minneapolis")
+        XCTAssertTrue(may(42.36, -71.06), "Boston is ~60 km from NH")
     }
 
-    func testPlateRecognitionIsAllowedAwayFromRestrictedStates() {
+    /// Default per the owner-reported counsel view (2026-10-15): no restricted states.
+    func testDefaultAllowsPlateRecognitionInPreviouslyRestrictedStates() {
+        XCTAssertTrue(JurisdictionPolicy.platesDisabledByDefault.isEmpty)
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26)), "Portland, ME")
+        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(43.21, -71.54)), "Concord, NH")
         XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(44.98, -93.27)), "Minneapolis")
-        XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(42.36, -71.06)), "Boston is ~60 km from NH")
         XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(34.05, -118.24)), "Los Angeles")
     }
 
@@ -324,9 +335,32 @@ final class RealWorldRegressionTests: XCTestCase {
         XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(0, -30)), "mid-Atlantic: nothing to reason from")
     }
 
+    func testPlateReadingGateFailsClosedWithoutALocationAndTracksIt() {
+        let gate = PlateReadingGate()
+        XCTAssertFalse(gate.allowed, "no location yet")
+        gate.update(latitude: 44.98, longitude: -93.27)            // Minneapolis
+        XCTAssertTrue(gate.allowed)
+        gate.update(latitude: 0, longitude: -30)                   // mid-Atlantic: nowhere to reason from
+        XCTAssertFalse(gate.allowed)
+        gate.update(latitude: 34.05, longitude: -118.24)           // Los Angeles
+        XCTAssertTrue(gate.allowed)
+        gate.update(latitude: nil, longitude: nil)                 // e.g. a photo without GPS
+        XCTAssertFalse(gate.allowed)
+        gate.update(latitude: 34.05, longitude: -118.24)           // same cell as before the clear: must reopen
+        XCTAssertTrue(gate.allowed)
+    }
+
+    func testConservativeGateClosesInRestrictedStates() {
+        let gate = PlateReadingGate(disabledStates: conservative)
+        gate.update(latitude: 43.66, longitude: -70.26)            // Portland, ME
+        XCTAssertFalse(gate.allowed)
+        gate.update(latitude: 44.98, longitude: -93.27)
+        XCTAssertTrue(gate.allowed)
+    }
+
     func testPolicyListsAreExplicit() {
         XCTAssertEqual(JurisdictionPolicy.platesRestricted, ["ME", "NH"])
-        XCTAssertTrue(JurisdictionPolicy.platesDisabledByDefault.isSuperset(of: ["ME", "NH", "AR", "ID", "KY", "CT"]))
+        XCTAssertTrue(JurisdictionPolicy.platesConservativeStates.isSuperset(of: ["ME", "NH", "AR", "ID", "KY", "CT"]))
         XCTAssertTrue(JurisdictionPolicy.mayReadPlates(near: hint(43.66, -70.26), disabledStates: []), "counsel can clear a state")
     }
 

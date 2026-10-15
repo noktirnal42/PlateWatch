@@ -19,6 +19,10 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
     public var citation: SourceCitation
     /// Optional honoring note, e.g. "Caltrans public feed, 5 s cadence".
     public var termsNote: String
+    /// US state (or province) the camera belongs to, as recorded by the
+    /// catalogue import. Drives the feed list's state grouping; nil for
+    /// sources imported before the field existed until they are re-imported.
+    public var state: String?
     /// Recorded terms (docs/FEED-SOURCES.md §5). Defaults to "unknown, not allowed".
     public var terms: FeedTerms
     /// Native image long side in pixels, when the catalogue states it (picks the analysis tier).
@@ -68,6 +72,7 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
                 geohash6: String,
                 citation: SourceCitation,
                 termsNote: String = "",
+                state: String? = nil,
                 terms: FeedTerms = .unknown,
                 nativeLongSide: Int? = nil,
                 locationConfidence: LocationConfidence = .approximate) throws {
@@ -85,6 +90,7 @@ public struct PublicFeedSource: Sendable, Identifiable, Hashable, Codable {
         self.geohash6 = geohash6
         self.citation = citation
         self.termsNote = termsNote
+        self.state = state
         self.terms = terms
         self.nativeLongSide = nativeLongSide
         self.locationConfidence = locationConfidence

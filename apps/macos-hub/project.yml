@@ -20,10 +20,15 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - Sources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Support/Info.plist
       properties:
-        LSUIElement: true   # menu-bar resident hub
+        LSUIElement: false   # full desktop app (the menu-bar item stays as a status shortcut)
+        NSLocationUsageDescription: "Optional: set this Hub's home area from your location. Only a ~1 km area is stored, and only when you press Use my location."
+        NSLocationWhenInUseUsageDescription: "Optional: set this Hub's home area from your location. Only a ~1 km area is stored, and only when you press Use my location."
         NSCameraUsageDescription: "The Hub can analyze cameras (including iPhones via Continuity Camera) for fleet vehicle identification, on-device."
         NSBonjourServices: [_platewatch-snapshot._tcp]   # advertises the snapshot ingest endpoint to IP cameras on the LAN
         CFBundleDisplayName: PlateWatch Hub
@@ -34,6 +39,23 @@ targets:
       - package: VehicleML
       - package: PlateSync
       - package: FeedIngest
+      - package: FleetImporters
+
+  PlateWatchHubTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/FeedRunner.swift
+      - Sources/Console/FeedPreferences.swift
+      - Sources/Console/ModeratorAccess.swift
+      - Sources/Console/ModerationStore.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: FeedIngest
+      - package: PlateKit
 
 packages:
   PlateKit: { path: ../../packages/PlateKit }
@@ -41,3 +63,13 @@ packages:
   VehicleML: { path: ../../packages/VehicleML }
   PlateSync: { path: ../../packages/PlateSync }
   FeedIngest: { path: ../../packages/FeedIngest }
+  FleetImporters: { path: ../../packages/FleetImporters }
+
+schemes:
+  PlateWatchHub:
+    build:
+      targets:
+        PlateWatchHub: all
+    test:
+      targets: [PlateWatchHubTests]
+      parallelizable: false

@@ -124,3 +124,90 @@ private extension SightingSubmissionDTO {
         return try! decoder.decode(SightingSubmissionDTO.self, from: Data(json.utf8))
     }
 }
+
+final class ModeratorAPIAuthTests: XCTestCase {
+    private let token = String(repeating: "x", count: 32)
+    private var basic: String { "Basic " + Data("moderator:\(token)".utf8).base64EncodedString() }
+
+    func testAPIRequiresCustomHeaderEvenWithValidCredentials() async throws {
+        try await withApp { app in
+            try app.register(collection: ModeratorController(token: token))
+            let res = try await app.sendRequest(.GET, "moderator/api/queue", headers: ["Authorization": basic])
+            XCTAssertEqual(res.status, .forbidden, "a cross-site request cannot add the header")
+        }
+    }
+
+    func testAPIRejectsWrongPasswordWithHeader() async throws {
+        try await withApp { app in
+            try app.register(collection: ModeratorController(token: token))
+            let bad = "Basic " + Data("moderator:nope".utf8).base64EncodedString()
+            let res = try await app.sendRequest(.GET, "moderator/api/queue",
+                                                headers: ["Authorization": bad, ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(res.status, .unauthorized)
+        }
+    }
+
+    func testAPIDisabledWithoutToken() async throws {
+        try await withApp { app in
+            try app.register(collection: ModeratorController(token: nil))
+            let res = try await app.sendRequest(.GET, "moderator/api/queue", headers: [ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(res.status, .notFound)
+        }
+    }
+}
+
+final class PublicationPolicyTests: XCTestCase {
+    func testDefaults() {
+        let p = PublicationPolicy.parse(delayHours: nil, retentionDays: nil)
+        XCTAssertEqual(p.publishDelay, 24 * 3600)
+        XCTAssertEqual(p.retention, 21 * 86_400)
+    }
+
+    func testValuesAreClamped() {
+        XCTAssertEqual(PublicationPolicy.parse(delayHours: "-5", retentionDays: "0").publishDelay, 0)
+        XCTAssertEqual(PublicationPolicy.parse(delayHours: "-5", retentionDays: "0").retention, 86_400, "retention is at least a day")
+        XCTAssertEqual(PublicationPolicy.parse(delayHours: "99999", retentionDays: "9999").publishDelay, 720 * 3600)
+        XCTAssertEqual(PublicationPolicy.parse(delayHours: "abc", retentionDays: "x").publishDelay, 24 * 3600, "garbage falls back to the default")
+    }
+
+    func testCutoffs() {
+        let p = PublicationPolicy.parse(delayHours: "24", retentionDays: "21")
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        XCTAssertEqual(p.publishCutoff(now: now), now.addingTimeInterval(-86_400))
+        XCTAssertEqual(p.purgeCutoff(now: now), now.addingTimeInterval(-21 * 86_400))
+        XCTAssertLessThan(p.purgeCutoff(now: now), p.publishCutoff(now: now), "rows are published before they are purged")
+    }
+
+    func testTakedownValidation() {
+        XCTAssertNotNil(TakedownController.validate(.init(sightingID: nil, reason: "   ", contact: nil)))
+        XCTAssertNotNil(TakedownController.validate(.init(sightingID: nil, reason: String(repeating: "x", count: 1001), contact: nil)))
+        XCTAssertNotNil(TakedownController.validate(.init(sightingID: nil, reason: "ok", contact: String(repeating: "c", count: 201))))
+        XCTAssertNil(TakedownController.validate(.init(sightingID: UUID(), reason: "That is my private vehicle", contact: "me@example.com")))
+    }
+
+    func testModeratorTakedownAPIRequiresHeaderAndToken() async throws {
+        try await withApp { app in
+            let token = String(repeating: "x", count: 32)
+            try app.register(collection: ModeratorController(token: token))
+            let basic = "Basic " + Data("m:\(token)".utf8).base64EncodedString()
+            let noHeader = try await app.sendRequest(.GET, "moderator/api/takedowns", headers: ["Authorization": basic])
+            XCTAssertEqual(noHeader.status, .forbidden)
+            let noAuth = try await app.sendRequest(.GET, "moderator/api/takedowns", headers: [ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(noAuth.status, .unauthorized)
+        }
+    }
+}
+
+final class ModeratorAuditAuthTests: XCTestCase {
+    func testAuditAPIIsModeratorOnly() async throws {
+        try await withApp { app in
+            let token = String(repeating: "x", count: 32)
+            try app.register(collection: ModeratorController(token: token))
+            let basic = "Basic " + Data("m:\(token)".utf8).base64EncodedString()
+            let noHeader = try await app.sendRequest(.GET, "moderator/api/audit", headers: ["Authorization": basic])
+            XCTAssertEqual(noHeader.status, .forbidden)
+            let noAuth = try await app.sendRequest(.GET, "moderator/api/audit", headers: [ModeratorController.apiHeader: "1"])
+            XCTAssertEqual(noAuth.status, .unauthorized)
+        }
+    }
+}

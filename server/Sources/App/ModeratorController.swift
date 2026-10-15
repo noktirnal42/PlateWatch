@@ -37,7 +37,121 @@ struct ModeratorController: RouteCollection {
         let mod = routes.grouped("moderator")
         mod.get(use: queue)
         mod.post("sightings", ":sightingID", "decision", use: decide)
+        // JSON API for the Hub's moderator console (moderators only: same token, plus a custom header that a
+        // cross-site browser form cannot send).
+        let api = mod.grouped("api")
+        api.get("queue", use: apiQueue)
+        api.post("sightings", ":sightingID", "decision", use: apiDecide)
+        api.get("audit", use: apiAudit)
+        api.get("takedowns", use: apiTakedowns)
+        api.post("takedowns", ":takedownID", "resolve", use: apiResolveTakedown)
     }
+
+    static let apiHeader = "X-PlateWatch-Moderator"
+
+    @Sendable
+    func apiQueue(req: Request) async throws -> [APIQueueItem] {
+        _ = try authorizedAPI(req)
+        let rows = try await Sighting.query(on: req.db)
+            .filter(\.$moderationState == RedactionGateService.ModerationState.pending.rawValue)
+            .sort(\.$createdAt, .descending)
+            .limit(200)
+            .all()
+        return rows.compactMap { row in
+            row.id.map { APIQueueItem(id: $0, capturedAt: row.capturedAt, geohash6: row.geohash6,
+                                      unitNumber: row.unitNumber, fleetConfidence: row.fleetConfidence) }
+        }
+    }
+
+    @Sendable
+    func apiDecide(req: Request) async throws -> HTTPStatus {
+        _ = try authorizedAPI(req)
+        guard let id = req.parameters.get("sightingID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "invalid sighting id")
+        }
+        let body = try req.content.decode(APIDecision.self)
+        guard let decision = Decision(rawValue: body.decision) else {
+            throw Abort(.badRequest, reason: "decision must be approve or reject")
+        }
+        guard let row = try await Sighting.find(id, on: req.db) else { throw Abort(.notFound) }
+        if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
+            row.moderationState = decision.resultingState.rawValue
+            try await row.save(on: req.db)
+            req.logger.info("moderation: \(decision.rawValue) sighting \(id)")
+            await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString, on: req.db)
+        }
+        return .noContent
+    }
+
+    struct APIAudit: Content, Equatable {
+        var createdAt: Date?
+        var action: String
+        var target: String?
+        var detail: String?
+    }
+
+    /// Newest first, capped. Action + target ID only — the log never holds sighting content.
+    @Sendable
+    func apiAudit(req: Request) async throws -> [APIAudit] {
+        _ = try authorizedAPI(req)
+        let limit = min(max(req.query["limit"] ?? 200, 1), 500)
+        return try await AuditEntry.query(on: req.db).sort(\.$createdAt, .descending).limit(limit).all()
+            .map { APIAudit(createdAt: $0.createdAt, action: $0.action, target: $0.target, detail: $0.detail) }
+    }
+
+    struct APITakedown: Content, Equatable {
+        var id: UUID
+        var createdAt: Date?
+        var sightingID: UUID?
+        var reason: String
+        var contact: String?
+    }
+    struct APITakedownResolution: Content { var action: String }
+
+    @Sendable
+    func apiTakedowns(req: Request) async throws -> [APITakedown] {
+        _ = try authorizedAPI(req)
+        return try await TakedownRequest.query(on: req.db).filter(\.$status == "open")
+            .sort(\.$createdAt, .ascending).limit(200).all().compactMap { r in
+                r.id.map { APITakedown(id: $0, createdAt: r.createdAt, sightingID: r.sightingID, reason: r.reason, contact: r.contact) }
+            }
+    }
+
+    /// `hide` removes the sighting from every public surface for good; `dismiss` closes the request.
+    @Sendable
+    func apiResolveTakedown(req: Request) async throws -> HTTPStatus {
+        _ = try authorizedAPI(req)
+        guard let id = req.parameters.get("takedownID", as: UUID.self),
+              let request = try await TakedownRequest.find(id, on: req.db) else { throw Abort(.notFound) }
+        let body = try req.content.decode(APITakedownResolution.self)
+        guard body.action == "hide" || body.action == "dismiss" else { throw Abort(.badRequest, reason: "action must be hide or dismiss") }
+        if request.status == "open" {
+            if body.action == "hide", let sid = request.sightingID, let sighting = try await Sighting.find(sid, on: req.db) {
+                sighting.takenDown = true
+                try await sighting.save(on: req.db)
+            }
+            request.status = body.action == "hide" ? "hidden" : "dismissed"
+            try await request.save(on: req.db)
+            await AuditEntry.record("takedown.\(body.action)", target: id.uuidString, on: req.db)
+        }
+        return .noContent
+    }
+
+    private func authorizedAPI(_ req: Request) throws -> String {
+        guard req.headers.first(name: Self.apiHeader) == "1" else { throw Abort(.forbidden, reason: "missing moderator header") }
+        return try authorizedToken(req)
+    }
+
+    /// Same privacy rule as the HTML queue: never a plate, only unit number, ~1 km cell and confidence.
+    struct APIQueueItem: Content, Equatable {
+        var id: UUID
+        var capturedAt: Date
+        var geohash6: String
+        var unitNumber: String?
+        var fleetConfidence: Double
+    }
+
+    struct APIDecision: Content { var decision: String }
 
     // MARK: - Routes
 

@@ -6,6 +6,8 @@ import XCTest
 final class RobotsStubProtocol: URLProtocol {
     nonisolated(unsafe) static var responder: ((URLRequest) -> (Int, String, Data))? = nil
     nonisolated(unsafe) static var requestCount = 0
+    /// Extra response headers (e.g. `Server`), reset by tests that set them.
+    nonisolated(unsafe) static var extraHeaders: [String: String] = [:]
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -19,7 +21,7 @@ final class RobotsStubProtocol: URLProtocol {
         let (status, type, body) = respond(request)
         let http = HTTPURLResponse(url: request.url!, statusCode: status,
                                    httpVersion: "HTTP/1.1",
-                                   headerFields: ["Content-Type": type])!
+                                   headerFields: ["Content-Type": type].merging(Self.extraHeaders) { $1 })!
         client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
@@ -41,7 +43,7 @@ final class RobotsCacheTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [RobotsStubProtocol.self]
         let sess = session ?? URLSession(configuration: config)
-        return RobotsCache(session: sess, userAgent: userAgent, ttl: ttl, now: { clock.now })
+        return RobotsCache(session: sess, userAgent: userAgent, ttl: ttl, maximumAttempts: 1, now: { clock.now })
     }
 
     private func makeURL(path: String = "/page") -> URL {
@@ -66,6 +68,20 @@ final class RobotsCacheTests: XCTestCase {
         XCTAssertTrue(allowed)
         XCTAssertFalse(disallowed)
         XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
+    }
+
+    func testHTMLHomepageIsNotARobotsPolicy() async {
+        RobotsStubProtocol.responder = { _ in (200, "text/html", Data("<!DOCTYPE html><html>App</html>".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date()))
+        let allowed = await cache.isAllowed(makeURL())
+        XCTAssertFalse(allowed)
+    }
+
+    func testUTF8BOMDoesNotHideUserAgentDirective() async {
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("\u{FEFF}User-agent: *\nDisallow: /private/\n".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date()))
+        let allowed = await cache.isAllowed(makeURL(path: "/private/camera.jpg"))
+        XCTAssertFalse(allowed)
     }
 
     func test404MeansAllowAll() async {
@@ -93,6 +109,46 @@ final class RobotsCacheTests: XCTestCase {
         let allowed = await cache.isAllowed(makeURL(path: "/anything"))
         XCTAssertFalse(allowed)
         XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
+    }
+
+    func testTransient503RetriesAndRecoversWithoutCachingARefusal() async {
+        var calls = 0
+        RobotsStubProtocol.responder = { _ in
+            calls += 1
+            return calls < 3 ? (503, "text/plain", Data()) : (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8))
+        }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [RobotsStubProtocol.self]
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: userAgent, retryDelay: .zero)
+        let decision = await cache.decision(for: makeURL())
+        XCTAssertEqual(decision, .allowed)
+        XCTAssertEqual(calls, 3)
+    }
+
+    func testManualRetryEvictsOnlyUnavailableFailure() async {
+        RobotsStubProtocol.responder = { _ in (503, "text/plain", Data()) }
+        let cache = makeCache(clock: ClockBox(Date()))
+        let failed = await cache.decision(for: makeURL())
+        guard case .unavailable(let reason) = failed else { return XCTFail("Expected lookup failure") }
+        XCTAssertTrue(reason.contains("503"))
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8)) }
+        let cached = await cache.decision(for: makeURL())
+        XCTAssertEqual(cached, failed)
+        let recovered = await cache.decision(for: makeURL(), retryFailure: true)
+        XCTAssertEqual(recovered, .allowed)
+        let refused = await cache.decision(for: makeURL(path: "/private/image.jpg"), retryFailure: true)
+        guard case .disallowed = refused else { return XCTFail("Real rule must remain enforced") }
+        XCTAssertEqual(RobotsStubProtocol.requestCount, 2)
+    }
+
+    func testTransientCacheExpiresAfterOneMinute() async {
+        let clock = ClockBox(Date())
+        RobotsStubProtocol.responder = { _ in (500, "text/plain", Data()) }
+        let cache = makeCache(clock: clock)
+        _ = await cache.decision(for: makeURL())
+        clock.now += 61
+        RobotsStubProtocol.responder = { _ in (404, "text/plain", Data()) }
+        let recovered = await cache.decision(for: makeURL())
+        XCTAssertEqual(recovered, .allowed)
     }
 
     // MARK: - Caching
@@ -309,5 +365,84 @@ final class RobotsCacheTests: XCTestCase {
         let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
         let allowed = await cache.isAllowed(makeURL())
         XCTAssertTrue(allowed)
+    }
+
+    /// An S3/CloudFront host answers a missing robots.txt with 403 AccessDenied — that is "no robots.txt", not a refusal.
+    func testS3AccessDeniedForMissingRobotsMeansAllowAll() async {
+        RobotsStubProtocol.extraHeaders = ["Server": "AmazonS3"]
+        defer { RobotsStubProtocol.extraHeaders = [:] }
+        RobotsStubProtocol.responder = { _ in
+            (403, "application/xml", Data("<?xml version=\"1.0\"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>".utf8))
+        }
+        let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+        let allowed = await cache.isAllowed(makeURL())
+        XCTAssertTrue(allowed)
+    }
+
+    /// The exception is narrow: a plain 403, or a 403 from a non-S3 server with the same body, still stops us.
+    func testOtherForbiddenResponsesStillDisallow() async {
+        let s3Body = Data("<Error><Code>AccessDenied</Code></Error>".utf8)
+        for (headers, body) in [([String: String](), Data()), ([:], s3Body), (["Server": "AmazonS3"], Data("<Error><Code>SignatureDoesNotMatch</Code></Error>".utf8))] {
+            RobotsStubProtocol.extraHeaders = headers
+            RobotsStubProtocol.responder = { _ in (403, "application/xml", body) }
+            let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+            let allowed = await cache.isAllowed(makeURL())
+            XCTAssertFalse(allowed)
+        }
+        RobotsStubProtocol.extraHeaders = [:]
+    }
+}
+
+extension RobotsCacheTests {
+    func testCitedCaltransServerErrorPermissionIsPathScoped() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        RobotsStubProtocol.responder = { _ in (500, "text/html", Data("Internal Server Error".utf8)) }
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: "PlateWatchHub", publicAPIPermissions: [.caltransCCTV])
+        let allowed = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/camera/camera.jpg")!)
+        let elsewhere = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/private/camera.jpg")!)
+        let otherHost = await cache.isAllowed(URL(string: "https://example.gov/data/d3/cctv/image/camera.jpg")!)
+        XCTAssertTrue(allowed)
+        XCTAssertFalse(elsewhere)
+        XCTAssertFalse(otherHost)
+    }
+
+    func testCitedGrantNeverOverridesExplicitDisallowOrAuthRefusal() async {
+        for status in [200, 401, 403, 429] {
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [RobotsStubProtocol.self]
+            RobotsStubProtocol.responder = { _ in (status, "text/plain", Data("User-agent: *\nDisallow: /".utf8)) }
+            let cache = RobotsCache(session: URLSession(configuration: config), userAgent: "PlateWatchHub", publicAPIPermissions: [.caltransCCTV])
+            let allowed = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/camera.jpg")!)
+            XCTAssertFalse(allowed, "HTTP \(status)")
+        }
+    }
+
+    func testCitedGrantDoesNotOverrideTLSOrNetworkFailures() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        RobotsStubProtocol.responder = nil
+        let cache = RobotsCache(session: URLSession(configuration: config), userAgent: "PlateWatchHub", publicAPIPermissions: [.caltransCCTV])
+        let allowed = await cache.isAllowed(URL(string: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/camera.jpg")!)
+        XCTAssertFalse(allowed)
+    }
+
+    func testCitedGrantDoesNotOverrideSchemePortOrDistrict() {
+        for url in ["http://cwwp2.dot.ca.gov/data/d3/cctv/image/a.jpg", "https://cwwp2.dot.ca.gov:8443/data/d3/cctv/image/a.jpg", "https://cwwp2.dot.ca.gov/data/d13/cctv/image/a.jpg"] {
+            XCTAssertFalse(PublicAPIPermission.caltransCCTV.allows(URL(string: url)!, robotsHTTPStatus: 500))
+        }
+        XCTAssertNotNil(PublicAPIPermission.caltransCCTV.citation.url)
+    }
+
+    /// Thousands of cameras on one host: one batched call, one robots.txt request, one answer per URL (in order).
+    func testBatchedDecisionsFetchOncePerOriginAndKeepOrder() async {
+        RobotsStubProtocol.requestCount = 0
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("User-agent: *\nDisallow: /private/\n".utf8)) }
+        let cache = makeCache(clock: ClockBox(Date(timeIntervalSince1970: 1_000_000_000)))
+        let urls = (0..<50).map { makeURL(path: $0 % 2 == 0 ? "/cam/\($0)" : "/private/\($0)") }
+        let answers = await cache.decisions(for: urls)
+        XCTAssertEqual(answers.count, 50)
+        XCTAssertEqual(answers.enumerated().filter { $0.element.isAllowed }.map(\.offset), Array(stride(from: 0, to: 50, by: 2)))
+        XCTAssertEqual(RobotsStubProtocol.requestCount, 1)
     }
 }

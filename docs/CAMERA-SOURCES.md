@@ -1,5 +1,17 @@
 # CAMERA-SOURCES.md — every way frames reach the analyzer
 
+> **2026-10-14 update:** the Hub compiles and runs. [WS2 handoff](HUB-HANDOFF-2026-10-14.md) supersedes
+> historical "does not compile" notes below. Local/Continuity/UVC capture and video-file controls exist;
+> hardware permission/continuous transport validation remains pending. Public feeds are snapshots with
+> background analysis, favorites, reversible blocks and Open in Live overlays.
+> **Public HLS is wired:** `.hls` feed entries run continuous background analysis through
+> `FeedIngest.HLSFrameSource` (decoded frames take the same concurrency cap, tier, gate, dedupe,
+> evidence-crop and Live-overlay paths as snapshots; the manifest origin must pass robots and terms
+> are person-confirmed; AVPlayer fetches its own CDN segments — a custom `AVURLAssetResourceLoader`
+> is the future fix for per-segment robots). `.rtsp` entries state honestly that they need the
+> VLCKit fallback (not bundled) instead of being fetched as images.
+
+
 PlateWatch treats *frame sources* as interchangeable: anything that can produce
 a `CVPixelBuffer` flows into `PlateAnalysisPipeline` and then the same
 `RedactionGate` (fleet-only persistence, redaction, provenance). This doc tracks
@@ -14,10 +26,10 @@ Status legend: ✅ working · ⚠️ code exists but not working · ⬜ planned
 | 2 | Photo / video import (EXIF-correct) | `apps/ios` | ✅ |
 | 3 | Hub folder watch — IP cameras FTP snapshots | `apps/macos-hub` | ✅ starts at launch (fixed 2026-10-13; it only ran after the menu was first opened before) — verified: files dropped in `~/Documents/PlateWatch-Ingest` are analysed and removed |
 | 4 | Hub Bonjour snapshot endpoint (devices POST frames) | `apps/macos-hub` | ✅ starts at launch, binary-safe request handling, falls back to a free port when 8088 is taken (fixed 2026-10-13; before: never started, corrupted JPEG bodies, one 64 KB read). Verified with `curl` |
-| 5 | Hub RTSP ingest | `apps/macos-hub/Sources/HubController.swift:409` | ⚠️ does not compile + wrong API — see §Network cameras |
-| 6 | Continuity Camera (iPhone as webcam) | `apps/macos-hub` | ⬜ M6 |
-| 7 | UVC webcams (any USB camera) | `apps/macos-hub` | ⬜ M6 |
-| 8 | Public traffic cams / live feeds (HLS, snapshot JPEG, mJPEG) | `apps/macos-hub` | ⬜ M6 |
+| 5 | Hub RTSP ingest | `apps/macos-hub/Sources/HubController.swift:409` | ⚠️ compiles; raw RTSP/live transport remains unsupported/unverified — see §Network cameras |
+| 6 | Continuity Camera (iPhone as webcam) | `apps/macos-hub` | ⚠️ picker/capture implemented; physical-device QA pending |
+| 7 | UVC webcams (any USB camera) | `apps/macos-hub` | ⚠️ picker/capture implemented; physical-device QA pending |
+| 8 | Public traffic cams / live feeds (HLS, snapshot JPEG, mJPEG) | `apps/macos-hub` | ⚠️ picker/capture implemented; physical-device QA pending |
 
 Why a range of sources: every additional legal frame source widens coverage of
 taxpayer-funded vehicles (fixed intersections, depots, park-and-rides) without
@@ -76,11 +88,9 @@ open-source **macam** driver. Deliverable: a camera picker in the Hub settings
 (persisted by `uniqueID`), disconnection recovery, and a preview tile per active
 camera. No special entitlements beyond Camera.
 
-## Network cameras — RTSP rework (M6 — planned; current code broken)
+## Network cameras — RTSP rework (M6 — transport validation pending)
 
-`RTSPStreamHandler` (HubController.swift:409) exists but **does not compile**
-(it calls a stale `RedactionGate.fleetConfidence(hasFleetMarkings:…)` signature
-removed in the M-Alpha markings rework) and uses `AVAssetReader` on an
+`RTSPStreamHandler` now compiles with shared fleet scoring, but still uses `AVAssetReader` on an
 `rtsp://` URL, which AVFoundation cannot open for live streams.
 
 Rework options, in order of pragmatism:

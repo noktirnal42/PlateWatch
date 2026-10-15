@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="470" viewBox="0 0 1440 470" role="img" aria-labelledby="title desc">
+<title id="title">PlateWatch Hub: from a public camera to fleet evidence</title>
+<desc id="desc">Illustrated system guide, not a screenshot. Reviewed snapshot feeds pass robots policy, shared host pacing, local analysis and a fleet-only gate. Live displays analysis overlays. A local block stops polling and previews.</desc>
+<defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#111b2a"/><stop offset="1" stop-color="#090e17"/></linearGradient>
+ <linearGradient id="card" x2="1" y2="1"><stop stop-color="#243247"/><stop offset="1" stop-color="#172232"/></linearGradient>
+ <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#6c809b" stroke-width="1.5"/></marker>
+</defs>
+<rect width="1440" height="470" rx="28" fill="url(#bg)"/>
+<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+ <rect x="42" y="34" width="8" height="40" rx="4" fill="#ffc62e"/>
+ <text x="68" y="52" fill="#f7f9fc" font-size="27" font-weight="700">Your feeds. Local analysis. Fleet-only evidence.</text>
+ <text x="68" y="81" fill="#9faec2" font-size="17">PlateWatch Hub · illustrated workflow · snapshots are not continuous video</text>
+ <g fill="url(#card)" stroke="#34465e">
+  <rect x="42" y="136" width="242" height="188" rx="18"/>
+  <rect x="324" y="136" width="242" height="188" rx="18"/>
+  <rect x="606" y="136" width="242" height="188" rx="18"/>
+  <rect x="888" y="136" width="242" height="188" rx="18"/>
+  <rect x="1170" y="136" width="228" height="188" rx="18"/>
+ </g>
+ <g fill="none" stroke="#6c809b" stroke-width="2" marker-end="url(#arrow)"><path d="M291 230h24"/><path d="M573 230h24"/><path d="M855 230h24"/><path d="M1137 230h24"/></g>
+ <g font-size="14" font-weight="700" fill="#ffc62e"><text x="65" y="166">01 / CATALOGUE</text><text x="347" y="166">02 / PERMISSION</text><text x="629" y="166">03 / ANALYSE</text><text x="911" y="166">04 / FLEET GATE</text><text x="1193" y="166">05 / REVIEW</text></g>
+ <g fill="#f7f9fc" font-size="23" font-weight="650"><text x="65" y="209">Choose a camera</text><text x="347" y="209">Review the host</text><text x="629" y="209">On this Mac</text><text x="911" y="209">Keep fleet hits</text><text x="1193" y="209">Queue evidence</text></g>
+ <g fill="#b3c0d2" font-size="17">
+  <text x="65" y="246">Cited source + location</text><text x="65" y="273">☆ Favorite · ⦸ Block</text>
+  <text x="347" y="246">Terms + robots policy</text><text x="347" y="273">Shared host pacing</text>
+  <text x="629" y="246">Frames stay in memory</text><text x="629" y="273">Sampled background work</text>
+  <text x="911" y="246">Jurisdiction + redaction</text><text x="911" y="273">Deduplicate observations</text>
+  <text x="1193" y="246">Outbox + moderation</text><text x="1193" y="273">Publication safeguards</text>
+ </g>
+ <path d="M727 333v24h-94" fill="none" stroke="#50c7c0" stroke-width="2"/>
+ <rect x="350" y="340" width="283" height="38" rx="19" fill="#163d43" stroke="#2c777c"/>
+ <text x="374" y="365" fill="#8ee6dd" font-size="16" font-weight="600">Open in Live → analysis overlays</text>
+ <text x="42" y="427" fill="#9faec2" font-size="16">Blocking stops a camera's polling and previews. Unblocking restores its star. New hosts stay inactive until terms are confirmed.</text>
+</g>
+</svg>

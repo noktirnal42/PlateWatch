@@ -23,12 +23,16 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_platewatch-snapshot._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>The Hub can analyze cameras (including iPhones via Continuity Camera) for fleet vehicle identification, on-device.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Optional: set this Hub's home area from your location. Only a ~1 km area is stored, and only when you press Use my location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Optional: set this Hub's home area from your location. Only a ~1 km area is stored, and only when you press Use my location.</string>
 </dict>
 </plist>

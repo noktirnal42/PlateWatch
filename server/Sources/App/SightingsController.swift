@@ -114,8 +114,7 @@ struct SightingsController: RouteCollection {
         let limit = min(req.query["limit"] ?? 200, 1000)
         // Public feed: fleet-confirmed rows only. Pending/redacted rows are
         // review-queue material and must never reach public clients.
-        var query = Sighting.query(on: req.db)
-            .filter(\.$moderationState == RedactionGateService.ModerationState.fleetConfirmed.rawValue)
+        var query = Sighting.publicQuery(on: req.db)
             .sort(\.$capturedAt, .descending)
             .sort(\.$id, .descending)
             .limit(limit)

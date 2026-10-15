@@ -1,5 +1,14 @@
 # FEED-SOURCES.md — public camera feeds and reference data the app suite can ingest
 
+> **Current Hub status (2026-10-14):** [continuation / verification](HUB-HANDOFF-2026-10-14.md) and
+> [USA access audit](research/USA-FEEDS-2026-10-14.md) supersede older reachability notes below.
+> Public feeds use refreshed snapshots; **`.hls` entries now run continuous background analysis**
+> through `FeedIngest.HLSFrameSource` under the same gates as snapshots (robots on the manifest
+> origin, person-confirmed terms, redaction gate, tiering, evidence crops). `.rtsp` entries are
+> honestly marked as needing the VLCKit fallback, which is not bundled. Continuous-video analysis
+> has not yet been verified against a real public HLS camera — that acceptance gate stays open.
+
+
 Reference for the macOS Hub (and any future ingest service) as it grows from handheld capture to **public feeds**:
 state/municipal/federal cameras, business livestreams that are open to the public, and the non-video data used to
 cross-reference what the cameras see. Written 2026-10-13. Companion to [CAMERA-SOURCES.md](CAMERA-SOURCES.md) (how frames
@@ -174,7 +183,7 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
   says it does not hold. Iowa bans bots/framing; Arkansas bans embedding and requires the owner's logo; PennDOT limits use to
   showing current traffic. CFAA risk for polling public pages looks low (Van Buren, hiQ — 9th Cir. only) but contract/state-law claims remain.
 - No statute found banning publication of police-vehicle locations; confidential/undercover plates are protected; doxxing laws target home addresses.
-- No face/person/biometric processing anywhere keeps the project outside BIPA/CUBI/RCW 19.375.
+- The feed/analysis pipeline does no face/person/biometric processing (vehicle-class detectors only), which keeps capture and sighting analysis outside BIPA/CUBI/RCW 19.375. Official identification is a separate `AccountabilityKit` path: off by default, on-device only, and gated by LEGAL-ETHICS Rule 6 (counsel review per jurisdiction before enabling).
 
 | Guardrail | Status |
 |---|---|
@@ -187,7 +196,7 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
 | Aggregation delay (24–72 h), ~1 km coarsening, k-suppression, no live police map | ⬜ server/publishing side, not built |
 | Exclude unmarked/undercover, SWAT/protective, school buses with children, ambulances with patients | ⬜ classifier/moderation work; unmarked vehicles are already undetectable from text |
 | TTL: 21 days full precision then aggregates; access audit log; takedown channel + tombstones | ⬜ server |
-| robots.txt, identifying User-Agent with contact URL, stop-and-flag on 403/429 (no IP rotation) | ✅ `RobotsPolicy`/`RobotsCache` (RFC 9309; Nemotron 3 Ultra, reviewed) gate every poll; 401/403/429/5xx/network error on `robots.txt` ⇒ do not fetch (stricter than RFC's "4xx = allow"), cached 10 min; Hub UA names the project and repo; image-level 403/429 ⇒ existing back-off/suspension. Verified: blocked camera 0 requests, `robots.txt` fetched once |
+| robots.txt, identifying User-Agent with contact URL, stop-and-flag on 403/429 (no IP rotation) | ✅ `RobotsPolicy`/`RobotsCache` (RFC 9309; Nemotron 3 Ultra, reviewed) gate every poll; 401/403/429/network error on `robots.txt` ⇒ do not fetch; 5xx defaults closed, with only the cited Caltrans image-path exception described below; transient failure cached 60 s; actual auth/rate refusal 10 min; Hub UA names the project and repo; image-level 403/429 ⇒ existing back-off/suspension. Verified: blocked camera 0 requests, `robots.txt` fetched once |
 
 ## 7. Open items / next research
 1. **Verify the Caltrans CWWP2 JSON and one keyless snapshot URL from the Hub's own network** (our dev machine could not reach it), then build the first end-to-end pilot (catalogue → poll → analyse → aggregate) with 5–10 cameras.
@@ -204,3 +213,56 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
 - Federal: USGS HVO webcam API — https://volcanoes.usgs.gov/vsc/api/hvoWebcamsApi ; USGS webcams — https://www.usgs.gov/mission-areas/natural-hazards/multimedia/webcams ; FAA weather cameras — https://www.faa.gov/about/office_org/headquarters_offices/ato/service_units/systemops/fs/alaskan/weather_cams ; NOAA GLERL disclaimer — https://www.glerl.noaa.gov/metdata/docs/webcam_disclaimer.html
 - Business livestreams: Windy webcam terms — https://account.windy.com/agreements/webcams-terms-of-use ; EarthCam ToS summary — https://tostracker.app/document/earthcam
 - Reference data: NHTSA vPIC — https://vpic.nhtsa.dot.gov/api/ ; USAspending — https://api.usaspending.gov/docs/endpoints ; SAM.gov entity API — https://open.gsa.gov/api/entity-api ; HIFLD law enforcement (OSM wiki) — https://wiki.openstreetmap.org/wiki/HIFLD/Law_Enforcement ; fleet datasets — https://catalog.data.gov/dataset/city-and-county-vehicle-inventories-f07a0 and https://catalog-beta.data.gov/dataset/new-york-city-fleet-daily-service-report
+
+## 8. More catalogues importable from the Hub (2026-10-14)
+
+Hub → Public feeds → **Add cameras** imports these (each camera arrives *unconfirmed*; review the image host's terms before anything
+is polled). Verified by live requests; full notes and the sources that did **not** qualify (key required, video-only, robots
+`Disallow: /`, unclear terms) are in [research/FEED-RESEARCH-MORE-SOURCES.md](research/FEED-RESEARCH-MORE-SOURCES.md).
+
+| Source | Cameras | Licence (as published) | Note |
+|---|---|---|---|
+| City of Austin (Socrata) | ~820 | Public domain | Image host is S3/CloudFront: a missing `robots.txt` answers 403 `AccessDenied` and is treated as "no robots.txt" |
+| Caltrans CWWP2 (CA) | ~3,400 | Public domain (Caltrans Conditions of Use) | `robots.txt` answers HTTP 500; cited, scoped image-path exception (below), still requires human terms review |
+| WSDOT (WA, ArcGIS) | ~1,700 | **No open licence**: "low volume" use only | Review carefully; many images are served from tripcheck.com |
+| Iowa DOT (ArcGIS) | ~1,300 | CC BY 4.0; site terms cap automated request rates | Per-host pacing is 1 request/s |
+| Oregon TripCheck | 1,161 views at audit | Attribution required; human review | Official JSON inventory, 300-second floor |
+| Utah UDOT public GIS | 482 at audit | Unknown until human review | Known retired snapshot URLs migrated to current HTTPS UDOT host |
+| New Mexico NMRoads | 185 enabled fixed cameras at audit | Unknown until human review | Official catalogue and HTTPS image proxy, 300-second floor |
+
+Not imported yet (open data but outside the US fleet focus or needing a decision): Toronto, Calgary (licence text unreadable),
+Singapore, Hong Kong, Finland Digitraffic. Do **not** poll: Illinois Gateway images (robots `Disallow: /`), Michigan, Kentucky,
+Tennessee (robots disallow), NYC DOT (cease-and-desist history; ask first), Houston TranStar (no redistribution).
+
+## 9. Austin pilot result (2026-10-14)
+
+39 frames sampled evenly across the 822 confirmed Austin cameras (one request per second, identifying User-Agent, saved only to the
+gitignored `eval/feeds/austin/`), analysed with `EvalHarness --survey` (YOLOv8n vehicle detector, plate reading off):
+
+| | |
+|---|---|
+| Frames | 39 (33 at 1920×1080, 6 at 320×176) |
+| Frames with at least one vehicle | 33 |
+| Vehicles detected | 250 |
+| Fleet hits / review candidates | **0 / 0** |
+
+Consistent with §1: these are wide intersection views with small vehicles, so door lettering is unreadable and nothing reaches the fleet
+gate. Austin is useful for traffic-volume and appearance-level work, not for agency identification; expect real fleet hits only from
+cameras with close, low-angle views of one lane. Without the vehicle detector loaded the baseline finds **no** vehicles at all in these
+frames (it grows vehicles from text regions), so the Hub's "CoreML active (N models)" status matters.
+
+Rerun: `eval/harness/.build/release/EvalHarness eval --survey eval/feeds/austin --models models/cache --tasks vehicle-detection`.
+
+## 10. Caltrans fallback, local block and Live semantics (2026-10-14)
+
+CWWP2 explicitly publishes CCTV data for third-party application integration ([operator documentation](https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm)). On the audit date its robots endpoint returned HTTP 500 while documented JSON and JPEG endpoints responded. `PublicAPIPermission.caltransCCTV` records a `SourceCitation` and permits **only** HTTPS, default/443 port, exact host `cwwp2.dot.ca.gov`, district 1–12 `/data/dN/cctv/image/` branches, and only when robots returns an actual 5xx. This is an intentional, operator-publication exception to normal [REP 5xx failure handling](https://www.rfc-editor.org/rfc/rfc9309.html). It is not a blanket 5xx allow rule. A valid Disallow, authentication/rate refusal, wrong host/path or TLS/network error is not overridden. Default `RobotsCache` users have no exception unless explicitly configured. Terms confirmation is a separate mandatory gate. The earlier narrow S3 missing-key rule remains unchanged.
+
+Every host is checked before sources are labelled polling, with per-path rules and cancellation on stop/reload. A 200 HTML homepage is a failed robots fetch; UTF-8 BOMs are removed before parsing. Transient failures retry up to three times, then cache for one minute; actual 401/403/429 refusals retain a ten-minute backoff. Refresh now can immediately recheck an unavailable policy, without overriding a valid refusal. Per-host request scheduling is shared between previews and background polls, and cancelled waiters are removed.
+
+⦸ blocks a source locally: its polling and in-flight previews stop; it disappears from All feeds and Favorites, but its star remains stored. Blocked → ↶ restores it after policy checks. Blocked sources cannot enter Live. No terms or upstream records are changed.
+
+**Open in Live** displays the selected snapshot's analysis overlays. One first-frame preview uses the same policy/throttle; subsequent analysed frames come from the existing background poller, using the camera's own location and resolution rules. Raw frames are in memory, only the selected latest frame is displayed, and leaving/closing/blocking clears it. Fetched/Analysed times are local processing times, not verified upstream capture times. Continuous HLS playback is not connected; the JPEG runner suspends HLS/RTSP records instead of fetching video manifests as images. Canadian options were removed from the Hub menu; historical parsers remain compatible.
+
+### Shared fetch-header and recovery follow-up
+
+The canonical identifying User-Agent is `PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)`. Pangborn rejected the prior long prose comment with HTTP 403; both its robots file and image return 200 to the corrected native client. Shared `RobotsDecision` exposes allowed / disallowed / unavailable outcomes, so network/5xx/HTML failures no longer appear as a policy refusal. Manual refresh retries only unavailable policy lookups. This fixes the header/recovery issue across adapters without pretending real provider restrictions or outages cannot occur.

@@ -57,8 +57,7 @@ struct AgencyReportController: RouteCollection {
         async let fleetSize = Vehicle.query(on: req.db)
             .filter(\.$agency.$id == id)
             .count()
-        async let sightingRows = Sighting.query(on: req.db)
-            .filter(\.$moderationState == "fleetConfirmed")
+        async let sightingRows = Sighting.publicQuery(on: req.db)
             .filter(\.$capturedAt >= windowStart)
             .all()
 

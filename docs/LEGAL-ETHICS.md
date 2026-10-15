@@ -88,13 +88,54 @@ individuals are not subjects at all. The M7 program
   releases, decertification registers, lawsuit dockets, and the work of
   public-interest publishers — always attributed to the original source;
 
+### Identifying officials on camera (authorized with conditions)
+
+Matching a person seen in a sighting to a public accountability record, and
+surfacing that record (court, Brady/Giglio, decertification, roster), is part
+of the mission — when **every** condition holds:
+
+1. **Recorded subjects only.** The matching corpus contains only people who
+   already have a cited public accountability record (Brady/Giglio release,
+   decertification register, docket, official disciplinary publication).
+   Nobody is enrolled "just in case", and **private individuals are never
+   enrolled or matched**.
+2. **Public photos only.** Reference photos come from official/department
+   publications or public-interest publishers, each carrying a
+   `SourceCitation`. Never personal social media, DMV records, or data
+   brokers.
+3. **On-device.** Face embeddings are computed and matched on the operator's
+   device; biometric templates never leave it and are never stored in the
+   shared database. What may be shared is a confirmed, citation-carrying
+   *link* — never biometric data.
+4. **Confirmation, not assertion.** A match is labeled inference with a
+   confidence and never auto-publishes or asserts that the person *is* the
+   subject; publishing a person-linked record requires the same moderator
+   confirmation as every other person link.
+5. **Public capacity only.** Identification surfaces cited records; it is
+   not a person-tracking product. No home addresses, no family, no off-duty
+   private life; no published per-person live maps or presence alerts;
+   residential-hours sightings are never linked to a named individual (see
+   the location firewall in ACCOUNTABILITY-DATA.md).
+6. **Verbatim + appealable.** What a docket alleges is stored as an
+   allegation with status and source; Brady entries name the releasing
+   office. Removal/appeal follows the SafetyHold process.
+
+**Jurisdiction gate.** Biometric matching is disabled by default in code. A
+deployment may enable it only after local-counsel review of that
+jurisdiction's biometric statutes (Illinois BIPA, Texas CUBI, Washington
+RCW 19.375 and their analogues create independent exposure with differing
+exemptions and remedies). The enablement decision (who approved, when, for
+where) is recorded with the deployment configuration.
+
 and may never:
 
 - profile or track a **private individual** (civilian plates, bystanders,
   family members);
 - publish home addresses, family details, or off-duty private life;
-- run **biometric matching** (no face recognition against sightings or any
-  image collection — BIPA/Tex./Wash. statutes make it independently unlawful);
+- run biometric matching outside the conditions above — no enrollment of
+  subjects without cited accountability records, no upload of biometric
+  templates, no identification that publishes or alerts without human
+  confirmation;
 - assert as fact what a docket only alleges — records are stored verbatim
   with status and source.
 

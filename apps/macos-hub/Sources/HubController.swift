@@ -7,6 +7,7 @@ import PlateKit
 import SwiftData
 import VehicleML
 import AVFoundation
+import CoreImage
 
 /// Fixed-camera ingest. v1 watches a folder that IP cameras FTP snapshots
 /// into (every Reolink/Amcrest-class camera supports this) — zero SDKs, no
@@ -18,6 +19,7 @@ final class HubController: ObservableObject {
     @Published private(set) var ingestFolder: URL
     @Published private(set) var framesAnalyzed = 0
     @Published private(set) var fleetHitsToday = 0
+    @Published private(set) var feedFramesAnalyzed = 0
     @Published private(set) var pendingCount = 0
     @Published private(set) var snapshotServerStatus = "Stopped"
     @Published private(set) var snapshotPort: UInt16 = 0
@@ -32,6 +34,8 @@ final class HubController: ObservableObject {
     private var deduper = SightingDeduper()
     /// Public camera feeds (docs/FEED-SOURCES.md). Only sources a person confirmed the terms of are polled.
     let feedRunner = FeedRunner()
+    let favorites = FeedFavorites()
+    private var activeFeedSources: [UUID: PublicFeedSource] = [:]
     var feedsFile: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appending(path: "PlateWatchHub/feeds.json")
@@ -82,6 +86,13 @@ final class HubController: ObservableObject {
         startFeeds()
         #if DEBUG
         if CommandLine.arguments.contains("-PWImportAustin") { Task { await importAustinCameras() } }
+        if let index = CommandLine.arguments.firstIndex(of: "-PWImportCatalogues"),
+           CommandLine.arguments.indices.contains(index + 1) {
+            let keys = Set(CommandLine.arguments[index + 1].split(separator: ",").map(String.init))
+            Task {
+                for choice in OpenCatalogue.allCases where keys.contains(choice.key) { await importCatalogue(choice) }
+            }
+        }
         #endif
         processNewFiles()   // pick up anything dropped while the Hub was not running
     }
@@ -90,6 +101,10 @@ final class HubController: ObservableObject {
     /// New cameras arrive **unconfirmed** and are not polled until a person reads the image host's terms and records
     /// them; existing confirmations are preserved (`FeedCatalogue.merged`). One catalogue request, identifying User-Agent.
     @Published private(set) var importStatus = ""
+    private static let maxFeedAnalyses = 2
+    private var feedAnalysesInFlight = 0
+    /// Frames skipped because analysis was already at capacity.
+    @Published private(set) var framesDropped = 0
 
     func importAustinCameras() async {
         importStatus = "Importing…"
@@ -103,7 +118,106 @@ final class HubController: ObservableObject {
         do {
             let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            let result = try SocrataCameraCatalogue.sources(fromJSON: data, datasetURL: dataset, attribution: "City of Austin")
+            let result = try SocrataCameraCatalogue.sources(fromJSON: data, datasetURL: dataset, attribution: "City of Austin", state: "TX")
+            let existing = (try? FeedCatalogue.load(from: feedsFile)) ?? FeedCatalogue()
+            let merged = existing.merged(with: result.sources)
+            try merged.write(to: feedsFile)
+            startFeeds()
+            importStatus = "Imported \(result.sources.count) cameras (\(result.skippedCount) skipped); \(merged.awaitingTerms.count) awaiting terms"
+        } catch {
+            importStatus = "Import failed: \(error.localizedDescription)"
+        }
+    }
+
+    enum OpenCatalogue: String, CaseIterable, Identifiable {
+        case caltrans = "California — Caltrans (about 3,400 cameras)"
+        case wsdot = "Washington — WSDOT (about 1,700; low-volume use only)"
+        case iowa = "Iowa DOT (about 1,300)"
+        case newMexico = "New Mexico — NMRoads (about 185 cameras)"
+        case utah = "Utah — UDOT public GIS (about 480 cameras)"
+        case oregon = "Oregon — TripCheck (about 1,160)"
+        var id: String { rawValue }
+        var key: String {
+            switch self {
+            case .caltrans: "caltrans"
+            case .wsdot: "wsdot"
+            case .iowa: "iowa"
+            case .oregon: "oregon"
+            case .utah: "utah"
+            case .newMexico: "new-mexico"
+            }
+        }
+    }
+
+    /// Imports a public camera catalogue into `feeds.json`. Like Austin, every camera arrives **unconfirmed**: nothing is fetched
+    /// from an image host until a person reviews and confirms that host's terms. Catalogue requests are spaced 1 s apart.
+    func importCatalogue(_ choice: OpenCatalogue) async {
+        importStatus = "Importing \(choice.rawValue)…"
+        typealias Importers = CameraCatalogueImporters
+        func fetch(_ url: URL) async throws -> Data {
+            var request = URLRequest(url: url)
+            request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+            request.timeoutInterval = 60
+            let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            return data
+        }
+        func arcGIS(_ base: String, _ fields: Importers.ArcGISFields, _ op: Importers.Operator) async throws -> SocrataImportResult {
+            var all: [PublicFeedSource] = [], skipped: [SkipReason] = []
+            var offset = 0
+            for _ in 0..<20 {
+                let url = URL(string: "\(base)/query?where=1%3D1&outFields=*&outSR=4326&f=json&resultOffset=\(offset)&resultRecordCount=1000")!
+                let (page, more) = try Importers.arcGIS(try await fetch(url), fields: fields, operator: op)
+                all += page.sources; skipped += page.skipReasons
+                guard more else { break }
+                offset += 1000
+                try await Task.sleep(for: .seconds(1))
+            }
+            return SocrataImportResult(sources: all, skippedCount: skipped.count, skipReasons: skipped)
+        }
+        do {
+            let result: SocrataImportResult
+            switch choice {
+            case .caltrans:
+                let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
+                                            attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300, state: "CA")
+                var sources: [PublicFeedSource] = [], skipped: [SkipReason] = []
+                for d in 1...12 {
+                    let n = String(format: "%02d", d)
+                    let data = try await fetch(URL(string: "https://cwwp2.dot.ca.gov/data/d\(d)/cctv/cctvStatusD\(n).json")!)
+                    let r = try Importers.caltrans(data, district: d, operator: op)
+                    sources += r.sources; skipped += r.skipReasons
+                    try await Task.sleep(for: .seconds(1))
+                }
+                result = SocrataImportResult(sources: sources, skippedCount: skipped.count, skipReasons: skipped)
+            case .newMexico:
+                let url = URL(string: "https://servicev5.nmroads.com/RealMapWAR/GetCameraInfo")!
+                result = try Importers.newMexicoRoads(try await fetch(url), operator: .init(
+                    datasetURL: url, attribution: "New Mexico Department of Transportation / NMRoads",
+                    licenseClass: .unknown, refreshInterval: 300, state: "NM"))
+            case .utah:
+                let base = "https://central.udot.utah.gov/server/rest/services/TOC_Devices/MapServer/0"
+                let url = URL(string: "\(base)/query?where=1%3D1&outFields=*&outSR=4326&f=json&resultRecordCount=2000")!
+                result = try Importers.utahTraffic(try await fetch(url), operator: .init(
+                    datasetURL: URL(string: base)!, attribution: "Utah Department of Transportation",
+                    licenseClass: .unknown, refreshInterval: 300, state: "UT"))
+            case .oregon:
+                let url = URL(string: "https://tripcheck.com/Scripts/map/data/cctvinventory.js")!
+                result = try Importers.oregonTripCheck(try await fetch(url), operator: .init(
+                    datasetURL: url, attribution: "Camera courtesy of ODOT / TripCheck",
+                    licenseClass: .unknown, refreshInterval: 300, state: "OR"))
+            case .wsdot:
+                result = try await arcGIS("https://data.wsdot.wa.gov/arcgis/rest/services/TravelInformation/TravelInfoCamerasWeather/FeatureServer/0",
+                    .init(name: "CameraTitle", image: "ImageURL", id: "OBJECTID"),
+                    .init(datasetURL: URL(string: "https://data.wsdot.wa.gov/arcgis/rest/services/TravelInformation/TravelInfoCamerasWeather/FeatureServer/0")!,
+                          attribution: "Washington State DOT", licenseClass: .unknown, refreshInterval: 600, state: "WA"))
+            case .iowa:
+                result = try await arcGIS("https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0",
+                    .init(name: "Desc_", image: "ImageURL", id: "device_id", latitude: "latitude", longitude: "longitude"),
+                    .init(datasetURL: URL(string: "https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0")!,
+                          attribution: "Iowa DOT (CC BY 4.0)", licenseClass: .openLicence, refreshInterval: 300, state: "IA"))
+
+            }
             let existing = (try? FeedCatalogue.load(from: feedsFile)) ?? FeedCatalogue()
             let merged = existing.merged(with: result.sources)
             try merged.write(to: feedsFile)
@@ -123,12 +237,57 @@ final class HubController: ObservableObject {
     /// Loads `feeds.json` and starts polling the confirmed sources. Missing/corrupt file = no feeds (never a crash).
     func startFeeds() {
         guard let catalogue = try? FeedCatalogue.load(from: feedsFile) else {
+            activeFeedSources = [:]
+            stopLiveFeed()
             feedRunner.stop()
             return
         }
-        feedRunner.start(catalogue: catalogue) { [weak self] data, source in
+        activeFeedSources = Dictionary(uniqueKeysWithValues: catalogue.sources.map { ($0.id, $0) })
+        if let liveFeed, activeFeedSources[liveFeed.id]?.mayBeAnalysed != true { stopLiveFeed() }
+        feedRunner.start(catalogue: catalogue, blockedIDs: favorites.blockedIDs) { [weak self] data, source in
             await self?.analyseFeedFrame(data, from: source)
+        } analyseVideoFrame: { [weak self] box, source in
+            await self?.analyseFeedVideoFrame(box.buffer, from: source)
         }
+    }
+
+    @Published private(set) var liveFeed: PublicFeedSource?
+    @Published private(set) var liveFeedFrame: WebFeedFrame?
+    @Published private(set) var liveFeedStatus = ""
+
+    func openFeedInLive(_ source: PublicFeedSource) {
+        guard source.kind == .snapshotJPEG, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
+        liveFeedFrame = nil
+        liveFeedStatus = "Waiting for a frame…"
+        liveFeed = source
+    }
+
+    func stopLiveFeed() {
+        liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
+    }
+
+    /// An immediate, rate-limited first frame; subsequent frames come from the existing background poller.
+    func loadLiveFeed() async {
+        guard let source = liveFeed else { return }
+        while !Task.isCancelled, liveFeed?.id == source.id {
+            do {
+                let data = try await feedRunner.fetchPreview(of: source)
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                await analyseFeedFrame(data, from: source)
+                return
+            } catch {
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                liveFeedStatus = error.localizedDescription
+                guard let delay = (error as? FeedRunner.PreviewError)?.policyRetryDelay else { return }
+                do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            }
+        }
+    }
+
+    func toggleFeedBlock(_ id: UUID) {
+        favorites.toggleBlocked(id)
+        if favorites.isBlocked(id), liveFeed?.id == id { stopLiveFeed() }
+        feedRunner.setBlocked(id, blocked: favorites.isBlocked(id))
     }
 
     /// Returns a summary of feed hosts from `feeds.json` for the review UI.
@@ -165,14 +324,65 @@ final class HubController: ObservableObject {
     /// and the plate-recognition jurisdiction gate), and the frame's real size (analysis tier). The frame lives in
     /// memory only.
     func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async {
-        guard let buffer = FileFrameSource.pixelBuffer(from: data) else { return }
+        // Analysis blocks threads (Vision OCR). With hundreds of cameras, unbounded concurrency starves the whole app
+        // (even unrelated network requests never get scheduled), so at most `maxFeedAnalyses` frames are analysed at once and
+        // the surplus is dropped — a camera is simply looked at again on its next refresh.
+        guard feedAnalysesInFlight < Self.maxFeedAnalyses else {
+            framesDropped += 1
+            if liveFeed?.id == source.id { liveFeedStatus = "Analysis busy; waiting for the next camera refresh" }
+            return
+        }
+        feedAnalysesInFlight += 1
+        defer { feedAnalysesInFlight -= 1 }
+        guard let buffer = FileFrameSource.pixelBuffer(from: data) else {
+            if liveFeed?.id == source.id { liveFeedStatus = "Image unavailable or unreadable. Use ⦸ to block this camera." }
+            return
+        }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
         guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
                                                       context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
         framesAnalyzed += 1
-        recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6, mayResolveIdentity: source.mayResolveIdentity,
-                        sourceID: source.id.uuidString)
+        feedFramesAnalyzed += 1
+        // Permissions can be revoked while Vision is processing a frame.
+        guard !favorites.isBlocked(source.id),
+              let current = activeFeedSources[source.id],
+              current.mayBeAnalysed else { return }
+        let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
+                                       mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
+                                       source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
+        if liveFeed?.id == source.id,
+           let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
+            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
+            liveFeedStatus = "Background analysis · refreshed at the camera's interval"
+        }
+    }
+
+    /// One decoded frame from a continuous video feed (HLS today, RTSP via a
+    /// future VLCKit path). Same rules, cadence cap and tiering as snapshot
+    /// frames — only the transport differs. The decoder taps ~15 fps; the
+    /// concurrency cap is what bounds the analysis cost.
+    func analyseFeedVideoFrame(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        guard feedAnalysesInFlight < Self.maxFeedAnalyses else { framesDropped += 1; return }
+        feedAnalysesInFlight += 1
+        defer { feedAnalysesInFlight -= 1 }
+        let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
+        let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
+        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+        framesAnalyzed += 1
+        feedFramesAnalyzed += 1
+        guard !favorites.isBlocked(source.id),
+              let current = activeFeedSources[source.id],
+              current.mayBeAnalysed else { return }
+        let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
+                                       mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
+                                       source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
+        if liveFeed?.id == source.id,
+           let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
+            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
+            liveFeedStatus = "Live video analysis · sampled from the stream"
+        }
     }
 
     /// Installs the detector models (registry, or a developer override `Local/<task>.mlmodel`). Best-effort:
@@ -343,7 +553,7 @@ final class HubController: ObservableObject {
 
     /// Reads until one whole request has arrived (by Content-Length), then answers it.
     /// The buffer is a value passed along the read chain, so nothing is shared across connections.
-    private func receiveHTTPRequest(on connection: NWConnection, buffer: HTTPRequestBuffer) {
+    nonisolated private func receiveHTTPRequest(on connection: NWConnection, buffer: HTTPRequestBuffer) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 256 * 1024) { [weak self] data, _, isComplete, error in
             guard let self else { connection.cancel(); return }
             var buffer = buffer
@@ -392,7 +602,8 @@ final class HubController: ObservableObject {
             let frame = try await pipeline.analyze(.init(pixelBuffer: buffer), context: frameContext(contextBox, for: buffer, readPlates: platesAllowed))
             framesAnalyzed += 1
             let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
-            let recorded = recordFleetHits(in: frame, tier: tier)
+            let recorded = recordFleetHits(in: frame, tier: tier,
+                                           source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
             let keys = recorded.agencyKeys.isEmpty ? "" : "; " + recorded.agencyKeys.joined(separator: ", ")
             sendHTTPResponse(on: connection, status: 200,
                              body: frame.vehicles.isEmpty ? "OK (no vehicles)" : "OK (fleet hits: \(recorded.hits)\(keys); tier: \(tier.rawValue); plates read: \(frame.vehicles.flatMap(\.plates).count))")
@@ -403,10 +614,13 @@ final class HubController: ObservableObject {
 
     /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
     /// endpoint so both apply identical rules. Returns the number of fleet hits.
+    /// `source` is the analysed frame as a bitmap: when present, every recorded hit
+    /// carries an evidence crop of the vehicle (redacted per `EvidenceCrop` policy).
     @discardableResult
     private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier,
                                  geohash6: String? = nil, mayResolveIdentity: Bool = true,
-                                 sourceID: String = "home") -> (hits: Int, agencyKeys: [String]) {
+                                 sourceID: String = "home",
+                                 source: EvidenceCrop.SourceFrame? = nil) -> (hits: Int, agencyKeys: [String]) {
         let geohash6 = geohash6 ?? homeGeohash6
         var hits = 0
         var agencyKeys: [String] = []
@@ -436,9 +650,12 @@ final class HubController: ObservableObject {
             fleetHitsToday += 1
             if let key = identity?.agency?.agencyKey { agencyKeys.append(key) }
             guard let context = modelContext else { continue }
+            let crop = source.flatMap { EvidenceCrop.make(source: $0, vehicle: vehicle, others: frame.vehicles) }
             let dto = SightingSubmissionDTO(
                 capturedAt: frame.timestamp,
                 geohash6: geohash6,
+                cropHashSHA256: crop?.sha256Hex,
+                cropJPEGBase64: crop?.base64,
                 deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
                 fleetConfidence: confidence,
                 plate: vehicle.plates.first?.best.map(PlateDTO.init),
@@ -467,7 +684,7 @@ final class HubController: ObservableObject {
                                              forceReview: !tier.identityMayBeConfirmed)
     }
 
-    private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
+    nonisolated private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
         connection.send(content: HTTPResponses.text(status: status, body), completion: .contentProcessed { _ in
             connection.cancel()
         })
@@ -485,6 +702,30 @@ final class HubController: ObservableObject {
         source.setCancelHandler { close(fd) }
         source.resume()
         watchDescriptor = source
+    }
+
+    /// One frame from a live camera or a video file, shown in the console. Same rules as every other source
+    /// (jurisdiction gate, redaction gate, de-dup, outbox); the frame stays in memory. Overlay labels never include
+    /// plate text — only the vehicle class and the fleet score.
+    func analyseLive(_ buffer: CVPixelBuffer, sourceID: String) async -> LiveFrameResult? {
+        guard let frame = try? await pipeline.analyze(
+            .init(pixelBuffer: buffer),
+            context: frameContext(contextBox, for: buffer, readPlates: platesAllowed)) else { return nil }
+        framesAnalyzed += 1
+        let tier = AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
+        let recorded = recordFleetHits(in: frame, tier: tier, sourceID: sourceID,
+                                       source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
+        return liveResult(frame, hits: recorded.hits)
+    }
+
+    private func liveResult(_ frame: DetectionFrame, hits: Int) -> LiveFrameResult {
+        let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
+            let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
+            return .init(id: vehicle.id, rect: vehicle.boundingBox,
+                         label: "\(vehicle.vehicleClass.rawValue) \(Int(confidence * 100))%",
+                         isFleet: gate.verdict(fleetConfidence: confidence) == .persistAndSync)
+        }
+        return LiveFrameResult(boxes: boxes, hits: hits)
     }
 
     private func processNewFiles() {
@@ -505,13 +746,13 @@ final class HubController: ObservableObject {
                 let frame = try? await pipeline.analyze(
                     .init(pixelBuffer: buffer),
                     context: frameContext(contextBox, for: buffer, readPlates: platesAllowed))
-                filesProcessed += 1
-                framesAnalyzed = filesProcessed
                 guard let frame else {
                     try? fm.removeItem(at: url) // undecodable input, discard
                     continue
                 }
-                recordFleetHits(in: frame, tier: AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))))
+                framesAnalyzed += 1
+                recordFleetHits(in: frame, tier: AnalysisTier.tier(forLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))),
+                                source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
                 // Rolling source media: hub keeps only fleet-hit crops,
                 // never the raw camera flow (LEGAL-ETHICS).
                 try? fm.removeItem(at: url)
@@ -520,7 +761,12 @@ final class HubController: ObservableObject {
     }
 
     private var inFlight = Set<String>()
-    private var filesProcessed = 0
+}
+
+struct LiveFrameResult: Sendable {
+    struct Box: Sendable, Identifiable { let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool }
+    var boxes: [Box]
+    var hits: Int
 }
 
 /// The analysis context for one frame: the shared models plus the thorough text path only where the frame has
@@ -575,7 +821,7 @@ final class RTSPStreamHandler: @unchecked Sendable {
         self.homeGeohash6 = homeGeohash6
         self.modelContext = modelContext
         
-        var status = RTSPStreamStatus(url: url)
+        let status = RTSPStreamStatus(url: url)
         self.statusUpdate?(status)
     }
     
@@ -703,16 +949,19 @@ final class RTSPStreamHandler: @unchecked Sendable {
                         timestamp: timestamp,
                         sequenceNumber: UInt64(frameCount))
                     
-                    Task { @Sendable [weak self] in
+                        Task { @Sendable [weak self] in
                         guard let self else { return }
                         do {
                             let frame = try await pipeline.analyze(
                                 FramePacketLike(pixelBuffer: packet.pixelBuffer),
                                 context: frameContext(contextBox, for: packet.pixelBuffer,
                                                       readPlates: HubController.platesAllowed(forGeohash6: homeGeohash6)))
-                            
+
+                            // The buffer is owned by this closure; wrap it here so a recorded
+                            // hit can crop its evidence image without another cross-actor hop.
+                            let source = EvidenceCrop.SourceFrame(pixelBuffer: packet.pixelBuffer)
                             await MainActor.run {
-                                self.handleFrame(frame, timestamp: timestamp)
+                                self.handleFrame(frame, timestamp: timestamp, source: source)
                             }
                         } catch {
                             print("RTSP analysis error: \(error)")
@@ -744,7 +993,7 @@ final class RTSPStreamHandler: @unchecked Sendable {
         isRunning = false
     }
     
-    private func handleFrame(_ frame: DetectionFrame, timestamp: Date) {
+    private func handleFrame(_ frame: DetectionFrame, timestamp: Date, source: EvidenceCrop.SourceFrame? = nil) {
         guard !frame.vehicles.isEmpty else { return }
         
         var fleetHits = 0
@@ -753,9 +1002,12 @@ final class RTSPStreamHandler: @unchecked Sendable {
             if gate.verdict(fleetConfidence: confidence) == .persistAndSync {
                 fleetHits += 1
                 if let context = modelContext {
+                    let crop = source.flatMap { EvidenceCrop.make(source: $0, vehicle: vehicle, others: frame.vehicles) }
                     let dto = SightingSubmissionDTO(
                         capturedAt: timestamp,
                         geohash6: homeGeohash6,
+                        cropHashSHA256: crop?.sha256Hex,
+                        cropJPEGBase64: crop?.base64,
                         deviceIDHash: (try? DeviceIdentity.loadOrCreate().publicKeyHash) ?? "unknown",
                         fleetConfidence: confidence,
                         plate: vehicle.plates.first?.best.map(PlateDTO.init),
@@ -787,3 +1039,10 @@ final class RTSPStreamHandler: @unchecked Sendable {
 
 import AppKit
 import Darwin
+
+/// Only the selected web camera's latest frame is retained, in memory, while Live is visible.
+struct WebFeedFrame {
+    let image: CGImage
+    let result: LiveFrameResult
+    let updatedAt: Date
+}
