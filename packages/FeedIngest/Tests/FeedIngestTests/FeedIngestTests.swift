@@ -30,6 +30,24 @@ final class FeedIngestTests: XCTestCase {
         XCTAssertEqual(source().kind, .snapshotJPEG)
     }
 
+    /// The hand-written Codable must round-trip newer optional fields — a
+    /// field missing from `CodingKeys` is silently dropped on both encode and
+    /// decode, which once erased every source's recorded state on the first
+    /// catalogue rewrite.
+    func testStateSurvivesJSONRoundTrip() throws {
+        var s = source()
+        s.state = "WA"
+        let encoded = try FeedCatalogue(schemaVersion: 1, sources: [s]).encoded()
+        let decoded = try FeedCatalogue.decode(encoded)
+        XCTAssertEqual(decoded.sources.first?.state, "WA")
+
+        // Legacy entries without the key decode to nil and stay valid.
+        var legacy = s
+        legacy.state = nil
+        let legacyData = try FeedCatalogue(schemaVersion: 1, sources: [legacy]).encoded()
+        XCTAssertEqual(try FeedCatalogue.decode(legacyData).sources.first?.state, nil)
+    }
+
     func testScheduleHonorsRefreshInterval() {
         let t0 = Date(timeIntervalSince1970: 1_000)
         var s = FeedSchedule(refreshInterval: 5, now: t0)

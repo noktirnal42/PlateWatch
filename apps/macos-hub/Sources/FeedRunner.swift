@@ -58,6 +58,7 @@ final class FeedRunner: ObservableObject {
     enum SourceState: Equatable {
         case checking, polling, blockedByRobots, blockedByUser, suspended
         case policyUnavailable(String)
+        case videoUnavailable(String)
     }
     /// Per-camera status. Deliberately **not** `@Published`: thousands of cameras change state in bursts (start-up, a host's
     /// robots.txt answering), and a publish per camera re-rendered the whole table thousands of times and froze the UI.
@@ -84,8 +85,9 @@ final class FeedRunner: ObservableObject {
         if blockedIDs.contains(source.id) { return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked) }
         guard source.mayBeAnalysed else { return .init(text: "Awaiting terms", icon: "hourglass", color: .orange, kind: .awaiting) }
         switch sourceStates[source.id] {
-        case .checking: return .init(text: "Checking robots.txt…", icon: "clock", color: .secondary, kind: .checking)
+        case .checking: return .init(text: source.kind == .hls && hlsSources[source.id] != nil ? "Connecting video…" : "Checking robots.txt…", icon: "clock", color: .secondary, kind: .checking)
         case .polling: return .init(text: "Polling", icon: "checkmark.circle.fill", color: .green, kind: .polling)
+        case .videoUnavailable: return .init(text: "Video unavailable; reconnecting", icon: "video.badge.ellipsis", color: .orange, kind: .unavailable)
         case .policyUnavailable: return .init(text: "Policy temporarily unavailable", icon: "arrow.clockwise", color: .orange, kind: .unavailable)
         case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
@@ -254,8 +256,18 @@ final class FeedRunner: ObservableObject {
             return
         }
         let id = source.id
-        sourceStates[id] = .polling
+        sourceStates[id] = .checking
         let decoder = HLSFrameSource(source: source)
+        decoder.onStateChange = { [weak self] state in
+            guard let self, self.generation == run, !self.blockedIDs.contains(id), self.hlsSources[id] != nil else { return }
+            switch state {
+            case .connecting: self.sourceStates[id] = .checking
+            case .streaming: self.sourceStates[id] = .polling
+            case .retrying(let reason): self.sourceStates[id] = .videoUnavailable(reason)
+            case .stopped: break
+            }
+            self.updateStatus()
+        }
         hlsSources[id] = decoder
         decoder.start(sink: videoSink)
         updateStatus()

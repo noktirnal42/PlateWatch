@@ -28,6 +28,7 @@ struct ConsoleView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var selection: Pane? = .dashboard
     @State private var feedsVisited = false
+    @AppStorage("hubAppearance") private var appearance = "system"
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
 
@@ -64,7 +65,17 @@ struct ConsoleView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .onChange(of: selection) { _, pane in if pane == .feeds { feedsVisited = true } }
+        .onChange(of: selection) { _, pane in
+            if pane == .feeds { feedsVisited = true }
+            hub.agentBridge?.currentPane = String(describing: pane ?? .dashboard)
+        }
+        .onAppear { hub.agentBridge?.currentPane = String(describing: selection ?? .dashboard) }
+        .onDisappear { hub.agentBridge?.currentPane = "closed" }
+        .onReceive(NotificationCenter.default.publisher(for: HubAgentBridge.navigation)) { note in
+            if let key = note.object as? String {
+                selection = Pane.allCases.first { String(describing: $0) == key } ?? selection
+            }
+        }
         .task { moderator = await Task.detached { ModeratorAccess.isEnrolled }.value }
         .navigationTitle(selection?.rawValue ?? "PlateWatch Hub")
         .toolbar {
@@ -73,19 +84,23 @@ struct ConsoleView: View {
                     .help("Feed status, favorites, blocks and Live analysis (⌘?)")
             }
         }
+        .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
         .frame(minWidth: 1000, minHeight: 600)
     }
 }
 
 private struct Stat: View {
     let title: String, value: String
+    var icon = "chart.bar"
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: icon).font(.title3).foregroundStyle(.tint)
             Text(value).font(.system(.title, design: .rounded).monospacedDigit()).bold()
             Text(title).font(.caption).foregroundStyle(.secondary)
         }
-        .padding(12).frame(minWidth: 140, alignment: .leading)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -95,23 +110,31 @@ struct DashboardPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Fleet activity, on this Mac").font(.largeTitle.bold())
+                    Text("Your fleet observatory").font(.largeTitle.bold())
                     Text("On-device analysis · fleet-only evidence · counts for this session")
                         .foregroundStyle(.secondary)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
-                    Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)")
-                    Stat(title: "Public feed frames", value: "\(hub.feedFramesAnalyzed)")
-                    Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)")
-                    Stat(title: "Frames skipped (busy)", value: "\(hub.framesDropped)")
-                    Stat(title: "Outbox pending", value: "\(hub.pendingCount)")
+                    Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)", icon: "viewfinder")
+                    Stat(title: "Public feed frames", value: "\(hub.feedFramesAnalyzed)", icon: "antenna.radiowaves.left.and.right")
+                    Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)", icon: "car.side")
+                    Stat(title: "Skipped while busy", value: "\(hub.framesDropped)", icon: "pause.circle")
+                    Stat(title: "Outbox pending", value: "\(hub.pendingCount)", icon: "tray.and.arrow.up")
                 }
+                HStack(spacing: 12) {
+                    dashboardAction("Browse cameras", icon: "antenna.radiowaves.left.and.right", pane: "feeds")
+                    dashboardAction("Review evidence", icon: "tray.full", pane: "review")
+                    dashboardAction("Records & FOIA", icon: "doc.text.magnifyingglass", pane: "records")
+                }.buttonStyle(.bordered)
                 GroupBox("Sources") {
                     VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Analysis", value: hub.modelStatus)
                         LabeledContent("Snapshot server", value: hub.snapshotServerStatus)
                         LabeledContent("RTSP streams", value: hub.rtspServerStatus)
-                        LabeledContent("Ingest folder", value: hub.ingestFolder.path)
+                        LabeledContent("Ingest folder") {
+                            Text(hub.ingestFolder.lastPathComponent).help(hub.ingestFolder.path)
+                                .textSelection(.enabled)
+                        }
                         FeedStatusRow(runner: hub.feedRunner)
                     }.padding(4)
                 }
@@ -121,8 +144,14 @@ struct DashboardPane: View {
                          : "Off: no home location set (or none we can place in the US). Set the home location in Settings.")
                         .padding(4)
                 }
-            }.padding()
+            }.padding(24)
         }
+    }
+
+    private func dashboardAction(_ title: String, icon: String, pane: String) -> some View {
+        Button(title, systemImage: icon) {
+            NotificationCenter.default.post(name: HubAgentBridge.navigation, object: pane)
+        }.help("Open \(title.lowercased())")
     }
 }
 
@@ -194,13 +223,30 @@ struct SettingsPane: View {
     @Binding var moderator: Bool
     @AppStorage("hubGeohash6") private var geohash = ""
     @AppStorage("hubSnapshotPort") private var port = 8088
+    @AppStorage("hubAppearance") private var appearance = "system"
     @State private var server = ""
     @State private var token = ""
     @State private var note = ""
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Color scheme", selection: $appearance) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }.pickerStyle(.segmented)
+                Text("Applies to the Hub console. Your Mac’s appearance stays unchanged.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HomeLocationSection(hub: hub, geohash: $geohash)
+            Section("Source API keys") {
+                Text("Catalogue providers whose supported access route requires a developer key. Keys are stored in this Mac's Keychain and are sent only to that provider's catalogue API — never to camera image hosts. After saving a key, import the catalogue from the Public feeds pane.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(SourceCredentials.providers) { provider in
+                    SourceKeyRow(provider: provider)
+                }
+            }
             Section("Hub") {
                 TextField("Preferred snapshot port", value: $port, format: .number.grouping(.never))
                     .onSubmit { Task { await hub.restartSnapshotServer(port: UInt16(clamping: port)) } }

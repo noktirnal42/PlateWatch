@@ -125,6 +125,7 @@ struct LivePane: View {
     @StateObject private var live: LiveController
     @State private var devices: [AVCaptureDevice] = []
     @State private var selected: String = ""
+    @AppStorage("hubShowDetectionOverlays") private var showOverlays = true
 
     init(hub: HubController) { self.hub = hub; _live = StateObject(wrappedValue: LiveController(hub: hub)) }
 
@@ -134,7 +135,7 @@ struct LivePane: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
-                        Text("Snapshot feed · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
                         if let frame = hub.liveFeedFrame {
                             Text("Analysed \(frame.updatedAt, format: .dateTime.hour().minute().second()) · \(frame.result.boxes.count) vehicle(s)")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -158,6 +159,8 @@ struct LivePane: View {
                 }
                 Button("Stop") { live.stop(); hub.stopLiveFeed() }.disabled(!live.running && hub.liveFeed == nil)
                 Spacer()
+                Toggle("Overlays", isOn: $showOverlays).toggleStyle(.checkbox)
+                    .help("Show vehicle boxes and fleet scores. Small boxes show their label on hover.")
                 if hub.liveFeed == nil {
                     Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
                 }
@@ -169,14 +172,20 @@ struct LivePane: View {
                         let size = fitted(CGSize(width: image.width, height: image.height), in: geo.size)
                         ZStack(alignment: .topLeading) {
                             Image(decorative: image, scale: 1).resizable().frame(width: size.width, height: size.height)
-                            ForEach(hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? [])) { box in
+                            ForEach(showOverlays ? (hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? [])) : []) { box in
                                 Rectangle().stroke(box.isFleet ? Color.green : Color.yellow, lineWidth: 2)
                                     .frame(width: box.rect.width * size.width, height: box.rect.height * size.height)
                                     .overlay(alignment: .topLeading) {
-                                        Text(box.label).font(.caption2.bold()).padding(2)
-                                            .background(box.isFleet ? Color.green : Color.yellow).foregroundStyle(.black)
-                                            .offset(y: -16)
+                                        if box.rect.width * size.width >= 72 {
+                                            Text(box.label).font(.system(size: 11, weight: .semibold, design: .rounded))
+                                                .fixedSize().padding(.horizontal, 6).padding(.vertical, 3)
+                                                .background(box.isFleet ? Color.green : Color.yellow, in: RoundedRectangle(cornerRadius: 4))
+                                                .foregroundStyle(.black)
+                                                .offset(y: box.rect.y * size.height > 24 ? -24 : 2)
+                                        }
                                     }
+                                    .help(box.label)
+                                    .accessibilityLabel(box.label)
                                     .offset(x: box.rect.x * size.width, y: box.rect.y * size.height)
                             }
                         }
@@ -187,6 +196,7 @@ struct LivePane: View {
                     Text(hub.liveFeed == nil ? "Start a camera, open a video, or choose Open in Live in Public feeds" : hub.liveFeedStatus).foregroundStyle(.secondary)
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             Text("In memory only. Overlays show vehicle class and fleet score, never plate text. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
                 .font(.caption).foregroundStyle(.secondary)
         }

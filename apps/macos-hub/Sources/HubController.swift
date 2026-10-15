@@ -45,6 +45,7 @@ final class HubController: ObservableObject {
     private let gate = RedactionGate(config: .standard)
     private var watchDescriptor: DispatchSourceFileSystemObject?
 
+    var agentBridge: HubAgentBridge?
     private var modelContext: ModelContext?
     /// Hub operator-set location bucket (these are fixed installations —
     /// the geohash-6 of the camera's own location).
@@ -90,7 +91,9 @@ final class HubController: ObservableObject {
            CommandLine.arguments.indices.contains(index + 1) {
             let keys = Set(CommandLine.arguments[index + 1].split(separator: ",").map(String.init))
             Task {
-                for choice in OpenCatalogue.allCases where keys.contains(choice.key) { await importCatalogue(choice) }
+                for choice in OpenCatalogue.allCases where keys.contains(choice.key) {
+                    await importCatalogue(choice)
+                }
             }
         }
         #endif
@@ -130,6 +133,7 @@ final class HubController: ObservableObject {
     }
 
     enum OpenCatalogue: String, CaseIterable, Identifiable {
+        case arizona = "Arizona — AZ511 (needs API key)"
         case caltrans = "California — Caltrans (about 3,400 cameras)"
         case wsdot = "Washington — WSDOT (about 1,700; low-volume use only)"
         case iowa = "Iowa DOT (about 1,300)"
@@ -139,6 +143,7 @@ final class HubController: ObservableObject {
         var id: String { rawValue }
         var key: String {
             switch self {
+            case .arizona: "arizona"
             case .caltrans: "caltrans"
             case .wsdot: "wsdot"
             case .iowa: "iowa"
@@ -162,6 +167,9 @@ final class HubController: ObservableObject {
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             return data
         }
+        func fetchSigned(_ request: URLRequest) async throws -> (Data, URLResponse) {
+            try await URLSession(configuration: .ephemeral).data(for: request)
+        }
         func arcGIS(_ base: String, _ fields: Importers.ArcGISFields, _ op: Importers.Operator) async throws -> SocrataImportResult {
             var all: [PublicFeedSource] = [], skipped: [SkipReason] = []
             var offset = 0
@@ -178,6 +186,19 @@ final class HubController: ObservableObject {
         do {
             let result: SocrataImportResult
             switch choice {
+            case .arizona:
+                guard let key = SourceCredentials.key(for: "az511"), !key.isEmpty else {
+                    importStatus = "AZ511 needs an API key. Add one in Settings › Source API keys — the signup link is next to the key field."
+                    return
+                }
+                var request = URLRequest(url: AZ511Cameras.endpoint
+                    .appending(queryItems: [URLQueryItem(name: "key", value: key),
+                                            URLQueryItem(name: "format", value: "json")]))
+                request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 60
+                let (data, response) = try await fetchSigned(request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                result = try AZ511Cameras.sources(fromJSON: data, key: key)
             case .caltrans:
                 let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
                                             attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300, state: "CA")
@@ -341,7 +362,7 @@ final class HubController: ObservableObject {
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
         guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         // Permissions can be revoked while Vision is processing a frame.
@@ -369,7 +390,7 @@ final class HubController: ObservableObject {
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
         guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates)) else { return }
+                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         guard !favorites.isBlocked(source.id),
@@ -771,9 +792,10 @@ struct LiveFrameResult: Sendable {
 
 /// The analysis context for one frame: the shared models plus the thorough text path only where the frame has
 /// enough pixels to read lettering (docs/FEED-SOURCES.md §1 — recall collapses below ~480 px).
-func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer, readPlates: Bool) -> AnalysisContext {
+func frameContext(_ box: AnalysisContextBox, for buffer: CVPixelBuffer, readPlates: Bool, publicFeed: Bool = false) -> AnalysisContext {
     var context = box.current
     context.readPlates = readPlates
+    context.suppressCameraCaptions = publicFeed
     let longSide = max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer))
     context.thorough = AnalysisTier.tier(forLongSide: longSide).thorough
     return context

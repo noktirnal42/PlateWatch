@@ -58,3 +58,7 @@ eval/feeds
 
 # Packaged release artifacts (staged locally, published to GitHub Releases)
 models/release/
+
+# Local Python environments and caches
+**/__pycache__/
+**/.venv/

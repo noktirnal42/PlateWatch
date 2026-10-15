@@ -12,7 +12,8 @@ struct RecordsCourtListsView: View {
     @State private var pacerLogin = ""
     @State private var pacerPassword = ""
     @State private var knownID = RecordCatalog.all[0].id
-    @State private var showAccepted = false
+    private enum ResultsTab: String { case search, saved, accepted }
+    @State private var resultsTab = ResultsTab.search
     @State private var agencyDrafts: [UUID: String] = [:]
     @State private var pacerOTP = ""
     @State private var pacerClientCode = RecordsCredentials.read(.pacerClientCode) ?? ""
@@ -49,7 +50,7 @@ struct RecordsCourtListsView: View {
                             Text(k.note).font(.caption).foregroundStyle(.secondary)
                             HStack {
                                 Button("Import", systemImage: "arrow.down.circle") {
-                                    busy = true; notice = ""
+                                    busy = true; notice = ""; resultsTab = .saved
                                     Task { let n = await workspace.importKnownList(k); notice = "\(n) new record(s) added as pending."; busy = false }
                                 }.disabled(busy)
                                 Link("Dataset page", destination: k.datasetPage).font(.caption)
@@ -122,11 +123,20 @@ struct RecordsCourtListsView: View {
 
     private var candidates: some View {
         VStack(alignment: .leading) {
-            Picker("", selection: $showAccepted) {
-                Text("\(workspace.ledger.pending.count) pending").tag(false)
-                Text("\(workspace.ledger.incidents.count) accepted").tag(true)
-            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 300)
-            if showAccepted { accepted } else { pendingList }
+            Picker("Results", selection: $resultsTab) {
+                Text("Current search (\(workspace.currentCourtResults.count))").tag(ResultsTab.search)
+                Text("Saved pending (\(workspace.ledger.pending.count))").tag(ResultsTab.saved)
+                Text("Accepted (\(workspace.ledger.incidents.count))").tag(ResultsTab.accepted)
+            }.pickerStyle(.segmented).labelsHidden()
+            if resultsTab == .search {
+                if workspace.courtSearchRunning {
+                    ProgressView("Searching \(workspace.currentCourtSource)…")
+                } else if !workspace.currentCourtQuery.isEmpty {
+                    Text("\(workspace.currentCourtSource) · \(workspace.currentCourtQuery)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if resultsTab == .accepted { accepted } else { pendingList }
             Text("Accepting stores the record with its citation and hash. Attaching a record to a named official is a separate step in the People tab; a name never links on its own.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -177,7 +187,14 @@ struct RecordsCourtListsView: View {
     private var pendingList: some View {
         VStack(alignment: .leading) {
             List {
-                ForEach(workspace.ledger.pending) { c in
+                let rows = resultsTab == .search ? workspace.currentCourtResults : workspace.ledger.pending
+                if rows.isEmpty {
+                    Text(resultsTab == .search
+                         ? (workspace.currentCourtQuery.isEmpty ? "Search courts to see results here." : "No pending results for this search.")
+                         : "No saved pending records.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(rows) { c in
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(c.kind.rawValue) · \(c.reference)").fontWeight(.medium)
                         Text([c.subjectName, c.status.isEmpty ? nil : c.status, "released by \(c.releasedBy)"].compactMap { $0 }.joined(separator: " · "))
@@ -200,13 +217,26 @@ struct RecordsCourtListsView: View {
     }
 
     private func runCourtListener() {
-        busy = true; notice = ""
-        Task { let n = await workspace.searchCourtListener(query: query); notice = "\(n) new docket(s) added as pending."; busy = false }
+        let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !busy, !search.isEmpty else { return }
+        busy = true; notice = ""; resultsTab = .search
+        Task {
+            _ = await workspace.searchCourtListener(query: search)
+            notice = "\(workspace.currentCourtResults.count) pending result(s) for this search."
+            busy = false
+        }
     }
 
     private func runPacer() {
-        busy = true; notice = ""
-        Task { let n = await workspace.searchPacer(partyName: query, otpCode: pacerOTP); notice = "\(n) new docket(s) added as pending."; busy = false }
+        let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !busy, !search.isEmpty else { return }
+        busy = true; notice = ""; resultsTab = .search
+        let otp = pacerOTP
+        Task {
+            _ = await workspace.searchPacer(partyName: search, otpCode: otp)
+            notice = "\(workspace.currentCourtResults.count) pending result(s) for this search."
+            busy = false
+        }
     }
 
     private func importCSV() {
@@ -246,6 +276,7 @@ struct RecordsCourtListsView: View {
             source: .init(kind: k, title: url.deletingPathExtension().lastPathComponent, releasedBy: publisher.stringValue, url: citationURL),
             columns: .init(name: nameCol.stringValue, agency: agencyCol.stringValue.isEmpty ? nil : agencyCol.stringValue, reference: refCol.stringValue.isEmpty ? nil : refCol.stringValue,
                            status: statusCol.stringValue.isEmpty ? nil : statusCol.stringValue))
+        resultsTab = .saved
         notice = "\(n) new row(s) added as pending."
     }
 }

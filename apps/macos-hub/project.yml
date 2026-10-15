@@ -51,12 +51,14 @@ targets:
       - Sources/Console/FeedPreferences.swift
       - Sources/Console/ModeratorAccess.swift
       - Sources/Console/ModerationStore.swift
+      - Sources/Console/RecordsWorkspace.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - package: FeedIngest
       - package: PlateKit
+      - package: AccountabilityKit
 
 packages:
   PlateKit: { path: ../../packages/PlateKit }

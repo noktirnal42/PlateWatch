@@ -280,6 +280,7 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         var hypotheses: [PlateHypothesis] = []
         var officialPlates: [PlateObservation] = []
         for hit in fastHits {
+            if context.suppressCameraCaptions && CameraCaptionFilter.isInCaptionBand(NormalizedBox(visionRect: hit.box)) { continue }
             let text = hit.texts.first ?? ""
             let aspect = Double(hit.box.width / max(hit.box.height, 0.0001))
             let normalized = Plate.normalize(text)
@@ -340,6 +341,9 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         where context.readPlates && !plates.contains(where: { Plate.normalize($0.best?.text ?? "") == official.best?.text }) {
             plates.append(official)
         }
+        if context.suppressCameraCaptions {
+            plates.removeAll { CameraCaptionFilter.isInCaptionBand($0.boundingBox) }
+        }
         plates.sort { ($0.best?.confidence ?? 0) > ($1.best?.confidence ?? 0) }
 
         // Baseline mode carries no vehicle detector: plate regions define
@@ -367,7 +371,7 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         }
 
         Self.applyCue(VehicleCueClassifier.classify(pixelBuffer), sceneText: sceneText, to: &vehicles)
-        if context.thorough { await Self.nameFleetVehicles(&vehicles, pixelBuffer: pixelBuffer) }
+        if context.thorough { await Self.nameFleetVehicles(&vehicles, pixelBuffer: pixelBuffer, suppressCameraCaptions: context.suppressCameraCaptions) }
 
         return DetectionFrame(timestamp: context.timestamp,
                               imageSize: CGSize(width: width, height: height),
@@ -388,7 +392,7 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
     /// classifier cue) but whose agency place could not be read gets one more look with
     /// contrast-enhanced OCR. The result is stored apart (`enhancedText`) and used only to
     /// *name* the agency — so it can never turn a non-fleet vehicle into a fleet one.
-    static func nameFleetVehicles(_ vehicles: inout [VehicleObservation], pixelBuffer: CVPixelBuffer) async {
+    static func nameFleetVehicles(_ vehicles: inout [VehicleObservation], pixelBuffer: CVPixelBuffer, suppressCameraCaptions: Bool = false) async {
         let resolver = IdentityResolver()
         let candidates = vehicles.indices.filter { i in
             let v = vehicles[i]
@@ -401,6 +405,7 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         let hits = await VisionTextRunner.recognizeEnhanced(in: pixelBuffer, minimumTextHeight: thoroughMinimumTextHeight)
         var seen = Set<String>()
         let lines: [SceneTextObservation] = hits.compactMap { hit in
+            if suppressCameraCaptions && CameraCaptionFilter.isInCaptionBand(NormalizedBox(visionRect: hit.box)) { return nil }
             let text = (hit.texts.first ?? "").trimmingCharacters(in: .whitespaces)
             guard text.count >= 3, seen.insert(text.uppercased()).inserted else { return nil }
             return SceneTextObservation(text: text, boundingBox: NormalizedBox(visionRect: hit.box),
