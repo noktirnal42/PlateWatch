@@ -118,8 +118,26 @@ program lawful, accurate, and worth defending:
 
 ## Status & prerequisites
 
-⬜ Not started. Depends on: CloudKit live (NEXT-STEPS §1), moderator publish
-tool (§1b), and an ethics review pass of this document by the owner before
-any person-data code lands. The `AccountabilityKit` package skeleton
-(types + citation enforcement + tests) may land first — it contains no
-collection logic.
+Citation-gated profile, incident and person-link types exist in `AccountabilityKit`;
+automated person-record collection and cross-reference publication are not implemented.
+The Hub exposes the existing **fleet-only** FOIA draft generator and a labelled
+programme overview. It does not collect officer photos, run face recognition,
+or identify people in live footage.
+
+Next implementation sequence for the records workstream:
+
+1. Review the programme with the owner before person-data ingestion lands.
+2. Add isolated adapters for official agency rosters/employee lists, official award
+   pages and permitted agency social posts, released Brady/Giglio/POST lists,
+   court filings/outcomes and FOIA releases. Record publisher, original URL,
+   retrieval date and evidence excerpt/hash for every extracted claim.
+3. Suggest candidate links using name, agency, role, published identifiers and
+   overlapping dates. A name alone never confirms identity; ambiguous matches
+   remain separate pending moderator review.
+4. Preserve the released wording, docket and outcome/status. Keep allegations,
+   findings and dispositions distinct, with corrections and appeal support.
+5. Link official photo sources for human verification subject to their licence;
+   do not derive face embeddings or match camera occupants. Keep person records
+   separate from sighting locations, timelines and presence alerts.
+6. Validate citation enforcement, false-match handling, moderation and the
+   location firewall before enabling publication or claiming automation works.

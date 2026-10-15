@@ -4,6 +4,14 @@ PlateWatch can draft a public-records request about an agency's vehicle fleet
 and its ALPR policies (`FleetImporters/FOIARequestGenerator`). It only produces
 text. It never sends anything, and it never fills in the requester's identity.
 
+## Hub desktop interface
+
+Open **Records & FOIA → Fleet FOIA draft**. Enter the agency, state and optional
+validated unit identifiers, choose the requested record categories, then preview,
+copy or save the text. Requester placeholders remain for manual completion.
+The Public-records programme tab describes future cited roster/court/Brady
+cross-referencing; it does not run collection or identify people in camera frames.
+
 ## What the draft asks for
 
 - Fleet inventory: unit or asset number, make, model, year, category, and plate

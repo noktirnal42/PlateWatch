@@ -6,7 +6,7 @@ import SwiftUI
 /// (for enrolled moderators only) moderation.
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models"
+        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
         case moderation = "Moderation", settings = "Settings"
         var id: String { rawValue }
         var icon: String {
@@ -17,6 +17,7 @@ struct ConsoleView: View {
             case .feeds: return "antenna.radiowaves.left.and.right"
             case .cameras: return "video"
             case .models: return "cpu"
+            case .records: return "doc.text.magnifyingglass"
             case .moderation: return "checkmark.shield"
             case .settings: return "gearshape"
             }
@@ -38,16 +39,25 @@ struct ConsoleView: View {
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 200)
         } detail: {
-            Group {
+            ZStack {
+                // Keep the browser mounted so native table/grid scroll and every local control survive navigation.
+                // Hidden browser media tasks are explicitly paused by isActive.
+                FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live })
+                    .opacity(selection == .feeds ? 1 : 0)
+                    .allowsHitTesting(selection == .feeds)
+                    .accessibilityHidden(selection != .feeds)
+                Group {
                 switch selection ?? .dashboard {
                 case .dashboard: DashboardPane(hub: hub)
                 case .live: LivePane(hub: hub)
                 case .review: ReviewPane()
-                case .feeds: FeedsPane(hub: hub, onOpenLive: { selection = .live })
+                case .feeds: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
+                case .records: RecordsPane()
                 case .moderation: ModerationPane(onSignOut: { moderator = false; selection = .dashboard })
                 case .settings: SettingsPane(hub: hub, moderator: $moderator)
+                }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

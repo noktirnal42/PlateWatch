@@ -6,6 +6,7 @@ struct FeedsPane: View {
     enum SortKey: String, CaseIterable, Identifiable { case name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
 
     @ObservedObject var hub: HubController
+    let isActive: Bool
     var onOpenLive: () -> Void
     @ObservedObject private var favorites: FeedFavorites
     @ObservedObject private var runner: FeedRunner
@@ -21,8 +22,9 @@ struct FeedsPane: View {
     @State private var reviewing: FeedHostSummary?
     @State private var selected: Set<UUID> = []
 
-    init(hub: HubController, onOpenLive: @escaping () -> Void) {
+    init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void) {
         self.hub = hub
+        self.isActive = isActive
         self.onOpenLive = onOpenLive
         _favorites = ObservedObject(wrappedValue: hub.favorites)
         _runner = ObservedObject(wrappedValue: hub.feedRunner)
@@ -197,7 +199,7 @@ struct FeedsPane: View {
                 }
             }
             .frame(minWidth: 460)
-            CameraPreviewPanel(hub: hub, favorites: favorites, onOpenLive: onOpenLive,
+            CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
                                source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } })
                 .frame(minWidth: 300, idealWidth: 380)
         }
@@ -215,7 +217,7 @@ struct FeedsPane: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
-                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, onOpenLive: onOpenLive) }
+                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, isActive: isActive, onOpenLive: onOpenLive) }
                     }.padding(.bottom, 8)
                 }
             }
@@ -231,6 +233,7 @@ struct FavoriteTile: View {
     @ObservedObject var hub: HubController
     @ObservedObject var favorites: FeedFavorites
     let source: PublicFeedSource
+    let isActive: Bool
     var onOpenLive: () -> Void
     @State private var image: NSImage?
     @State private var message = ""
@@ -257,7 +260,8 @@ struct FavoriteTile: View {
                 .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
             Text(source.url.host ?? "").font(.caption2).foregroundStyle(.secondary).monospaced()
         }
-        .task(id: source.id) {
+        .task(id: "\(source.id)-\(isActive)") {
+            guard isActive else { image = nil; return }
             while !Task.isCancelled {
                 policyRetryDelay = nil
                 do {
@@ -279,6 +283,7 @@ struct FavoriteTile: View {
 struct CameraPreviewPanel: View {
     @ObservedObject var hub: HubController
     @ObservedObject var favorites: FeedFavorites
+    let isActive: Bool
     var onOpenLive: () -> Void
     let source: PublicFeedSource?
     @State private var image: NSImage?
@@ -329,9 +334,9 @@ struct CameraPreviewPanel: View {
             }
         }
         .padding()
-        .task(id: source.map { "\($0.id)-\(favorites.isBlocked($0.id))" }) {
+        .task(id: source.map { "\($0.id)-\(favorites.isBlocked($0.id))-\(isActive)" }) {
             image = nil; fetchedAt = nil; message = ""
-            guard let source else { return }
+            guard isActive, let source else { return }
             guard !favorites.isBlocked(source.id) else { message = "Blocked on this Mac. Unblock this camera to view it again."; return }
             while !Task.isCancelled {
                 await load(source)

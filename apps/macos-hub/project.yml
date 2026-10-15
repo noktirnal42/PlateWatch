@@ -39,6 +39,7 @@ targets:
       - package: VehicleML
       - package: PlateSync
       - package: FeedIngest
+      - package: FleetImporters
 
   PlateWatchHubTests:
     type: bundle.unit-test
@@ -62,6 +63,7 @@ packages:
   VehicleML: { path: ../../packages/VehicleML }
   PlateSync: { path: ../../packages/PlateSync }
   FeedIngest: { path: ../../packages/FeedIngest }
+  FleetImporters: { path: ../../packages/FleetImporters }
 
 schemes:
   PlateWatchHub:
