@@ -1,22 +1,31 @@
 import Foundation
 
 /// Where plate recognition may run. Some states regulate *use of an automated licence-plate-recognition system by
-/// any person* (Maine, 29-A MRSA §2117-A; New Hampshire RSA 261:75-b limits ALPR to law enforcement). Whether OCR of
-/// plates from a third-party public camera feed is such "use" is an open question for counsel
-/// (docs/FEED-LEGAL-RESEARCH.md), so the Hub fails closed: **no plate recognition runs** (not just "results hidden")
-/// for a source in, near, or of unknown location relative to a restricted state. Fleet detection from door lettering and
-/// vehicle appearance is unaffected.
+/// any person* (Maine, 29-A MRSA §2117-A; New Hampshire RSA 261:75-b limits ALPR to law enforcement).
+///
+/// **Owner-reported counsel view (2026-10-15):** neither OCR of plates from third-party public camera feeds nor
+/// handheld use is ALPR "use" under those statutes. On that basis the default is **no restricted states**
+/// (`platesDisabledByDefault` is empty). This is a relayed position — no written opinion is in the repo — so the
+/// state lists below are kept as data and `platesConservativeStates` re-enables the old behaviour in one line
+/// (`PlateReadingGate(disabledStates:)` / `mayReadPlates(disabledStates:)`). The gate still fails closed when the
+/// location is unknown or outside the catalogued US places: counsel's view was about US statutes, so nothing
+/// supports reading plates where the jurisdiction cannot be identified. Fleet detection from door lettering and
+/// vehicle appearance is unaffected either way. See docs/PLATE-READING-JURISDICTIONS.md.
 ///
 /// Not legal advice; the lists change as statutes do — review before relying on them.
 public enum JurisdictionPolicy {
 
-    /// Statute text read (VERIFIED in the research): plate recognition disabled by default.
+    /// Statute text read (VERIFIED in the research). Reference data; not enforced by default (see above).
     public static let platesRestricted: Set<String> = ["ME", "NH"]
 
-    /// Reported by a secondary source (NCSL) and pending counsel: also disabled by default.
+    /// Reported by a secondary source (NCSL) and pending counsel. Reference data; not enforced by default.
     public static let platesPendingCounsel: Set<String> = ["AR", "ID", "KY", "CT"]
 
-    public static var platesDisabledByDefault: Set<String> { platesRestricted.union(platesPendingCounsel) }
+    /// The previous default: every state above. Pass as `disabledStates` to restore the conservative gate.
+    public static var platesConservativeStates: Set<String> { platesRestricted.union(platesPendingCounsel) }
+
+    /// States where plate recognition is disabled by default. Empty per the owner-reported counsel view.
+    public static var platesDisabledByDefault: Set<String> { [] }
 
     /// Radius around the camera in which any restricted state blocks plate reading. A place just across a state
     /// line must not slip through because the nearest census place is on the other side.

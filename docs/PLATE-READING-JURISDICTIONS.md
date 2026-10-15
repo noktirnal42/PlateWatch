@@ -3,10 +3,12 @@
 **Not legal advice.** This is how the software behaves today and why, based on `docs/research/FEED-LEGAL-RESEARCH.md`
 (statute text read where marked VERIFIED, secondary sources otherwise). The statutes change; counsel should confirm
 before anyone relies on this list. Owner position (2026-10-14): PlateWatch is not an ALPR in the usual sense, so it is not
-"ALPR use". **Update (2026-10-15):** the owner reports that counsel's view is that neither OCR of plates on third-party
-public feeds nor handheld use is ALPR "use". That is relayed, not documented: no written opinion is in the repo, so it is
-unverified here and its scope (which states, which designs) is unknown. The software therefore **still ships with the gate
-below**; relaxing it is a code change (see "Gaps to close") that should cite the written opinion.
+"ALPR use". **2026-10-15:** the owner reports that counsel's view is that neither OCR of plates on third-party public
+feeds nor handheld use is ALPR "use". That view is relayed, not documented: **no written opinion is in the repo**, and its scope
+(which states, which designs) is unknown. On the owner's instruction the default was relaxed accordingly: **no state is
+disabled by default** (`JurisdictionPolicy.platesDisabledByDefault` is empty). The previous list is kept as
+`platesConservativeStates` and can be restored in one line (see "Gaps to close"). Please file counsel's written opinion
+next to this page and cite it here.
 
 ## What "plate reading off" means
 
@@ -17,7 +19,7 @@ hidden), so nothing is read and nothing can be stored.
 ## How the Hub decides (`PlateKit.JurisdictionPolicy`)
 
 1. A camera or home location is mapped to the states that have a catalogued place within **30 km** of it.
-2. If **any** of those states is in the "off" lists below, plate reading is **off** for that source (this is why a camera
+2. If **any** of those states is in the active "off" set, plate reading is **off** for that source. The active set is **empty by default** (see top); with the conservative list restored, this is why a camera
    just across a state line from Maine or New Hampshire is also off).
 3. If the location is **unknown**, or no US place is catalogued within 30 km (including anywhere outside the US), plate
    reading is **off** — the gate fails closed.
@@ -27,7 +29,9 @@ hidden), so nothing is read and nothing can be stored.
 Set the Hub's home location in **Settings → Home location** (Use my location, latitude/longitude, or a Plus Code).
 Public feeds use each camera's own catalogued position, not the home location.
 
-## Off by default
+## Previously off by default (now reference data, not enforced)
+
+These were the default-off states until 2026-10-15. They remain in `platesRestricted` / `platesPendingCounsel` and are enforced only if `platesConservativeStates` is passed.
 
 | State | Why | Status |
 |---|---|---|
@@ -38,7 +42,7 @@ Public feeds use each camera's own catalogued position, not the home location.
 | Kentucky | Use unlawful except listed purposes (per NCSL) | Pending counsel (secondary source) |
 | Connecticut | Retention limits and restrictions on private vendors (per NCSL) | Pending counsel (secondary source) |
 
-Plus the **30 km border margin** around each of these.
+Plus the **30 km border margin** around each of these, when enforced.
 
 ## On by default, with notes (reviewed)
 
@@ -62,13 +66,18 @@ not read. **Washington** enacted a Driver Privacy Act (SB 6002, March 2026) whos
 
 ## Outside the United States
 
-Off everywhere (no US place within 30 km). Canadian, Finnish, Singaporean and other feeds can still be used for vehicle
+Still off everywhere (no US place within 30 km). Canadian, Finnish, Singaporean and other feeds can still be used for vehicle
 and fleet detection, but not plate reading.
 
 ## Gaps to close
 
-- The handheld iPhone app applies the same gate (`PlateReadingGate`, per frame, from the phone's coarse location or an imported photo's own GPS; unknown location ⇒ plates off). The Watch app does no analysis. Counsel reportedly says handheld use is not ALPR "use" (see top); the gate stays until that is in writing.
-- Counsel (reported, 2026-10-15): feed OCR and handheld use are not ALPR "use". Still to get in writing: does it hold in Maine and
-  New Hampshire (statutes read as VERIFIED above)? Does the on-device, discard-immediately design matter? Do the four "pending counsel" states apply? (`docs/research/FEED-LEGAL-RESEARCH.md`.)
-- The state lists live in `packages/PlateKit/Sources/PlateKit/Identity/JurisdictionPolicy.swift`
-  (`platesRestricted`, `platesPendingCounsel`). Change them there, update this page, and run the PlateKit tests.
+- **Counsel's written opinion** is not in the repo. The relaxation rests on the owner's report of it. File it here and cite it.
+- To restore the conservative behaviour: in `JurisdictionPolicy`, make `platesDisabledByDefault` return `platesConservativeStates`
+  (the tests in `IdentityTests` pass it explicitly, so they will keep passing), update this page, run the PlateKit tests.
+- Unknown location and non-US locations stay **off**: counsel's view as relayed concerned US statutes. Say so to counsel if
+  non-US feeds matter.
+- Statutes to watch for private-operator reach: Washington SB 6002 (March 2026), California Civ. Code 1798.90.5 (operator duties);
+  pending MI HB 5492, NY A563A (`research/STATE-ALPR-SWEEP-2026-10-15.md`).
+- The state lists live in `packages/PlateKit/Sources/PlateKit/Identity/JurisdictionPolicy.swift`.
+- The handheld iPhone app uses the same gate (`PlateReadingGate`, per frame, from the phone's coarse location or an imported photo's
+  own GPS; unknown location ⇒ plates off). The Watch app does no analysis.

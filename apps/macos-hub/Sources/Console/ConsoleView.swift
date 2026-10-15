@@ -115,7 +115,7 @@ struct DashboardPane: View {
                 GroupBox("Plate reading") {
                     Text(hub.platesAllowed
                          ? "Enabled for this Hub's location."
-                         : "Off: no home location set, or a jurisdiction that restricts plate recognition. Set the home location in Settings.")
+                         : "Off: no home location set (or none we can place in the US). Set the home location in Settings.")
                         .padding(4)
                 }
             }.padding()

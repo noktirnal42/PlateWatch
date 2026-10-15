@@ -270,8 +270,9 @@ Priority remains 1 → 2 → 3 above; these programs queue behind CloudKit
   analyses each frame with that camera's location, resolution tier and plate-jurisdiction gate, and de-duplicates repeat sightings.
   Measured: fleet recall collapses with resolution (63 → 57 → 35 → 7 % at 1080p-class → 720 → 480 → 240 px). First live frames (City of
   Austin, 1080p wide night views): 0 hits, 0 FP — vehicles too small to read.
-- **Legal (research/FEED-LEGAL-RESEARCH.md, not legal advice):** Maine/New Hampshire restrict ALPR use by any person → plate recognition is
-  off in/near them (and AR, ID, KY, CT pending counsel) and when a source's location is unknown (`JurisdictionPolicy`, `AnalysisContext.readPlates`).
+- **Legal (research/FEED-LEGAL-RESEARCH.md, not legal advice):** Maine/New Hampshire restrict ALPR use by any person → plate recognition *was*
+  off in/near them (and AR, ID, KY, CT pending counsel); since 2026-10-15 the default is relaxed per the owner-reported counsel view
+  (docs/PLATE-READING-JURISDICTIONS.md), but it stays off when a source's location is unknown (`JurisdictionPolicy`, `AnalysisContext.readPlates`).
 
 **Do next, in this order**
 1. Merge PR #11 (feed quality) and GLM's model-release PR; owner runs `gh release create models-v…` and registers the Create ML detector.

@@ -116,7 +116,7 @@ Do **not** re-create the Keychain item from the command line on each run: it res
 ## 7. Positions and decisions (owner's)
 
 - PlateWatch is "not an ALPR as we know it", so the owner's position is that it is not ALPR "use". **Counsel reportedly confirmed it (owner, 2026-10-15; nothing in writing in the repo)**, so the
-  jurisdiction gate stays on until a written opinion is filed ([`PLATE-READING-JURISDICTIONS.md`](PLATE-READING-JURISDICTIONS.md)). Plate *reading* off ⇒ fleet detection continues.
+  state "off" list is empty by default as of 2026-10-15 (unknown/non-US location still off; see [`PLATE-READING-JURISDICTIONS.md`](PLATE-READING-JURISDICTIONS.md)). Plate *reading* off ⇒ fleet detection continues.
 - CC BY-SA images were allowed for the plate-state classifier only (that classifier was abandoned: location is the primary state source).
 - Public camera feeds carry no GPS: location comes from the source's catalogued position. The Hub's *home* location is operator-set.
 - The owner publishes releases and answers system prompts; agents do not.
@@ -128,7 +128,7 @@ Do **not** re-create the Keychain item from the command line on each run: it res
 3. Hub: video-file/Continuity camera path in the **Live pane is built but only partly exercised**; LLM/MLX assistants are **not built** (must stay on-device; AGENTS.md rule 3).
 4. **Use my location** shows "permission granted but no position available" on this desktop Mac (no GPS/Wi-Fi fix). Manual lat/lon and Plus Code work.
 5. CloudKit: two-account creator-only test; moderator publish path (server-to-server key).
-6. Legal: counsel (reported) says feed OCR and handheld use are not ALPR "use" — get it in writing before relaxing the gate; the remaining 23 states + DC were desk-reviewed 2026-10-15 (`research/STATE-ALPR-SWEEP-2026-10-15.md`; no ban found; WA SB 6002 reach unconfirmed); the handheld iOS app now applies the jurisdiction gate (`PlateReadingGate`).
+6. Legal: counsel (reported) says feed OCR and handheld use are not ALPR "use" — get it in writing and file it (the gate is already relaxed on the owner's instruction); the remaining 23 states + DC were desk-reviewed 2026-10-15 (`research/STATE-ALPR-SWEEP-2026-10-15.md`; no ban found; WA SB 6002 reach unconfirmed); the handheld iOS app now applies the jurisdiction gate (`PlateReadingGate`).
 7. Feeds: 15 more working sources have unclear terms (`research/FEED-RESEARCH-MORE-SOURCES.md`); Arizona-first research (`a82d65e`) lists next steps;
    WSDOT allows "low volume" only; do **not** poll Illinois/Michigan/Kentucky/Tennessee images (robots), NYC DOT (ask), Houston TranStar.
 8. Recognition: Austin cameras are wide views — 0 fleet hits in 39 sampled frames. Real hits need close, low-angle lanes. Stealth-livery data
