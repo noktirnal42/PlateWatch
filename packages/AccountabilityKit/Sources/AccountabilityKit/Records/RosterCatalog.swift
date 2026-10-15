@@ -46,7 +46,7 @@ public enum RosterCatalog {
               agencyKey: "US-NY/new-york/police", state: "NY", domain: "data.cityofnewyork.us", datasetID: "k397-673e",
               names: .firstLast(first: "first_name", last: "last_name"), roleField: "title_description",
               filter: "agency_name='POLICE DEPARTMENT'", latestBy: "fiscal_year",
-              note: "Citywide Payroll Data, latest fiscal year; ~55,000 rows (sworn and civilian)."),
+              note: "Citywide Payroll Data, latest fiscal year; ~55,000 rows (sworn and civilian). The portal is slow on this one: about 2 minutes."),
         .init(id: "chicago-pd", title: "Chicago — Police Department", agencyName: "Chicago Police Department",
               agencyKey: "US-IL/chicago/police", state: "IL", domain: "data.cityofchicago.org", datasetID: "xzkq-xp2w",
               names: .single("name"), roleField: "job_titles", filter: "department='CHICAGO POLICE DEPARTMENT'", latestBy: nil,
