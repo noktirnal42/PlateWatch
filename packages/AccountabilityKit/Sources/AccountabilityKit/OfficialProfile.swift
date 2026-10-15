@@ -78,6 +78,8 @@ public struct IncidentRecord: Sendable, Identifiable, Hashable, Codable {
     /// "decertified"…). Verbatim from the source.
     public var status: String
     public var subjectID: OfficialProfile.ID?
+    /// Agency the record is about (agency-level records, or the subject's agency). Reference to a PlateKit `Agency`.
+    public var agencyID: UUID?
     public var citations: [SourceCitation]
 
     public enum Kind: String, Sendable, Codable, CaseIterable {
@@ -94,6 +96,7 @@ public struct IncidentRecord: Sendable, Identifiable, Hashable, Codable {
                 reference: String,
                 status: String = "",
                 subjectID: OfficialProfile.ID? = nil,
+                agencyID: UUID? = nil,
                 citations: [SourceCitation]) throws {
         guard !reference.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw CreationError.missingReference
@@ -106,6 +109,7 @@ public struct IncidentRecord: Sendable, Identifiable, Hashable, Codable {
         self.reference = reference
         self.status = status
         self.subjectID = subjectID
+        self.agencyID = agencyID
         self.citations = citations
     }
 }
