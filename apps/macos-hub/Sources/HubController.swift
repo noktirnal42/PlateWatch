@@ -133,6 +133,7 @@ final class HubController: ObservableObject {
     }
 
     enum OpenCatalogue: String, CaseIterable, Identifiable {
+        case arizona = "Arizona — AZ511 (needs API key)"
         case caltrans = "California — Caltrans (about 3,400 cameras)"
         case wsdot = "Washington — WSDOT (about 1,700; low-volume use only)"
         case iowa = "Iowa DOT (about 1,300)"
@@ -142,6 +143,7 @@ final class HubController: ObservableObject {
         var id: String { rawValue }
         var key: String {
             switch self {
+            case .arizona: "arizona"
             case .caltrans: "caltrans"
             case .wsdot: "wsdot"
             case .iowa: "iowa"
@@ -165,6 +167,9 @@ final class HubController: ObservableObject {
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             return data
         }
+        func fetchSigned(_ request: URLRequest) async throws -> (Data, URLResponse) {
+            try await URLSession(configuration: .ephemeral).data(for: request)
+        }
         func arcGIS(_ base: String, _ fields: Importers.ArcGISFields, _ op: Importers.Operator) async throws -> SocrataImportResult {
             var all: [PublicFeedSource] = [], skipped: [SkipReason] = []
             var offset = 0
@@ -181,6 +186,19 @@ final class HubController: ObservableObject {
         do {
             let result: SocrataImportResult
             switch choice {
+            case .arizona:
+                guard let key = SourceCredentials.key(for: "az511"), !key.isEmpty else {
+                    importStatus = "AZ511 needs an API key. Add one in Settings › Source API keys — the signup link is next to the key field."
+                    return
+                }
+                var request = URLRequest(url: AZ511Cameras.endpoint
+                    .appending(queryItems: [URLQueryItem(name: "key", value: key),
+                                            URLQueryItem(name: "format", value: "json")]))
+                request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 60
+                let (data, response) = try await fetchSigned(request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                result = try AZ511Cameras.sources(fromJSON: data, key: key)
             case .caltrans:
                 let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
                                             attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300, state: "CA")

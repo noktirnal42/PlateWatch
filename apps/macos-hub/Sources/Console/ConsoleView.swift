@@ -240,6 +240,13 @@ struct SettingsPane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             HomeLocationSection(hub: hub, geohash: $geohash)
+            Section("Source API keys") {
+                Text("Catalogue providers whose supported access route requires a developer key. Keys are stored in this Mac's Keychain and are sent only to that provider's catalogue API — never to camera image hosts. After saving a key, import the catalogue from the Public feeds pane.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(SourceCredentials.providers) { provider in
+                    SourceKeyRow(provider: provider)
+                }
+            }
             Section("Hub") {
                 TextField("Preferred snapshot port", value: $port, format: .number.grouping(.never))
                     .onSubmit { Task { await hub.restartSnapshotServer(port: UInt16(clamping: port)) } }
