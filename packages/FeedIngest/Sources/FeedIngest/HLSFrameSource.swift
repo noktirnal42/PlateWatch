@@ -3,83 +3,114 @@ import CoreVideo
 import Foundation
 import PlateKit
 
-/// Sink for decoded live-video frames (HLS). Snapshot feeds use
-/// `FeedFrameSink` (bytes); continuous feeds deliver pixel buffers.
 public protocol LiveFrameSink: Sendable {
     func accept(_ pixelBuffer: CVPixelBuffer, from source: PublicFeedSource) async
 }
 
-/// Decodes a public HLS (.m3u8) camera feed and taps decoded video frames —
-/// the display path that pure AVFoundation supports for live streams
-/// (RTSP needs the VLCKit fallback, see docs/CAMERA-SOURCES.md).
-///
-/// **Status: implemented, not yet verified against a live feed.** CI has no
-/// network/no camera; verify with a real 511 HLS URL before marking the M6
-/// roadmap box. Nothing here touches persistence — frames go to a
-/// `LiveFrameSink`, and the receiving pipeline still runs the RedactionGate.
-public final class HLSFrameSource: @unchecked Sendable {
+/// A serial, bounded HLS decoder. Terms are checked before an AVPlayerItem is created.
+/// Manifest policy is checked by the caller; AVPlayer's segment fetches remain outside that policy cache.
+@MainActor
+public final class HLSFrameSource {
+    public enum State: Sendable, Equatable {
+        case connecting, streaming, retrying(String), stopped
+    }
     public let source: PublicFeedSource
-    private let player: AVPlayer
-    private let output: AVPlayerItemVideoOutput
-    private let queue = DispatchQueue(label: "org.platewatch.feedingest.hls", qos: .utility)
-    private var running = false
-    /// Decoded-frame tap rate. Analysis cadence (analyze-every-Nth) is the
-    /// pipeline's job; this just avoids copying every decoder frame.
-    public var tapInterval: TimeInterval = 1.0 / 15.0
-
-    /// See `SnapshotPoller.enforceTerms`.
     public let enforceTerms: Bool
     public var isPermitted: Bool { !enforceTerms || source.mayBeAnalysed }
+    public private(set) var isRunning = false
+    public private(set) var state: State = .stopped
+    /// Called on the main actor when transport state changes, never once per frame.
+    public var onStateChange: (@MainActor @Sendable (State) -> Void)?
+    public var tapInterval: TimeInterval = 1.0 / 15.0
+    private let stallTimeout: TimeInterval
+    private let retryDelay: TimeInterval
+    private let player = AVPlayer()
+    private var output: AVPlayerItemVideoOutput?
+    private var task: Task<Void, Never>?
+    private var generation = UUID()
 
-    public init(source: PublicFeedSource, enforceTerms: Bool = true) {
+    public init(source: PublicFeedSource, enforceTerms: Bool = true,
+                stallTimeout: TimeInterval = 30, retryDelay: TimeInterval = 5) {
         precondition(source.kind == .hls, "HLSFrameSource is for .hls feeds")
         self.source = source
         self.enforceTerms = enforceTerms
-        let item = AVPlayerItem(url: source.url)
-        self.output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-        ])
-        item.add(output)
-        self.player = AVPlayer(playerItem: item)
+        self.stallTimeout = max(1, stallTimeout)
+        self.retryDelay = max(0.1, retryDelay)
         player.isMuted = true
-        player.actionAtItemEnd = .none
-        // Live streams: keep the item playing at the live edge.
-        player.automaticallyWaitsToMinimizeStalling = false
+        player.automaticallyWaitsToMinimizeStalling = true
     }
 
-    public var isRunning: Bool { running }
-
-    /// Begin decoding and delivering frames until `stop()`.
     public func start(sink: any LiveFrameSink) {
-        guard isPermitted, !running else { return }
-        running = true
-        player.play()
-        tapLoop(sink: sink)
-    }
-
-    public func stop() {
-        running = false
-        player.pause()
-    }
-
-    private func tapLoop(sink: any LiveFrameSink) {
-        queue.async { [weak self] in
-            guard let self, self.running else { return }
-            let hostTime = CMClockGetTime(CMClockGetHostTimeClock())
-            let itemTime = self.output.itemTime(forHostTime: CMTimeGetSeconds(hostTime))
-            // copyPixelBuffer returns nil when no new frame is available at
-            // this item time; guard against re-delivering the same frame.
-            if itemTime.isValid, itemTime.seconds > self.lastTappedTime,
-               let pixelBuffer = self.output.copyPixelBuffer(forItemTime: itemTime,
-                                                             itemTimeForDisplay: nil) {
-                self.lastTappedTime = itemTime.seconds
-                Task { await sink.accept(pixelBuffer, from: self.source) }
-            }
-            self.queue.asyncAfter(deadline: .now() + self.tapInterval) { [weak self] in
-                self?.tapLoop(sink: sink)
+        guard isPermitted, !isRunning else { return }
+        isRunning = true
+        let run = UUID()
+        generation = run
+        task = Task { @MainActor [weak self] in
+            // Only one sink delivery can be in flight. Awaiting it provides backpressure.
+            // Reacquire self each iteration so an idle decoder is not retained by its own task.
+            while !Task.isCancelled {
+                guard let self, self.isRunning, self.generation == run else { return }
+                self.openItem()
+                var lastFrame = ContinuousClock.now
+                while !Task.isCancelled, self.isRunning, self.generation == run {
+                    if self.player.currentItem?.status == .failed { break }
+                    if let output = self.output {
+                        let itemTime = output.itemTime(forHostTime: CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())))
+                        if itemTime.isValid, output.hasNewPixelBuffer(forItemTime: itemTime),
+                           let buffer = output.copyPixelBuffer(forItemTime: itemTime, itemTimeForDisplay: nil) {
+                            lastFrame = .now
+                            self.setState(.streaming)
+                            await Self.deliver(Frame(buffer: buffer), source: self.source, sink: sink)
+                            guard !Task.isCancelled, self.generation == run else { return }
+                            // Sink latency is not a transport stall.
+                            lastFrame = .now
+                        }
+                    }
+                    if lastFrame.duration(to: .now) >= .seconds(self.stallTimeout) { break }
+                    do { try await Task.sleep(for: .seconds(max(0.02, self.tapInterval.isFinite ? self.tapInterval : 1.0 / 15.0))) }
+                    catch { return }
+                }
+                guard !Task.isCancelled, self.isRunning, self.generation == run else { return }
+                let reason = self.player.currentItem?.error?.localizedDescription ?? "No decoded frames; reconnecting"
+                self.player.pause()
+                self.player.replaceCurrentItem(with: nil)
+                self.output = nil
+                self.setState(.retrying(reason))
+                do { try await Task.sleep(for: .seconds(self.retryDelay)) } catch { return }
             }
         }
     }
 
-    private var lastTappedTime: Double = -.infinity
+    public func stop() {
+        generation = UUID()
+        isRunning = false
+        task?.cancel()
+        task = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        output = nil
+        setState(.stopped)
+    }
+
+    private func openItem() {
+        let item = AVPlayerItem(url: source.url)
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        item.add(output)
+        self.output = output
+        player.replaceCurrentItem(with: item)
+        setState(.connecting)
+        player.play()
+    }
+
+    private func setState(_ value: State) {
+        guard state != value else { return }
+        state = value
+        onStateChange?(value)
+    }
+
+    /// The buffer is immutable during delivery and owned by this one task.
+    private struct Frame: @unchecked Sendable { let buffer: CVPixelBuffer }
+    nonisolated private static func deliver(_ frame: Frame, source: PublicFeedSource, sink: any LiveFrameSink) async {
+        await sink.accept(frame.buffer, from: source)
+    }
 }
