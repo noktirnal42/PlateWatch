@@ -1,5 +1,7 @@
 # PlateWatch — Handoff Document
 
+> **Start here (2026-10-14):** [docs/SESSION-HANDOFF-2026-10-14.md](docs/SESSION-HANDOFF-2026-10-14.md) — current state, how to build/run, local secrets paths, gotchas, prioritised open items.
+
 > **2026-10-14 WS1 continuation:** current iOS review/branding and simulator startup
 > crash handoff: [docs/IOS-UI-HANDOFF.md](docs/IOS-UI-HANDOFF.md). The older session
 > logs below are historical and contain superseded counts and status claims.
