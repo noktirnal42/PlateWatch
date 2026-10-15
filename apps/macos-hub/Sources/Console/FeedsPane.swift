@@ -5,7 +5,7 @@ struct FeedsPane: View {
     enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites", blocked = "Blocked"; var id: String { rawValue } }
     enum SortKey: String, CaseIterable, Identifiable { case state = "State", name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
 
-    @ObservedObject var hub: HubController
+    let hub: HubController
     let isActive: Bool
     var onOpenLive: () -> Void
     @ObservedObject private var favorites: FeedFavorites
@@ -30,7 +30,7 @@ struct FeedsPane: View {
         _runner = ObservedObject(wrappedValue: hub.feedRunner)
     }
 
-    private var hosts: [FeedHostSummary] { catalogue?.hosts() ?? [] }
+    @State private var hosts: [FeedHostSummary] = []
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
     private var totalCount: Int { catalogue?.sources.count ?? 0 }
 
@@ -245,7 +245,12 @@ struct FeedsPane: View {
     }
 
     private struct HostBox: Identifiable { let host: FeedHostSummary; var id: String { host.host } }
-    private func reload() { catalogue = try? FeedCatalogue.load(from: hub.feedsFile); refreshRows() }
+    private func reload() {
+        catalogue = try? FeedCatalogue.load(from: hub.feedsFile)
+        // Grouping 8,000+ URLs on every frame/status notification starves the main thread.
+        hosts = catalogue?.hosts() ?? []
+        refreshRows()
+    }
 }
 
 /// A favorite camera: live thumbnail (refreshed no faster than every 30 s, and never faster than the source's own interval).

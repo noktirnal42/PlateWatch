@@ -55,8 +55,16 @@ struct RecordsCourtListsView: View {
                                 Link("Dataset page", destination: k.datasetPage).font(.caption)
                             }
                         }
-                        Text("Official certification actions published as open data. Brady/Giglio lists are almost never published as downloads — use the CSV import below for one you obtained.")
+                        Text("This importer covers official certification actions. Watchdog and news publishers also publish Brady/Giglio records; inspect their original releases before using CSV import.")
                             .font(.caption2).foregroundStyle(.secondary)
+                    }.padding(4)
+                }
+                GroupBox("Published Brady/Giglio records") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Link("50-a.org · NYC DA credibility lists", destination: URL(string: "https://www.50-a.org/credibility")!)
+                        Link("ABC15 · Maricopa Tier 2 list", destination: URL(string: "https://www.abc15.com/news/local-news/investigations/brady-list/database-mcaos-more-secretive-brady-list")!)
+                        Text("Research links, not one-click importers. Verify the releasing office, date and original document; allegations and list categories remain distinct. More sources are in Directory.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }.padding(4)
                 }
                 GroupBox("Other released list (CSV)") {

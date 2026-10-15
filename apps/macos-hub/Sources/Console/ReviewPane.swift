@@ -74,15 +74,17 @@ private struct EvidenceThumbnail: View {
 
     var body: some View {
         if let image {
-            Image(nsImage: image)
+            Button { enlarged = true } label: {
+                Image(nsImage: image)
                 .resizable()
                 .scaledToFill()
                 .frame(width: 64, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary))
                 .contentShape(RoundedRectangle(cornerRadius: 5))
-                .onTapGesture { enlarged = true }
-                .help("Click to view full size")
+            }.buttonStyle(.plain)
+                .accessibilityLabel("View fleet vehicle evidence image")
+                .help("Click to view the saved evidence image at full size")
                 .sheet(isPresented: $enlarged) { EvidenceViewer(image: image) }
         } else {
             Image(systemName: "photo")
