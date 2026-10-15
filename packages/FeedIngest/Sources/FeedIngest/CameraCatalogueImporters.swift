@@ -14,10 +14,13 @@ public enum CameraCatalogueImporters {
         public var licenseClass: FeedTerms.LicenseClass
         public var refreshInterval: TimeInterval
         public var retrievedAt: Date
+        /// US state (or province) the catalogue covers, recorded on every source it produces.
+        public var state: String?
         public init(datasetURL: URL, attribution: String, licenseClass: FeedTerms.LicenseClass,
-                    refreshInterval: TimeInterval = 300, retrievedAt: Date = Date()) {
+                    refreshInterval: TimeInterval = 300, retrievedAt: Date = Date(), state: String? = nil) {
             self.datasetURL = datasetURL; self.attribution = attribution
             self.licenseClass = licenseClass; self.refreshInterval = refreshInterval; self.retrievedAt = retrievedAt
+            self.state = state
         }
     }
 
@@ -192,6 +195,7 @@ public enum CameraCatalogueImporters {
                 geohash6: Geohash.encode(latitude: lat, longitude: lon, precision: 6),
                 citation: SourceCitation(sourceType: .openDataPortal, url: op.datasetURL, retrievedAt: op.retrievedAt),
                 termsNote: "",
+                state: op.state,
                 terms: FeedTerms(licenseClass: op.licenseClass, attribution: op.attribution, automatedUseAllowed: false),
                 nativeLongSide: nil, locationConfidence: .surveyed))
         } catch { return .failure(.init(cameraID: id, reason: .refreshIntervalTooAggressive)) }

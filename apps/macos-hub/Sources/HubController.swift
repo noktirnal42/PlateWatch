@@ -118,7 +118,7 @@ final class HubController: ObservableObject {
         do {
             let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            let result = try SocrataCameraCatalogue.sources(fromJSON: data, datasetURL: dataset, attribution: "City of Austin")
+            let result = try SocrataCameraCatalogue.sources(fromJSON: data, datasetURL: dataset, attribution: "City of Austin", state: "TX")
             let existing = (try? FeedCatalogue.load(from: feedsFile)) ?? FeedCatalogue()
             let merged = existing.merged(with: result.sources)
             try merged.write(to: feedsFile)
@@ -180,7 +180,7 @@ final class HubController: ObservableObject {
             switch choice {
             case .caltrans:
                 let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
-                                            attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300)
+                                            attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300, state: "CA")
                 var sources: [PublicFeedSource] = [], skipped: [SkipReason] = []
                 for d in 1...12 {
                     let n = String(format: "%02d", d)
@@ -194,28 +194,28 @@ final class HubController: ObservableObject {
                 let url = URL(string: "https://servicev5.nmroads.com/RealMapWAR/GetCameraInfo")!
                 result = try Importers.newMexicoRoads(try await fetch(url), operator: .init(
                     datasetURL: url, attribution: "New Mexico Department of Transportation / NMRoads",
-                    licenseClass: .unknown, refreshInterval: 300))
+                    licenseClass: .unknown, refreshInterval: 300, state: "NM"))
             case .utah:
                 let base = "https://central.udot.utah.gov/server/rest/services/TOC_Devices/MapServer/0"
                 let url = URL(string: "\(base)/query?where=1%3D1&outFields=*&outSR=4326&f=json&resultRecordCount=2000")!
                 result = try Importers.utahTraffic(try await fetch(url), operator: .init(
                     datasetURL: URL(string: base)!, attribution: "Utah Department of Transportation",
-                    licenseClass: .unknown, refreshInterval: 300))
+                    licenseClass: .unknown, refreshInterval: 300, state: "UT"))
             case .oregon:
                 let url = URL(string: "https://tripcheck.com/Scripts/map/data/cctvinventory.js")!
                 result = try Importers.oregonTripCheck(try await fetch(url), operator: .init(
                     datasetURL: url, attribution: "Camera courtesy of ODOT / TripCheck",
-                    licenseClass: .unknown, refreshInterval: 300))
+                    licenseClass: .unknown, refreshInterval: 300, state: "OR"))
             case .wsdot:
                 result = try await arcGIS("https://data.wsdot.wa.gov/arcgis/rest/services/TravelInformation/TravelInfoCamerasWeather/FeatureServer/0",
                     .init(name: "CameraTitle", image: "ImageURL", id: "OBJECTID"),
                     .init(datasetURL: URL(string: "https://data.wsdot.wa.gov/arcgis/rest/services/TravelInformation/TravelInfoCamerasWeather/FeatureServer/0")!,
-                          attribution: "Washington State DOT", licenseClass: .unknown, refreshInterval: 600))
+                          attribution: "Washington State DOT", licenseClass: .unknown, refreshInterval: 600, state: "WA"))
             case .iowa:
                 result = try await arcGIS("https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0",
                     .init(name: "Desc_", image: "ImageURL", id: "device_id", latitude: "latitude", longitude: "longitude"),
                     .init(datasetURL: URL(string: "https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0")!,
-                          attribution: "Iowa DOT (CC BY 4.0)", licenseClass: .openLicence, refreshInterval: 300))
+                          attribution: "Iowa DOT (CC BY 4.0)", licenseClass: .openLicence, refreshInterval: 300, state: "IA"))
 
             }
             let existing = (try? FeedCatalogue.load(from: feedsFile)) ?? FeedCatalogue()

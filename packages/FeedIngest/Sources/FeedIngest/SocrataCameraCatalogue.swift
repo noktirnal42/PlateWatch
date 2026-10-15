@@ -58,7 +58,8 @@ public struct SocrataCameraCatalogue: Sendable {
         datasetURL: URL,
         refreshInterval: TimeInterval = 60,
         retrievedAt: Date = Date(),
-        attribution: String = "City of Austin"
+        attribution: String = "City of Austin",
+        state: String? = nil
     ) throws -> SocrataImportResult {
         let json = try JSONSerialization.jsonObject(with: data)
         guard let records = json as? [[String: Any]] else {
@@ -157,6 +158,7 @@ public struct SocrataCameraCatalogue: Sendable {
                     geohash6: geohash6,
                     citation: citation,
                     termsNote: "",
+                    state: state,
                     terms: terms,
                     nativeLongSide: nil,
                     locationConfidence: .surveyed

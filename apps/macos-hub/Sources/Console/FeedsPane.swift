@@ -3,7 +3,7 @@ import SwiftUI
 
 struct FeedsPane: View {
     enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites", blocked = "Blocked"; var id: String { rawValue } }
-    enum SortKey: String, CaseIterable, Identifiable { case name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
+    enum SortKey: String, CaseIterable, Identifiable { case state = "State", name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
 
     @ObservedObject var hub: HubController
     let isActive: Bool
@@ -15,7 +15,7 @@ struct FeedsPane: View {
     @State private var query = ""
     @State private var hostFilter = ""
     @State private var statusFilter: FeedRunner.StatusKind?
-    @State private var sortKey: SortKey = .name
+    @State private var sortKey: SortKey = .state
     @State private var ascending = true
     @State private var favoritesFirst = false
     @State private var termsExpanded = false
@@ -44,12 +44,13 @@ struct FeedsPane: View {
         let words = query.lowercased().split(separator: " ").map(String.init)
         if !words.isEmpty {
             list = list.filter { s in
-                let hay = "\(s.name) \(s.url.host ?? "") \(s.geohash6) \(s.terms.attribution)".lowercased()
+                let hay = "\(s.name) \(s.url.host ?? "") \(s.geohash6) \(s.state ?? "") \(s.terms.attribution)".lowercased()
                 return words.allSatisfy(hay.contains)
             }
         }
         func key(_ s: PublicFeedSource) -> String {
             switch sortKey {
+            case .state: return (s.state ?? "zz") + " " + s.name.lowercased()
             case .name: return s.name.lowercased()
             case .host: return (s.url.host ?? "") + " " + s.name.lowercased()
             case .location: return s.geohash6 + " " + s.name.lowercased()
@@ -248,6 +249,12 @@ struct FavoriteTile: View {
             }.aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 8))
             HStack {
                 Text(source.name).font(.callout.bold()).lineLimit(1)
+                if let state = source.state {
+                    Text(state).font(.caption2.bold())
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                        .help("State recorded by the catalogue import")
+                }
                 Spacer()
                 Button { favorites.toggle(source.id) } label: { Image(systemName: "star.fill").foregroundStyle(.yellow) }
                     .buttonStyle(.plain).help("Remove from favorites")
