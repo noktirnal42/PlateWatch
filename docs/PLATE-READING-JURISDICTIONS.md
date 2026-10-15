@@ -65,7 +65,7 @@ and fleet detection, but not plate reading.
 
 ## Gaps to close
 
-- The handheld iPhone/Watch apps do **not** apply this gate yet (it is wired into the Hub and feed ingest).
+- The handheld iPhone app applies the same gate (`PlateReadingGate`, per frame, from the phone's coarse location or an imported photo's own GPS; unknown location ⇒ plates off). The Watch app does no analysis. Counsel has not yet said whether handheld use falls under these statutes; the gate is the conservative default.
 - Counsel questions: does reading plates on a third-party feed count as ALPR "use"? Does an on-device, discard-immediately
   design change the answer? Do the four "pending counsel" states really apply? (`docs/research/FEED-LEGAL-RESEARCH.md`.)
 - The state lists live in `packages/PlateKit/Sources/PlateKit/Identity/JurisdictionPolicy.swift`

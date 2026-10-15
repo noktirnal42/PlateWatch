@@ -324,6 +324,21 @@ final class RealWorldRegressionTests: XCTestCase {
         XCTAssertFalse(JurisdictionPolicy.mayReadPlates(near: hint(0, -30)), "mid-Atlantic: nothing to reason from")
     }
 
+    func testPlateReadingGateFailsClosedAndTracksLocation() {
+        let gate = PlateReadingGate()
+        XCTAssertFalse(gate.allowed, "no location yet")
+        gate.update(latitude: 44.98, longitude: -93.27)            // Minneapolis
+        XCTAssertTrue(gate.allowed)
+        gate.update(latitude: 43.66, longitude: -70.26)            // Portland, ME
+        XCTAssertFalse(gate.allowed)
+        gate.update(latitude: 34.05, longitude: -118.24)           // Los Angeles
+        XCTAssertTrue(gate.allowed)
+        gate.update(latitude: nil, longitude: nil)                 // e.g. a photo without GPS
+        XCTAssertFalse(gate.allowed)
+        gate.update(latitude: 34.05, longitude: -118.24)           // same cell as before the clear: must reopen
+        XCTAssertTrue(gate.allowed)
+    }
+
     func testPolicyListsAreExplicit() {
         XCTAssertEqual(JurisdictionPolicy.platesRestricted, ["ME", "NH"])
         XCTAssertTrue(JurisdictionPolicy.platesDisabledByDefault.isSuperset(of: ["ME", "NH", "AR", "ID", "KY", "CT"]))

@@ -128,7 +128,7 @@ Do **not** re-create the Keychain item from the command line on each run: it res
 3. Hub: video-file/Continuity camera path in the **Live pane is built but only partly exercised**; LLM/MLX assistants are **not built** (must stay on-device; AGENTS.md rule 3).
 4. **Use my location** shows "permission granted but no position available" on this desktop Mac (no GPS/Wi-Fi fix). Manual lat/lon and Plus Code work.
 5. CloudKit: two-account creator-only test; moderator publish path (server-to-server key).
-6. Legal: counsel on ALPR "use" for feed OCR; 23 states + DC **unresearched**; handheld iOS app has no jurisdiction gate yet.
+6. Legal: counsel on ALPR "use" for feed OCR; 23 states + DC **unresearched**; the handheld iOS app now applies the jurisdiction gate (`PlateReadingGate`) — counsel question on handheld use still open.
 7. Feeds: 15 more working sources have unclear terms (`research/FEED-RESEARCH-MORE-SOURCES.md`); Arizona-first research (`a82d65e`) lists next steps;
    WSDOT allows "low volume" only; do **not** poll Illinois/Michigan/Kentucky/Tennessee images (robots), NYC DOT (ask), Houston TranStar.
 8. Recognition: Austin cameras are wide views — 0 fleet hits in 39 sampled frames. Real hits need close, low-angle lanes. Stealth-livery data

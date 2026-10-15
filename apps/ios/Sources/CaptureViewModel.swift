@@ -75,6 +75,8 @@ final class CaptureViewModel: ObservableObject {
     private var modelContext: ModelContext?
     private var backend: (any SyncBackend)?
     private let contextBox = AnalysisContextBox()
+    /// Plate recognition is off wherever it is regulated (PlateKit.JurisdictionPolicy) and when the location is unknown.
+    private let plateGate = PlateReadingGate()
     private var lastPacket: FramePacket?
     private var lastEscalation = Date.distantPast
     private var escalating = false
@@ -97,7 +99,12 @@ final class CaptureViewModel: ObservableObject {
         // as downloads complete; absence means baseline Vision only.
         let box = contextBox
         let pipeline = PlateAnalysisPipeline()
-        self.executor = AnalysisExecutor(pipeline: pipeline) { box.current }
+        let plateGate = plateGate
+        self.executor = AnalysisExecutor(pipeline: pipeline) {
+            var context = box.current
+            context.readPlates = plateGate.allowed
+            return context
+        }
         session.onFrame { [weak self] packet in
             Task { [weak self] in await self?.handle(packet) }
         }
@@ -205,8 +212,15 @@ final class CaptureViewModel: ObservableObject {
         return (bucket.geohash6, center.latitude, center.longitude)
     }
 
+    /// Re-evaluates whether plates may be read at the location the frame being analysed was captured.
+    private func refreshPlateGate() {
+        let location = captureLocation()
+        plateGate.update(latitude: location?.latitude, longitude: location?.longitude)
+    }
+
     private func runAccurate(pixelBuffer: CVPixelBuffer, source: String) async {
         processingStill = true
+        refreshPlateGate()
         defer { processingStill = false }
         statusText = source == "photo" ? "Analyzing photo…" : "Analyzing frame…"
         guard let frame = try? await executor.submit(
@@ -378,6 +392,7 @@ final class CaptureViewModel: ObservableObject {
 
     private func handle(_ packet: FramePacket) async {
         lastPacket = packet
+        refreshPlateGate()
         guard let frame = try? await executor.submit(
             .init(pixelBuffer: packet.pixelBuffer), mode: .live) else { return }
         latestFrame = frame

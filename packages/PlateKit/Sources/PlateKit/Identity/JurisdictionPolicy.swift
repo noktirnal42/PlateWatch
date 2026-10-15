@@ -54,3 +54,39 @@ public extension Gazetteer {
         return 2 * r * asin(min(1, sqrt(a)))
     }
 }
+
+/// Thread-safe "may this app read plates right now?" switch for apps whose location changes while frames stream
+/// (the handheld iPhone app). Fails closed: until a location has been supplied, or when the location is cleared
+/// (e.g. a photo import without GPS), plate reading is off. The gazetteer lookup is cached per ~1 km geohash cell.
+public final class PlateReadingGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let disabledStates: Set<String>
+    private var cellKey: String?
+    private var cellAllowed = false
+
+    public init(disabledStates: Set<String> = JurisdictionPolicy.platesDisabledByDefault) {
+        self.disabledStates = disabledStates
+    }
+
+    /// Whether plate recognition may run for the most recently supplied location.
+    public var allowed: Bool { lock.lock(); defer { lock.unlock() }; return cellAllowed }
+
+    /// Updates the location the gate decides on. `nil` (unknown) closes the gate.
+    public func update(latitude: Double?, longitude: Double?) {
+        guard let latitude, let longitude else { return set(key: nil, allowed: false) }
+        let key = Geohash.encode(latitude: latitude, longitude: longitude, precision: 6)
+        lock.lock()
+        let unchanged = key == cellKey
+        lock.unlock()
+        if unchanged { return }
+        let allowed = JurisdictionPolicy.mayReadPlates(near: .init(latitude: latitude, longitude: longitude),
+                                                       disabledStates: disabledStates)
+        set(key: key, allowed: allowed)
+    }
+
+    private func set(key: String?, allowed: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        cellKey = key
+        cellAllowed = allowed
+    }
+}
