@@ -172,6 +172,12 @@ program lawful, accurate, and worth defending:
   before `redactFlag`/`clientCode` were sent, and errors now show PACER's `loginResult`/`errorDescription`. 2026-10-15: with a real account the call returned **HTTP 502** (PACER's own endpoint answers dummy credentials with a normal
   "Login Failed" JSON, so the request format is accepted); the client now retries gateway errors once, shows the server's
   words, and has an optional MFA-code field (`otpCode`, UNVERIFIED name). The PCL case-search call is still **UNVERIFIED**. First live use: free allowance only.
+- **Known lists** (`RecordCatalog`, `RecordSourceFetcher`; Court & lists → "Known lists"): Washington's Criminal Justice Training
+  Commission officer-certification dataset (data.wa.gov, 470 revocation/surrender/hearing cases since 2002, each citing its
+  final order) imports as pending `decertification` candidates with the commission's own wording. A desk survey on 2026-10-15
+  found no prosecutor publishing Brady/Giglio lists as downloads (they appear as PDFs or one-off records releases — use the
+  CSV import), California POST's list page refused our connection, Oregon DPSST offers a search site and a statistics
+  spreadsheet only, Massachusetts POST posts PDFs. The catalogue grows as machine-readable sources are found.
 - Court & lists has a **Pending / Accepted** switch. Accepted records are listed with their status and source; each can be
   *shown for an agency* (pick a catalogue agency or type its key — it then appears in Review next to that agency's recognised
   units), *attached to an official* (People), or *sent back to pending*. An accepted record attached to neither is shown

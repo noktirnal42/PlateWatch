@@ -11,6 +11,7 @@ struct RecordsCourtListsView: View {
     @State private var notice = ""
     @State private var pacerLogin = ""
     @State private var pacerPassword = ""
+    @State private var knownID = RecordCatalog.all[0].id
     @State private var showAccepted = false
     @State private var agencyDrafts: [UUID: String] = [:]
     @State private var pacerOTP = ""
@@ -41,7 +42,24 @@ struct RecordsCourtListsView: View {
                         Text("Results are dockets only — a docket is a filing, not a finding.").font(.caption).foregroundStyle(.secondary)
                     }.padding(4)
                 }
-                GroupBox("Released lists (CSV)") {
+                GroupBox("Known lists (one click)") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Picker("", selection: $knownID) { ForEach(RecordCatalog.all) { Text($0.title).tag($0.id) } }.labelsHidden()
+                        if let k = RecordCatalog.source(id: knownID) {
+                            Text(k.note).font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                Button("Import", systemImage: "arrow.down.circle") {
+                                    busy = true; notice = ""
+                                    Task { let n = await workspace.importKnownList(k); notice = "\(n) new record(s) added as pending."; busy = false }
+                                }.disabled(busy)
+                                Link("Dataset page", destination: k.datasetPage).font(.caption)
+                            }
+                        }
+                        Text("Official certification actions published as open data. Brady/Giglio lists are almost never published as downloads — use the CSV import below for one you obtained.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }.padding(4)
+                }
+                GroupBox("Other released list (CSV)") {
                     VStack(alignment: .leading) {
                         Text("Import a Brady/Giglio list or POST register that a public body has published. You say who released it and which columns are which.")
                             .font(.caption).foregroundStyle(.secondary)

@@ -487,3 +487,38 @@ final class AcceptedRecordsTests: XCTestCase {
         XCTAssertEqual(ledger.pending.count, 1, "the candidate is back for another look")
     }
 }
+
+final class RecordCatalogTests: XCTestCase {
+    private final class Canned: HTTPFetching, @unchecked Sendable {
+        var url: URL?
+        let body: Data
+        init(_ b: String) { body = Data(b.utf8) }
+        func fetch(_ request: URLRequest) async throws -> (data: Data, status: Int) { url = request.url; return (body, 200) }
+    }
+
+    func testWashingtonRowsBecomePendingCitedDecertificationCandidates() async throws {
+        let json = #"[{"case":"2024-0010282","officer_name":"Myers","officer_first_name":"Matthew","employer":"Yakima Police Department","case_determination":"Revocation - Default","final_order":"2003-02-03T00:00:00.000","conduct_investigated":"RCW 9A.80.010 - Official Misconduct","documents_link":{"url":"https://cjtc.box.com/v/02-001-Myers-Matthew"}},{"officer_name":"no case number"}]"#
+        let f = Canned(json)
+        let source = RecordCatalog.source(id: "wa-cjtc-revocations")!
+        let c = try await RecordSourceFetcher(fetcher: f, pause: {}).candidates(from: source, now: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(c.count, 1, "rows without a case number skipped")
+        XCTAssertEqual(c[0].subjectName, "Matthew Myers")
+        XCTAssertEqual(c[0].status, "Revocation - Default", "status verbatim")
+        XCTAssertEqual(c[0].agencyName, "Yakima Police Department")
+        XCTAssertEqual(c[0].kind, .decertification)
+        XCTAssertEqual(c[0].citation.sourceType, .decertificationRegister)
+        XCTAssertEqual(c[0].citation.url?.absoluteString, "https://cjtc.box.com/v/02-001-Myers-Matthew", "cites the final order itself")
+        XCTAssertEqual(c[0].review, .pending)
+        XCTAssertTrue(c[0].excerpt.contains("Official Misconduct"))
+        XCTAssertTrue(f.url!.absoluteString.contains("starts_with"), "only revocations requested")
+        // Idempotent through the ledger.
+        var ledger = RecordsLedger()
+        XCTAssertEqual(ledger.add(c), 1); XCTAssertEqual(ledger.add(c), 0)
+    }
+
+    func testErrorsAbort() async {
+        struct Fail: HTTPFetching { func fetch(_ r: URLRequest) async throws -> (data: Data, status: Int) { (Data(), 503) } }
+        do { _ = try await RecordSourceFetcher(fetcher: Fail(), pause: {}).candidates(from: RecordCatalog.all[0]); XCTFail() }
+        catch { XCTAssertEqual(error as? RecordSourceFetcher.FetchError, .http(503)) }
+    }
+}

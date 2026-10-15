@@ -19,15 +19,17 @@ struct RecordsPeopleView: View {
     @State private var sourceID = RosterCatalog.all[0].id
     @State private var importing = false
     @State private var search = ""
+    @State private var addType: SourceCitation.SourceType = .agencyRoster
 
     private var profile: OfficialProfile? { workspace.ledger.profiles.first { $0.id == selected } }
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
+            ScrollView { VStack(alignment: .leading, spacing: 8) {
+                GroupBox("Add an official (public capacity)") { addForm }
                 List(workspace.ledger.profiles, selection: $selected) { p in
                     VStack(alignment: .leading) { Text(p.name).fontWeight(.medium); Text(p.role).font(.caption).foregroundStyle(.secondary) }.tag(p.id)
-                }
+                }.frame(height: 150)
                 GroupBox("Police rosters (open data)") { catalogue }
                 GroupBox("Import a roster from a CSV file") {
                     VStack(alignment: .leading) {
@@ -50,23 +52,7 @@ struct RecordsPeopleView: View {
                         if !workspace.lastError.isEmpty { Text(workspace.lastError).font(.caption).foregroundStyle(.red) }
                     }.padding(4)
                 }
-                GroupBox("Add an official (public capacity)") {
-                    VStack(alignment: .leading) {
-                        TextField("Name as published", text: $name)
-                        TextField("Role as published", text: $role)
-                        TextField("Source page URL (roster, bio, release)", text: $rosterURL)
-                        Button("Add with citation", systemImage: "plus") {
-                            guard let url = URL(string: rosterURL), url.scheme?.hasPrefix("http") == true else { message = "A source URL is required."; return }
-                            do {
-                                let p = try workspace.ledger.addProfile(name: name, role: role,
-                                    citation: SourceCitation(sourceType: .agencyRoster, url: url, retrievedAt: Date()))
-                                selected = p.id; name = ""; role = ""; rosterURL = ""; message = ""
-                            } catch { message = "\(error)" }
-                        }.disabled(name.isEmpty || rosterURL.isEmpty)
-                        Text("Names, roles and a citation only — no home addresses, family or personal details.").font(.caption2).foregroundStyle(.secondary)
-                    }.padding(4)
-                }
-            }.frame(width: 340)
+            } }.frame(width: 340)
             Divider()
             if let p = profile { detail(p) } else {
                 ContentUnavailableView("Officials and unit links", systemImage: "person.text.rectangle",
@@ -234,6 +220,43 @@ struct RecordsPeopleView: View {
             }
             if !workspace.lastError.isEmpty { Text(workspace.lastError).font(.caption).foregroundStyle(.red) }
             if !message.isEmpty { Text(message).font(.caption) }
+        }.padding(4)
+    }
+
+    private var addForm: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Name as published", text: $name)
+            TextField("Role as published (e.g. Chief of Police)", text: $role)
+            Picker("Source is", selection: $addType) {
+                ForEach([SourceCitation.SourceType.agencyRoster, .officialPost, .openDataPortal, .courtDocket, .newsReport, .foiaRelease], id: \.self) {
+                    Text($0.rawValue).tag($0)
+                }
+            }
+            TextField("Source page URL (a page that names them and their role)", text: $rosterURL)
+            let withURL = workspace.ledger.incidents.filter { $0.citations.first?.url != nil }
+            if !withURL.isEmpty {
+                Menu("Use the source of an accepted record…") {
+                    ForEach(withURL) { r in
+                        Button("\(r.kind.rawValue) · \(r.reference)") {
+                            rosterURL = r.citations.first?.url?.absoluteString ?? ""
+                            addType = r.citations.first?.sourceType ?? .courtDocket
+                        }
+                    }
+                }.controlSize(.small).fixedSize()
+            }
+            Button("Add with citation", systemImage: "plus") {
+                guard let url = URL(string: rosterURL.trimmingCharacters(in: .whitespaces)), url.scheme?.hasPrefix("http") == true else {
+                    message = "A source URL starting with http(s):// is required — every official needs a cited source."; return
+                }
+                do {
+                    let p = try workspace.ledger.addProfile(name: name.trimmingCharacters(in: .whitespaces), role: role,
+                        citation: SourceCitation(sourceType: addType, url: url, retrievedAt: Date()))
+                    selected = p.id; name = ""; role = ""; rosterURL = ""; message = "Added \(p.name)."
+                } catch { message = "Could not add: \(error)" }
+            }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            if !message.isEmpty { Text(message).font(.caption).foregroundStyle(message.hasPrefix("Added") ? Color.secondary : Color.red) }
+            Text("Names, roles and a citation only — no home addresses, family or personal details. A docket that names someone as a party is a source for who they are, not a finding about them.")
+                .font(.caption2).foregroundStyle(.secondary)
         }.padding(4)
     }
 }

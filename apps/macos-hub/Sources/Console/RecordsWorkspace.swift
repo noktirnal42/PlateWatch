@@ -150,4 +150,13 @@ final class RecordsWorkspace {
             return added
         } catch { lastError = "Roster import failed: \(error)"; return 0 }
     }
+
+    /// One-click import of a catalogue list into pending candidates. Returns how many were new.
+    func importKnownList(_ source: RecordSource) async -> Int {
+        do {
+            let found = try await RecordSourceFetcher().candidates(from: source)
+            lastError = ""
+            return ledger.add(found)
+        } catch { lastError = "Import failed (\(source.title)): \(error)"; return 0 }
+    }
 }
