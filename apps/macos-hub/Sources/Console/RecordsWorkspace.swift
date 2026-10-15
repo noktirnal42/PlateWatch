@@ -118,14 +118,14 @@ final class RecordsWorkspace {
     }
 
     /// PACER party search with the user's own account. Refuses (without touching the network) when the budget says no.
-    func searchPacer(partyName: String) async -> Int {
+    func searchPacer(partyName: String, otpCode: String? = nil) async -> Int {
         guard let login = RecordsCredentials.read(.pacerLogin), let password = RecordsCredentials.read(.pacerPassword) else {
             lastError = "Add your PACER login in Court sources first."; return 0
         }
         var client = PacerClient(budget: budget)
         do {
             let dockets = try await client.findCases(partyName: partyName, loginID: login, password: password,
-                                                     clientCode: RecordsCredentials.read(.pacerClientCode))
+                                                     clientCode: RecordsCredentials.read(.pacerClientCode), otpCode: otpCode)
             budget = client.budget
             let now = Date()
             lastError = ""

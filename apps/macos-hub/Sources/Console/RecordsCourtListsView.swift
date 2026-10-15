@@ -11,6 +11,7 @@ struct RecordsCourtListsView: View {
     @State private var notice = ""
     @State private var pacerLogin = ""
     @State private var pacerPassword = ""
+    @State private var pacerOTP = ""
     @State private var pacerClientCode = RecordsCredentials.read(.pacerClientCode) ?? ""
     @State private var clToken = ""
     @State private var extraLimit = ""
@@ -63,6 +64,7 @@ struct RecordsCourtListsView: View {
                         }
                         TextField("Client code (needed for searches; no spaces or commas)", text: $pacerClientCode)
                             .onSubmit { RecordsCredentials.write(pacerClientCode, for: .pacerClientCode) }
+                        TextField("MFA code (only if your PACER account uses one; not saved)", text: $pacerOTP)
                         Button("Save client code") { RecordsCredentials.write(pacerClientCode, for: .pacerClientCode) }
                         Divider()
                         let now = Date()
@@ -125,7 +127,7 @@ struct RecordsCourtListsView: View {
 
     private func runPacer() {
         busy = true; notice = ""
-        Task { let n = await workspace.searchPacer(partyName: query); notice = "\(n) new docket(s) added as pending."; busy = false }
+        Task { let n = await workspace.searchPacer(partyName: query, otpCode: pacerOTP); notice = "\(n) new docket(s) added as pending."; busy = false }
     }
 
     private func importCSV() {

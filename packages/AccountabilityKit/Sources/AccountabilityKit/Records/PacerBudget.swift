@@ -74,10 +74,12 @@ public struct PacerClient: Sendable {
     public static let caseFindURL = URL(string: "https://pcl.uscourts.gov/pcl-public-api/rest/cases/find")!
 
     private let fetcher: HTTPFetching
+    private let retryDelayNanoseconds: UInt64
     public private(set) var budget: PacerBudget
 
-    public init(budget: PacerBudget = PacerBudget(), fetcher: HTTPFetching = URLSessionFetcher()) {
-        self.budget = budget; self.fetcher = fetcher
+    public init(budget: PacerBudget = PacerBudget(), fetcher: HTTPFetching = URLSessionFetcher(),
+                retryDelayNanoseconds: UInt64 = 2_000_000_000) {
+        self.budget = budget; self.fetcher = fetcher; self.retryDelayNanoseconds = retryDelayNanoseconds
     }
 
     public enum Failure: Error, Equatable { case authFailed(String), budgetDenied(String), decoding, http(Int) }
@@ -85,12 +87,12 @@ public struct PacerClient: Sendable {
     /// Searches PCL for cases whose party name matches. Estimated cost: one results page. Returns the dockets and the
     /// updated budget the caller should persist.
     public mutating func findCases(partyName: String, loginID: String, password: String, clientCode: String? = nil,
-                                   now: Date = Date()) async throws -> [CourtDocket] {
+                                   otpCode: String? = nil, now: Date = Date()) async throws -> [CourtDocket] {
         let estimate = budget.estimate(pages: 1)
         let decision = budget.check(estimatedCost: estimate, on: now)
         if case .denied(let reason) = decision { throw Failure.budgetDenied(reason) }
 
-        let token = try await authenticate(loginID: loginID, password: password, clientCode: clientCode)
+        let token = try await authenticate(loginID: loginID, password: password, clientCode: clientCode, otpCode: otpCode)
         var req = URLRequest(url: Self.caseFindURL)
         req.httpMethod = "POST"
         req.setValue(token, forHTTPHeaderField: "X-NEXT-GEN-CSO")
@@ -107,7 +109,7 @@ public struct PacerClient: Sendable {
     /// Success is `loginResult == "0"` with a token in `nextGenCSO`; failures carry PACER's own `errorDescription`, which
     /// is surfaced so a bad password, a locked account or a missing client code can be told apart. The password is never
     /// included in any error text.
-    func authenticate(loginID: String, password: String, clientCode: String?) async throws -> String {
+    func authenticate(loginID: String, password: String, clientCode: String?, otpCode: String? = nil) async throws -> String {
         var req = URLRequest(url: Self.authURL)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -116,8 +118,17 @@ public struct PacerClient: Sendable {
         if let code = clientCode?.trimmingCharacters(in: .whitespaces), !code.isEmpty {
             body["clientCode"] = Self.sanitisedClientCode(code)
         }
+        // Accounts with multi-factor sign-in send the current 6-digit code (PACER's 2025 guide ships a TOTP sample; the
+        // field name `otpCode` is **UNVERIFIED** — it is only sent when the user types a code).
+        if let otp = otpCode?.trimmingCharacters(in: .whitespaces), !otp.isEmpty { body["otpCode"] = otp }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, status) = try await fetcher.fetch(req)
+
+        // A gateway error (502/503/504) is the server failing, not a verdict on the credentials: retry once.
+        var (data, status) = try await fetcher.fetch(req)
+        if [502, 503, 504].contains(status) {
+            try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+            (data, status) = try await fetcher.fetch(req)
+        }
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let result = (object?["loginResult"] as? String) ?? (object?["loginResult"] as? Int).map(String.init)
         let detail = (object?["errorDescription"] as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -125,6 +136,10 @@ public struct PacerClient: Sendable {
         var message = "HTTP \(status)"
         if let result, result != "0" { message += ", loginResult \(result)" }
         if let detail { message += ": \(detail)" }
+        else if object == nil, let text = String(data: data.prefix(160), encoding: .utf8)?
+            .replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            message += " — \(text)"          // the server's own words (never the request, so never the password)
+        }
         throw Failure.authFailed(message)
     }
 

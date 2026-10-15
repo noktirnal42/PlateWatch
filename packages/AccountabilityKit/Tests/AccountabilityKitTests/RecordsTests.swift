@@ -429,3 +429,40 @@ final class RosterCatalogTests: XCTestCase {
         XCTAssertEqual(try dec.decode(RosterSnapshot.self, from: Data(snap.utf8)).entries[0].pay, [])
     }
 }
+
+final class PacerGatewayTests: XCTestCase {
+    private final class Scripted: HTTPFetching, @unchecked Sendable {
+        var replies: [(Data, Int)]; var bodies: [[String: String]] = []
+        init(_ replies: [(Data, Int)]) { self.replies = replies }
+        func fetch(_ request: URLRequest) async throws -> (data: Data, status: Int) {
+            if let b = request.httpBody, let o = try? JSONSerialization.jsonObject(with: b) as? [String: String] { bodies.append(o) }
+            return replies.isEmpty ? (Data(), 500) : replies.removeFirst()
+        }
+    }
+    private let ok = (Data(#"{"nextGenCSO":"tok","loginResult":"0","errorDescription":""}"#.utf8), 200)
+
+    func testGatewayErrorIsRetriedOnce() async throws {
+        let f = Scripted([(Data("Bad Gateway".utf8), 502), ok])
+        let t = try await PacerClient(fetcher: f, retryDelayNanoseconds: 0).authenticate(loginID: "u", password: "p", clientCode: nil)
+        XCTAssertEqual(t, "tok"); XCTAssertEqual(f.bodies.count, 2)
+    }
+
+    func testPersistentGatewayErrorShowsServerWordsNotPassword() async {
+        let f = Scripted([(Data("<html>Bad Gateway upstream</html>".utf8), 502), (Data("<html>Bad Gateway upstream</html>".utf8), 502)])
+        do { _ = try await PacerClient(fetcher: f, retryDelayNanoseconds: 0).authenticate(loginID: "u", password: "hunter2", clientCode: nil); XCTFail() }
+        catch {
+            guard case PacerClient.Failure.authFailed(let why) = error else { return XCTFail("\(error)") }
+            XCTAssertTrue(why.hasPrefix("HTTP 502") && why.contains("Bad Gateway upstream"), why)
+            XCTAssertFalse(why.contains("hunter2"))
+        }
+    }
+
+    func testOtpCodeOnlySentWhenGiven() async throws {
+        let f = Scripted([ok, ok])
+        let c = PacerClient(fetcher: f, retryDelayNanoseconds: 0)
+        _ = try await c.authenticate(loginID: "u", password: "p", clientCode: nil, otpCode: " 123456 ")
+        _ = try await c.authenticate(loginID: "u", password: "p", clientCode: nil, otpCode: "")
+        XCTAssertEqual(f.bodies[0]["otpCode"], "123456")
+        XCTAssertNil(f.bodies[1]["otpCode"])
+    }
+}

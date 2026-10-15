@@ -169,8 +169,9 @@ program lawful, accurate, and worth defending:
   (`org.platewatch.hub.records`); the code never sees them elsewhere.
   CourtListener search was **verified live by the owner (2026-10-15)**. PACER sign-in followed PACER's documented `cso-auth`
   call (`loginId`, `password`, required `redactFlag`, `clientCode` for searches); the first live try failed ("auth failed")
-  before `redactFlag`/`clientCode` were sent, and errors now show PACER's `loginResult`/`errorDescription`. The PCL case-search
-  call is still **UNVERIFIED**. First live use: free allowance only.
+  before `redactFlag`/`clientCode` were sent, and errors now show PACER's `loginResult`/`errorDescription`. 2026-10-15: with a real account the call returned **HTTP 502** (PACER's own endpoint answers dummy credentials with a normal
+  "Login Failed" JSON, so the request format is accepted); the client now retries gateway errors once, shows the server's
+  words, and has an optional MFA-code field (`otpCode`, UNVERIFIED name). The PCL case-search call is still **UNVERIFIED**. First live use: free allowance only.
 - Hub → Records & FOIA → **Requests** and **Court & lists** tabs; Review shows a **cited-records strip** for the selected
   vehicle's unit.
 
