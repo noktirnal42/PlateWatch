@@ -36,12 +36,12 @@ struct RecordsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Picker("Records workspace", selection: $tab) {
-                Text("Fleet FOIA draft").tag(0)
+                Text("FOIA draft").tag(0)
                 Text("Requests").tag(3)
                 Text("Court & lists").tag(4)
-                Text("Public records directory").tag(1)
-                Text("Public-records programme").tag(2)
-            }.pickerStyle(.segmented).frame(maxWidth: 760)
+                Text("Directory").tag(1)
+                Text("Programme").tag(2)
+            }.pickerStyle(.segmented).frame(maxWidth: 560)
             switch tab {
             case 0: builder
             case 1: directory
