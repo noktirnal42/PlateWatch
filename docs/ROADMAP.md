@@ -101,7 +101,8 @@ first.
 - 🟡 Brady/decertification register (CSV) + lawsuit docket (CourtListener, PACER with a dollar budget) importers — built,
   verbatim, cited, pending-until-accepted; live CourtListener/PACER endpoints not yet exercised
 - 🟡 Cross-reference chain: unit → confirmed link → official → records, location-free, shown in Hub Review — built;
-  the moderator-confirmation UI for `PersonLink`s and any publication path are not
+  operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; second-person
+  moderation and any publication path are not
 - ✅ FOIA request tracker (Hub: Requests tab — due dates, appeal text, cited releases)
 - ⬜ Aggregation of existing public-interest publishers (cite-first, no
   re-hosting without attribution)

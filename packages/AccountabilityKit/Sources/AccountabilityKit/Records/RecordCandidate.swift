@@ -128,3 +128,49 @@ public struct RecordsLedger: Sendable, Codable, Equatable {
         incidents.append(try candidates[i].accept(subject: subject, agencyID: agencyID, agencyKey: agencyKey))
     }
 }
+
+// MARK: - People: profiles, unit links, record attachment (all explicit human steps, all cited)
+
+public extension RecordsLedger {
+    enum PeopleError: Error, Equatable { case unknownProfile, unknownLink, unknownIncident, communityCitationOnly }
+
+    /// Adds an official **in their public capacity**; the citation (e.g. the agency's published roster page) is mandatory.
+    @discardableResult
+    mutating func addProfile(name: String, role: String, citation: SourceCitation) throws -> OfficialProfile {
+        guard citation.sourceType != .communityVerified else { throw PeopleError.communityCitationOnly }
+        let profile = try OfficialProfile(name: name, role: role, citations: [citation])
+        profiles.append(profile)
+        return profile
+    }
+
+    /// Records a *suggested* unit↔person link: confidence below 1, never shown until confirmed.
+    @discardableResult
+    mutating func proposeLink(profileID: OfficialProfile.ID, unitNumber: String, agencyKey: String,
+                              confidence: Double = 0.5, citation: SourceCitation) throws -> PersonLink {
+        guard profiles.contains(where: { $0.id == profileID }) else { throw PeopleError.unknownProfile }
+        let link = try PersonLink(officialID: profileID, unitNumber: unitNumber, agencyKey: agencyKey,
+                                  confidence: min(confidence, 0.95), citations: [citation])
+        links.append(link)
+        return link
+    }
+
+    /// Confirms a link with an additional **external** citation (a roster, a FOIA release…). A community claim cannot.
+    mutating func confirmLink(id: PersonLink.ID, citation: SourceCitation) throws {
+        guard let i = links.firstIndex(where: { $0.id == id }) else { throw PeopleError.unknownLink }
+        try links[i].moderatorConfirm(additionalCitation: citation)
+    }
+
+    /// Attaches an accepted record to a profile. The human chose the profile; nothing infers it.
+    mutating func attach(incidentID: IncidentRecord.ID, to profileID: OfficialProfile.ID) throws {
+        guard profiles.contains(where: { $0.id == profileID }) else { throw PeopleError.unknownProfile }
+        guard let i = incidents.firstIndex(where: { $0.id == incidentID }) else { throw PeopleError.unknownIncident }
+        incidents[i].subjectID = profileID
+    }
+
+    /// Removes a profile and everything that points at it (takedown / correction). Records detach, they are not deleted.
+    mutating func removeProfile(id: OfficialProfile.ID) {
+        profiles.removeAll { $0.id == id }
+        links.removeAll { $0.officialID == id }
+        for i in incidents.indices where incidents[i].subjectID == id { incidents[i].subjectID = nil }
+    }
+}

@@ -104,7 +104,7 @@ struct RecordsCourtListsView: View {
                     }.padding(.vertical, 2)
                 }
             }
-            Text("Accepting stores the record with its citation and hash. Linking a record to a named official is a separate, cited, moderator-confirmed step that is not offered here; a name never links on its own.")
+            Text("Accepting stores the record with its citation and hash. Attaching a record to a named official is a separate step in the People tab; a name never links on its own.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

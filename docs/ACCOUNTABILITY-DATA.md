@@ -144,7 +144,10 @@ program lawful, accurate, and worth defending:
   idempotent re-import); `PublishedListImporter` (a CSV that a public body already published — Brady/Giglio list or POST
   register — with the releasing office named by the user); `CourtListenerClient` (free RECAP/CourtListener search) and
   `PacerClient` (user's own PACER account) turning dockets into pending `lawsuit` candidates;
-  `PersonMatcher` (suggestions only, confidence always < 1); `UnitRecordsIndex`.
+  `PersonMatcher` (suggestions only, confidence always < 1); `UnitRecordsIndex`; `RecordsLedger` people steps
+  (`addProfile`, `proposeLink`, `confirmLink`, `attach`, `removeProfile`) behind the Hub **People** tab — a link starts as a
+  hidden inference (confidence < 1) and is confirmed only with an additional external citation; records attach to a person
+  only by an explicit choice; removing a person detaches their records.
 - **PACER budget** (`PacerBudget`): spending inside the free quarterly allowance (US$30, PACER's published waiver — a
   setting, confirm on pacer.uscourts.gov) is always allowed; anything above it is allowed only up to the user's
   "allowed above free" dollar limit, **default $0 = never billed**. Estimated cost is checked before each request and the
@@ -158,9 +161,14 @@ program lawful, accurate, and worth defending:
 **Location firewall, as implemented:** `UnitRecordsIndex.records(forUnit:agencyKey:)` takes only a unit number and the
 recognised agency's key — no sighting, place, time or camera — so nothing it returns can say where or when anyone was
 seen. It returns only moderator-confirmed `PersonLink`s and cited records, never inferences, and nothing at all when the
-agency was not recognised (unit numbers repeat across agencies). Accepting a candidate in the Hub stores a cited record
-but does **not** link it to a named person: that needs the cited, moderator-confirmed `PersonLink` step, which the Hub UI
-does not yet offer. Photos, face matching and live identification are still not built.
+agency was not recognised (unit numbers repeat across agencies). Accepting a candidate stores a cited record but does
+**not** link it to a person; that is a separate choice in the People tab. "Confirmed" here means *the operator confirmed
+it with an external citation* on their own Mac — there is no second-person moderation or publication path yet, and none
+of this syncs. Photos, face matching and live identification are still not built.
+
+FOIA deadline table: a 2026-10-15 desk check against secondary sources (AG opinions, state guidance) supported IL, CA, MA,
+WA, CT, NH and the NY acknowledgement rule; TX is a certify-or-produce rule; VA was **not** confirmed; California's 2026
+AB 1821 would change its period. Entries stay `verified: false` until statute text is read; each carries a `checkedNote`.
 
 Next implementation sequence for the records workstream:
 

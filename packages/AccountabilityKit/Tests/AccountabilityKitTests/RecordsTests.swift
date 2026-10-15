@@ -246,3 +246,34 @@ final class UnitRecordsIndexTests: XCTestCase {
         XCTAssertTrue(index.records(forUnit: "", agencyKey: "example-pd").officials.isEmpty)
     }
 }
+
+final class PeopleFlowTests: XCTestCase {
+    private let roster = SourceCitation(sourceType: .agencyRoster, url: URL(string: "https://pd.example.gov/roster"), retrievedAt: Date())
+    private let foia = SourceCitation(sourceType: .foiaRelease, retrievedAt: Date())
+
+    func testProfileLinkConfirmAttachAndTakedown() throws {
+        var ledger = RecordsLedger()
+        XCTAssertThrowsError(try ledger.addProfile(name: "Jane Doe", role: "Officer",
+                                                   citation: SourceCitation(sourceType: .communityVerified)))
+        let jane = try ledger.addProfile(name: "Jane Doe", role: "Officer", citation: roster)
+        let link = try ledger.proposeLink(profileID: jane.id, unitNumber: "D756", agencyKey: "example-pd", confidence: 1, citation: roster)
+        XCTAssertLessThan(link.confidence, 1, "a proposal can never claim certainty")
+        let rec = try IncidentRecord(kind: .decertification, reference: "R-1", agencyKey: "example-pd",
+                                     citations: [SourceCitation(sourceType: .decertificationRegister, retrievedAt: Date())])
+        ledger.incidents.append(rec)
+
+        XCTAssertTrue(UnitRecordsIndex(ledger: ledger).records(forUnit: "D756", agencyKey: "example-pd").officials.isEmpty, "unconfirmed ⇒ hidden")
+        XCTAssertThrowsError(try ledger.confirmLink(id: link.id, citation: SourceCitation(sourceType: .communityVerified)))
+        try ledger.confirmLink(id: link.id, citation: foia)
+        try ledger.attach(incidentID: rec.id, to: jane.id)
+        let shown = UnitRecordsIndex(ledger: ledger).records(forUnit: "D756", agencyKey: "example-pd")
+        XCTAssertEqual(shown.officials.first?.records.map(\.reference), ["R-1"])
+        XCTAssertThrowsError(try ledger.attach(incidentID: rec.id, to: UUID()))
+        XCTAssertThrowsError(try ledger.proposeLink(profileID: UUID(), unitNumber: "X", agencyKey: "a", citation: roster))
+
+        ledger.removeProfile(id: jane.id)
+        XCTAssertTrue(ledger.profiles.isEmpty && ledger.links.isEmpty)
+        XCTAssertNil(ledger.incidents[0].subjectID, "the record detaches, it is not deleted")
+        XCTAssertEqual(ledger.incidents.count, 1)
+    }
+}

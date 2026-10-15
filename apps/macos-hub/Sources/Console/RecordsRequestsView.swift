@@ -62,8 +62,9 @@ struct RecordsRequestsView: View {
                     if let due = r.dueOn { Text("Due \(due, format: .dateTime.year().month().day())\(r.dueDateIsOverride ? " (your date)" : "")") }
                 }
                 if let rule {
-                    Text("\(rule.days) \(rule.businessDays ? "business" : "calendar") days — \(rule.citation) (\(rule.covers.rawValue); not verified; weekends skipped, holidays not)")
+                    Text("\(rule.days) \(rule.businessDays ? "business" : "calendar") days — \(rule.citation) (\(rule.covers.rawValue); statute text not read; weekends skipped, holidays not)")
                         .font(.caption).foregroundStyle(.secondary)
+                    if let note = rule.checkedNote { Text(note).font(.caption2).foregroundStyle(.secondary) }
                 } else if r.stateCode != nil {
                     Text("No statutory window on file for \(r.stateCode ?? "") — set a due date yourself.").font(.caption).foregroundStyle(.secondary)
                 }

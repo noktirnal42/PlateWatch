@@ -39,6 +39,7 @@ struct RecordsPane: View {
                 Text("FOIA draft").tag(0)
                 Text("Requests").tag(3)
                 Text("Court & lists").tag(4)
+                Text("People").tag(5)
                 Text("Directory").tag(1)
                 Text("Programme").tag(2)
             }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
@@ -47,6 +48,7 @@ struct RecordsPane: View {
             case 1: directory
             case 3: RecordsRequestsView()
             case 4: RecordsCourtListsView()
+            case 5: RecordsPeopleView()
             default: programme
             }
         }.padding()
