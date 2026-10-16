@@ -120,7 +120,8 @@ tests must stay green before its status advances.
   thumbnail bytes and reapply plate/location privacy (19 PlateSync tests, 53 server tests pass).
   Hub automatic queue delivery and CloudKit publication remain
   unfinished; schema deployment alone does not prove either. Receipts now carry optional idempotency and
-  operator-confirmation metadata for audit surfaces. See [connection QA](BACKEND-QA-2026-10-15.md).
+  operator-confirmation metadata for audit surfaces. Intake and moderator state transitions now append
+  content-free audit details. See [connection QA](BACKEND-QA-2026-10-15.md).
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 

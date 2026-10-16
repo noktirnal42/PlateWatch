@@ -75,10 +75,12 @@ struct ModeratorController: RouteCollection {
         }
         guard let row = try await Sighting.find(id, on: req.db) else { throw Abort(.notFound) }
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
+            let previous = row.moderationState
             row.moderationState = decision.resultingState.rawValue
             try await row.save(on: req.db)
             req.logger.info("moderation: \(decision.rawValue) sighting \(id)")
-            await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString, on: req.db)
+            await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString,
+                                    detail: "state=\(previous)→\(row.moderationState); source=api", on: req.db)
         }
         return .noContent
     }
@@ -197,9 +199,12 @@ struct ModeratorController: RouteCollection {
         }
         // Only pending rows are actionable; a double-submit is a no-op.
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
+            let previous = row.moderationState
             row.moderationState = decision.resultingState.rawValue
             try await row.save(on: req.db)
             req.logger.info("moderation: \(decision.rawValue) sighting \(id)")
+            await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString,
+                                    detail: "state=\(previous)→\(row.moderationState); source=html", on: req.db)
         }
         return req.redirect(to: "/moderator", redirectType: .normal)
     }
