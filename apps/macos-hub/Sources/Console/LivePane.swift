@@ -200,6 +200,17 @@ struct LivePane: View {
                 Spacer()
                 Toggle("Overlays", isOn: $showOverlays).toggleStyle(.checkbox)
                     .help("Show car, truck, bus and motorcycle boxes; fleet labels include a fleet score. Small boxes show their label on hover.")
+                if showOverlays {
+                    HStack(spacing: 8) {
+                        Label("Vehicle class", systemImage: "square")
+                            .foregroundStyle(.yellow)
+                        Label("Fleet hit", systemImage: "square.fill")
+                            .foregroundStyle(.green)
+                    }
+                    .font(.caption)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Yellow boxes show vehicle classes. Green boxes show fleet hits.")
+                }
                 if hub.liveFeed == nil {
                     Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
                 }
