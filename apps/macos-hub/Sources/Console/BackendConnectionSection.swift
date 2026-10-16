@@ -7,14 +7,22 @@ struct BackendConnectionSection: View {
     @State private var cloudKit = "Not checked"
     @State private var server = "Not checked"
     @State private var checking = false
+    @State private var lastChecked: Date?
 
     var body: some View {
         Section("Backend connections") {
-            LabeledContent("CloudKit", value: cloudKit)
-            LabeledContent("Reference server", value: server)
+            connectionRow(title: "CloudKit", value: cloudKit, systemImage: "icloud")
+            connectionRow(title: "Reference server", value: server, systemImage: "server.rack")
             Text("Local review items remain on this Mac. Automatic outbox delivery is not enabled. Server moderation and CloudKit publication are separate paths; CloudKit publication tooling is still pending.")
                 .font(.caption).foregroundStyle(.secondary)
-            Button("Check connections") { Task { await check() } }.disabled(checking)
+            HStack(spacing: 10) {
+                Button(checking ? "Checking…" : "Check connections", systemImage: "arrow.clockwise") { Task { await check() } }
+                    .disabled(checking)
+                if let lastChecked {
+                    Text("Checked (lastChecked, format: .dateTime.hour().minute().second())")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
         .task { await check() }
     }
@@ -32,6 +40,33 @@ struct BackendConnectionSection: View {
         guard !Task.isCancelled else { return }
         cloudKit = results.0
         server = results.1
+        lastChecked = Date()
+    }
+
+    @ViewBuilder
+    private func connectionRow(title: String, value: String, systemImage: String) -> some View {
+        LabeledContent {
+            HStack(spacing: 6) {
+                Image(systemName: statusIcon(for: value))
+                    .foregroundStyle(statusColor(for: value))
+                Text(value).multilineTextAlignment(.trailing)
+            }
+        } label: {
+            Label(title, systemImage: systemImage)
+        }
+    }
+
+    private func statusIcon(for value: String) -> String {
+        if value == "Checking…" { return "hourglass" }
+        if value.localizedCaseInsensitiveContains("connected") || value.localizedCaseInsensitiveContains("reachable") { return "checkmark.circle.fill" }
+        if value.localizedCaseInsensitiveContains("not checked") { return "questionmark.circle" }
+        return "exclamationmark.triangle.fill"
+    }
+
+    private func statusColor(for value: String) -> Color {
+        if value == "Checking…" || value.localizedCaseInsensitiveContains("not checked") { return .secondary }
+        if value.localizedCaseInsensitiveContains("connected") || value.localizedCaseInsensitiveContains("reachable") { return .green }
+        return .orange
     }
 
     private func checkCloudKit() async -> String {
