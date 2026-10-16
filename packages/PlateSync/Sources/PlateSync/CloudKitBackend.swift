@@ -231,13 +231,8 @@ public struct CloudKitBackend: SyncBackend {
         let agencyKey = (agencyRecord["agencyKey"] as? String) ?? id.uuidString
         let vehicleQuery = CKQuery(recordType: RecordType.vehicle,
                                    predicate: NSPredicate(format: "agencyKey == %@", agencyKey))
-        let (vehicles, _) = try await publicDB.records(
-            matching: vehicleQuery, inZoneWith: nil,
-            desiredKeys: ["unitNumber"], resultsLimit: 200)
-        let unitNumbers: Set<String> = Set(vehicles.compactMap { result in
-            guard case .success(let record) = result.1 else { return nil }
-            return record["unitNumber"] as? String
-        })
+        let vehicleRecords = try await allRecords(matching: vehicleQuery, desiredKeys: ["unitNumber"])
+        let unitNumbers: Set<String> = Set(vehicleRecords.compactMap { $0["unitNumber"] as? String })
 
         let since = Date().addingTimeInterval(-30 * 86_400)
         let sightingQuery = CKQuery(recordType: RecordType.sighting,
@@ -246,9 +241,7 @@ public struct CloudKitBackend: SyncBackend {
                 NSPredicate(format: "capturedAt >= %@", since as NSDate),
                 NSPredicate(format: "moderationState == %@", Sighting.ModerationState.fleetConfirmed.rawValue)
             ]))
-        let (sightings, _) = try await publicDB.records(
-            matching: sightingQuery, inZoneWith: nil,
-            desiredKeys: [], resultsLimit: 200)
+        let sightingRecords = try await allRecords(matching: sightingQuery, desiredKeys: [])
         let agency = PublicAgencyDTO(
             id: id,
             name: agencyRecord["name"] as? String ?? "Unknown agency",
@@ -257,12 +250,33 @@ public struct CloudKitBackend: SyncBackend {
             parentAgencyID: (agencyRecord["parentAgencyID"] as? String).flatMap(UUID.init),
             publicContactURL: agencyRecord["publicContactURL"] as? String,
             budgetURL: agencyRecord["budgetURL"] as? String)
-        return AgencyReportDTO(agency: agency, fleetSize: vehicles.count,
-                               sightings30d: sightings.reduce(into: 0) { count, result in
-                                   if case .success = result.1 { count += 1 }
-                               }, activeUnits: unitNumbers.count,
+        return AgencyReportDTO(agency: agency, fleetSize: vehicleRecords.count,
+                               sightings30d: sightingRecords.count, activeUnits: unitNumbers.count,
                                publicContactURL: agency.publicContactURL,
                                budgetURL: agency.budgetURL, generatedAt: Date())
+    }
+
+    /// CloudKit caps each query page. Report cards must count the complete
+    /// public set, so follow cursors instead of silently undercounting at 200.
+    private func allRecords(matching query: CKQuery, desiredKeys: [CKRecord.FieldKey]) async throws -> [CKRecord] {
+        var records: [CKRecord] = []
+        var cursor: CKQueryOperation.Cursor?
+        repeat {
+            let page: ([(CKRecord.ID, Result<CKRecord, Error>)], CKQueryOperation.Cursor?)
+            if let cursor {
+                page = try await publicDB.records(continuingMatchFrom: cursor,
+                                                  desiredKeys: desiredKeys, resultsLimit: 200)
+            } else {
+                page = try await publicDB.records(matching: query, inZoneWith: nil,
+                                                  desiredKeys: desiredKeys, resultsLimit: 200)
+            }
+            records.append(contentsOf: page.0.compactMap { result in
+                guard case .success(let record) = result.1 else { return nil }
+                return record
+            })
+            cursor = page.1
+        } while cursor != nil
+        return records
     }
 
     public func ensureWatchlistSubscription() async throws {
