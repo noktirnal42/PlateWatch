@@ -50,6 +50,8 @@ targets:
         product: HubAgentProviders
       - package: HubAgents
         product: HubAgentCore
+      - package: HubAgents
+        product: NIMKit
 
   PlateWatchHubTests:
     type: bundle.unit-test

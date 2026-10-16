@@ -20,7 +20,10 @@ Vapor reference server for cross-platform expansion.
    (officer, agency, cost) must write a `SourceCitation`. No unsourced
    enrichment.
 3. **On-device first.** Do not add telemetry, analytics SDKs, frame uploads,
-   or third-party trackers. The sync boundary is `PlateSync`.
+   or third-party trackers. The sync boundary is `PlateSync`. The owner-selected
+   NVIDIA hosted research exception (2026-10-16) permits entered public text and
+   explicitly selected public/licensed document or benchmark images. Never route
+   local Review evidence, raw camera frames, private records or credentials to models.
 4. **No secrets in the repo.** `.gitignore` covers the usual Apple/CloudKit
    material; extend it if you add config formats.
 5. **Licenses matter.** Converted third-party ML models keep their upstream

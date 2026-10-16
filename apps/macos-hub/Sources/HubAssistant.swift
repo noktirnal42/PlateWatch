@@ -2,13 +2,29 @@ import Foundation
 import PlateSync
 import HubAgentCore
 import HubAgentProviders
+import NIMKit
 
 @MainActor
 final class HubAssistant: ObservableObject {
     enum Provider: String, CaseIterable, Identifiable {
-        case mlx = "Local MLX", apple = "Apple Intelligence"
+        case mlx = "Local MLX", apple = "Apple Intelligence", nvidia = "NVIDIA hosted"
         var id: String { rawValue }
     }
+    struct ModelChoice: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let detail: String
+    }
+    static let mlxModels = [ModelChoice(id: SharedModelStore.repo + "@" + SharedModelStore.revision,
+        name: "Qwen 1.5B", detail: "Pinned shared MLX cache · on device")]
+    static let appleModels = [ModelChoice(id: AppleAgentModel.defaultModelIdentifier,
+        name: "Foundation Model (default)", detail: "Apple on device")]
+    static let nvidiaModels = [
+        ModelChoice(id: NIMClient.agentModel, name: "Nemotron 3 Super 120B", detail: "Hosted text agent · recommended"),
+        ModelChoice(id: "nvidia/llama-3.1-nemotron-70b-instruct", name: "Llama 3.1 Nemotron 70B", detail: "Hosted text agent"),
+        ModelChoice(id: "nvidia/llama-3.1-nemotron-51b-instruct", name: "Llama 3.1 Nemotron 51B", detail: "Hosted text agent"),
+        ModelChoice(id: NIMClient.visionModel, name: "Nemotron 3.5 Super VL", detail: "Hosted multimodal model")
+    ]
     struct Activity: Identifiable {
         let id = UUID()
         let action: AgentAction
@@ -39,6 +55,7 @@ final class HubAssistant: ObservableObject {
 
     func availability(_ provider: Provider) -> String {
         switch provider {
+        case .nvidia: return "Hosted Nemotron Super · public tasks only · key in Settings"
         case .apple: return AppleAgentModel.availability ?? "On-device model available"
         case .mlx:
             #if !arch(arm64)
@@ -50,19 +67,36 @@ final class HubAssistant: ObservableObject {
         }
     }
 
-    func start(task: String, provider: Provider, bridge: HubAgentBridge?) {
+    func modelChoices(for provider: Provider) -> [ModelChoice] {
+        switch provider {
+        case .mlx: Self.mlxModels
+        case .apple: Self.appleModels
+        case .nvidia: Self.nvidiaModels
+        }
+    }
+
+    func defaultModel(for provider: Provider) -> String {
+        modelChoices(for: provider).first?.id ?? ""
+    }
+
+    func start(task: String, provider: Provider, modelID: String? = nil, bridge: HubAgentBridge?) {
         guard !running, let bridge else { return }
         let cancellation = AgentCancellation(seconds: 90)
         self.cancellation = cancellation
-        running = true; status = "Planning locally…"; summary = ""; activities = []
-        let model: any AgentModel = provider == .mlx ? mlx : AppleAgentModel()
+        running = true; status = provider == .nvidia ? "Planning with NVIDIA…" : "Planning locally…"; summary = ""; activities = []
+        let model: any AgentModel
+        switch provider {
+        case .mlx: model = mlx
+        case .apple: model = AppleAgentModel(modelIdentifier: modelID ?? AppleAgentModel.defaultModelIdentifier)
+        case .nvidia: model = NIMAgentModel(client: NIMCredentials.client(), model: modelID ?? NIMClient.agentModel)
+        }
         run = Task { [weak self] in
             guard let self else { return }
             let outcome: String
             do {
                 summary = try await AgentRunLoop.run(task: task, model: model, cancellation: cancellation,
                     execute: { [weak self] step in
-                        let result = try Self.execute(step, bridge: bridge)
+                        let result = try Self.execute(step, bridge: bridge, hosted: provider == .nvidia)
                         if let index = self?.activities.lastIndex(where: { $0.action == step.action && $0.state == "Running" }) {
                             self?.activities[index].result = result
                         }
@@ -71,7 +105,7 @@ final class HubAssistant: ObservableObject {
                         guard let self else { return }
                         if state == "Running" { activities.append(.init(action: action, state: state)) }
                         else if let index = activities.lastIndex(where: { $0.action == action && $0.state == "Running" }) { activities[index].state = state }
-                        status = state == "Running" ? "Running \(action.rawValue)…" : "Planning locally…"
+                        status = state == "Running" ? "Running \(action.rawValue)…" : (provider == .nvidia ? "Planning with NVIDIA…" : "Planning locally…")
                     })
                 status = "Completed"; outcome = "completed"
             } catch {
@@ -91,8 +125,9 @@ final class HubAssistant: ObservableObject {
     func stop() { status = "Stopping…"; cancellation?.cancel(); run?.cancel() }
     func unload() { guard !running else { return }; Task { await mlx.unload() }; status = "Local model unloaded" }
 
-    private static func execute(_ step: AgentStep, bridge: HubAgentBridge) throws -> String {
+    private static func execute(_ step: AgentStep, bridge: HubAgentBridge, hosted: Bool) throws -> String {
         _ = try step.validated()
+        if hosted && [.reviewQueue, .findRecords].contains(step.action) { throw NIMError.invalidInput }
         let command: String
         var args: [String: Any] = ["limit": 5]
         switch step.action {
@@ -107,6 +142,11 @@ final class HubAssistant: ObservableObject {
         }
         var value = try bridge.execute(command, data: JSONSerialization.data(withJSONObject: args))
         if step.action == .status { value.removeValue(forKey: "assistant_status"); value.removeValue(forKey: "assistant_actions") }
+        if hosted {
+            let data = try JSONSerialization.data(withJSONObject: value)
+            let sanitized = try NIMPublicContext.sanitize(action: step.action, result: data)
+            return String(decoding: sanitized, as: UTF8.self)
+        }
         let data = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
         return String(String(decoding: data, as: UTF8.self).prefix(3000))
     }

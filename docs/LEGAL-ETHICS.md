@@ -166,3 +166,17 @@ disciplined than the systems it audits.
   fleet-confirmed rule would publish it anyway.
 - Evaluation photos are third-party, licensed (see `eval/manifest.json`), kept out of the repo, and
   never converted into synthetic "sightings".
+
+## Optional hosted public research — owner selection, 2026-10-16
+
+The owner selected NVIDIA hosted agents, cited search, document extraction and a
+separate vehicle benchmark after reviewing the proposed uses. The explicit NVIDIA
+provider sends the user's entered public task and allowlisted public feed diagnostics.
+It cannot read local queue or record tools. The research pane sends only entered
+public passages or an explicitly selected public/licensed image/PDF page after
+content confirmation; the preview shows the prepared image sent. No background frame
+upload, local Review image routing, biometric matching or automatic acceptance is
+authorized by this exception. Model output remains untrusted research data; original
+source URL/page and extracted regions accompany it. Accepted record enrichment still
+requires `SourceCitation` and human review. No API key or image bytes enter the action
+journal. The original local evidence and shared structured-data rules remain in force.

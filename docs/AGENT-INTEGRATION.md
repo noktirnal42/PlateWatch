@@ -64,6 +64,14 @@ Task/result text lives only in the current pane. A private 0700/0600 action jour
 retains up to 100 run identities, timestamps, provider/revision, outcomes and command
 names; it does not persist prompts, results, images, plates or credentials.
 
+The pane has separate provider and model pickers. Local MLX exposes the pinned verified
+Qwen cache, Apple Foundation Models exposes the system default on-device model, and
+NVIDIA hosted exposes the supported Nemotron text and multimodal choices. Each provider's
+selection is saved independently in local app preferences and the selected model identifier
+is retained in the local activity journal. NVIDIA research operations continue to use their
+specialized embedding, reranking, parsing and vision endpoints rather than routing through
+the general assistant model choice.
+
 ### Shared MLX store and provenance
 
 The resolver adapts Axiom RE's read-only cache discovery/hash patterns; resident serial
@@ -103,8 +111,9 @@ broad planning reliability, prompt-injection robustness or accuracy of model sum
 Longer-task fixtures, source-attribution evaluation, memory/thermal pilots and physical
 hardware QA remain. No remote inference or evidence publication was exercised.
 
-NVIDIA NIM is a researched optional provider, pending the owner's implementation choice;
-see [candidate roles and payload boundary](research/NVIDIA-NIM-OPTIONS-2026-10-16.md).
+NVIDIA NIM is now an explicit hosted provider selected by the owner, with public-only
+command observations, secure settings and a separate cited public-research workspace;
+see [implementation and live endpoint findings](research/NVIDIA-NIM-OPTIONS-2026-10-16.md).
 PCC remains pending signed-provider/data-boundary proof. ACP is deferred until needed.
 
 ### Provider references checked October 14, 2026

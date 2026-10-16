@@ -5,6 +5,7 @@ let package = Package(
     name: "HubAgents", platforms: [.macOS(.v14)],
     products: [
         .library(name: "HubAgentCore", targets: ["HubAgentCore"]),
+        .library(name: "NIMKit", targets: ["NIMKit"]),
         .library(name: "HubAgentProviders", targets: ["HubAgentProviders"])
     ],
     dependencies: [
@@ -13,6 +14,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "HubAgentCore"),
+        .target(name: "NIMKit", dependencies: ["HubAgentCore"]),
+        .testTarget(name: "NIMKitTests", dependencies: ["NIMKit"]),
         .target(name: "HubAgentProviders", dependencies: ["HubAgentCore",
             .product(name: "MLXLLM", package: "mlx-swift-examples"),
             .product(name: "MLXLMCommon", package: "mlx-swift-examples")]),

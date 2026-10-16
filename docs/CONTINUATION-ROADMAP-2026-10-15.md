@@ -75,5 +75,6 @@ completed smoke tasks in the signed Hub; cancelled MLX runs executed no subseque
 commands. Seven core tests and 45 Hub tests pass (four Hub opt-ins skipped). Broader
 planning/attribution quality and resource pilots remain; PCC is not implemented.
 The iOS duplicate-watch UI regression test also passes after dismissing its keyboard
-before checking the validation message. NVIDIA research is documented separately and
-implementation awaits the owner's selection; no remote provider was enabled.
+before checking the validation message. NVIDIA hosted research was subsequently selected by the owner; its explicit provider,
+cited retrieval, extraction and separate vehicle benchmark are now integrated. See
+the dated NIM report for live endpoint corrections and quality limits.

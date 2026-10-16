@@ -7,7 +7,7 @@ import SwiftUI
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
         case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
-        case moderation = "Moderation", settings = "Settings", assistant = "Assistant"
+        case moderation = "Moderation", settings = "Settings", assistant = "Assistant", research = "NVIDIA research"
         var id: String { rawValue }
         var icon: String {
             switch self {
@@ -21,6 +21,7 @@ struct ConsoleView: View {
             case .moderation: return "checkmark.shield"
             case .settings: return "gearshape"
             case .assistant: return "sparkles"
+            case .research: return "doc.text.magnifyingglass"
             }
         }
     }
@@ -64,6 +65,10 @@ struct ConsoleView: View {
                     AssistantPane(hub: hub, assistant: hub.assistant).opacity(selection == .assistant ? 1 : 0)
                         .allowsHitTesting(selection == .assistant).accessibilityHidden(selection != .assistant).disabled(selection != .assistant)
                 }
+                if selection == .research || visited.contains(.research) {
+                    NIMResearchPane().opacity(selection == .research ? 1 : 0)
+                        .allowsHitTesting(selection == .research).accessibilityHidden(selection != .research).disabled(selection != .research)
+                }
                 if selection == .review || visited.contains(.review) {
                     ReviewPane(onQueueChange: hub.refreshPendingCount).opacity(selection == .review ? 1 : 0)
                         .allowsHitTesting(selection == .review).accessibilityHidden(selection != .review).disabled(selection != .review)
@@ -79,7 +84,7 @@ struct ConsoleView: View {
                 case .records: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .moderation: ModerationPane(onSignOut: { moderator = false; selection = .dashboard })
                 case .settings: SettingsPane(hub: hub, moderator: $moderator)
-                case .assistant: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+                case .assistant, .research: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 }
                 }
             }
@@ -252,6 +257,7 @@ struct SettingsPane: View {
     var body: some View {
         Form {
             BackendConnectionSection()
+            NIMSettingsSection()
             Section("Appearance") {
                 Picker("Color scheme", selection: $appearance) {
                     Text("System").tag("system")

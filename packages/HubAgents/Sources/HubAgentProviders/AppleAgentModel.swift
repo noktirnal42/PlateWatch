@@ -3,8 +3,12 @@ import FoundationModels
 import HubAgentCore
 
 public struct AppleAgentModel: AgentModel {
-    public let identifier = "Apple Foundation Models · on device"
-    public init() {}
+    public static let defaultModelIdentifier = "apple.foundation-models.default"
+    public let modelIdentifier: String
+    public var identifier: String { modelIdentifier + " · Apple Foundation Models · on device" }
+    public init(modelIdentifier: String = AppleAgentModel.defaultModelIdentifier) {
+        self.modelIdentifier = modelIdentifier
+    }
     public static var availability: String? {
         guard #available(macOS 26, *) else { return "Requires macOS 26 or later." }
         switch SystemLanguageModel.default.availability {

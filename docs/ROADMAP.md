@@ -128,6 +128,7 @@ first.
 - [x] In-app planner/executor driving the same validated commands, activity journal, budgets and stop control.
 - [x] On-device Apple Foundation Models agent provider (separate from the existing markings parser).
 - [x] Local MLX provider using the existing universal Hugging Face store, with missing-volume refusal and pinned/licensed models.
+- [x] Optional NVIDIA hosted agent and public-research workspace (cited retrieval, document extraction, separate geometry benchmark); broader quality evaluation pending.
 - [ ] Apple Foundation Models PCC provider: signed entitlement/account/platform and actual-inference validation; approved data boundary.
 - [ ] Consider ACP frontend after a usable internal conversational agent exists.
 
