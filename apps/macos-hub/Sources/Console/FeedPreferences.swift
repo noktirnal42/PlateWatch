@@ -32,6 +32,11 @@ final class FeedFavorites: ObservableObject {
         if watched { watchedIDs.insert(id) } else { watchedIDs.remove(id) }
         defaults.set(watchedIDs.map(\.uuidString).sorted(), forKey: "hubWatchedFeeds")
     }
+    func watch(_ ids: Set<UUID>) {
+        watchedIDs.formUnion(ids)
+        defaults.set(watchedIDs.map(\.uuidString).sorted(), forKey: "hubWatchedFeeds")
+    }
+    @discardableResult
     func toggleWatched(_ id: UUID) -> Bool {
         setWatched(id, watched: !watchedIDs.contains(id))
         return watchedIDs.contains(id)

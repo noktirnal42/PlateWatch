@@ -316,7 +316,7 @@ final class HubController: ObservableObject {
     /// Convenience: watch every favorite (the curated set), keeping non-favorite
     /// watches as they are.
     func watchAllFavorites() {
-        for id in favorites.ids { favorites.setWatched(id, watched: true) }
+        favorites.watch(favorites.ids)
         syncRunnerWatch()
     }
 

@@ -215,6 +215,9 @@ struct FeedsPane: View {
                 TableColumn("") { s in
                     FeedBlockButton(hub: hub, preferences: favorites, source: s)
                 }.width(28)
+                TableColumn("Watch") { source in
+                    FeedWatchButton(hub: hub, favorites: favorites, source: source)
+                }.width(42)
                 TableColumn("Camera / source") { source in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(source.name).lineLimit(1)
@@ -345,7 +348,7 @@ struct CameraPreviewPanel: View {
                     }.buttonStyle(.plain).help("Favorite")
                         .accessibilityLabel("Favorite \(source.name)")
                     FeedBlockButton(hub: hub, preferences: favorites, source: source)
-                FeedWatchButton(hub: hub, favorites: favorites, source: source)
+                    FeedWatchButton(hub: hub, favorites: favorites, source: source)
                 }
                 Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
                 Label(source.kind == .hls ? "HLS video · sampled analysis" : "Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: source.kind == .hls ? "video" : "photo")

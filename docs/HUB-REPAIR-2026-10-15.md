@@ -124,3 +124,22 @@ Hub verification: 33 tests, four opt-in skips, zero failures. New coverage verif
 watch persistence, selective requests, enrollment/removal, cancellation during policy
 lookup, preview independence, HLS decoder capacity, Live priority and decoder release.
 The original OpenCode checkout and its unfinished edits remain untouched.
+
+### Watch responsiveness regression and final native check
+
+The first watch integration recomputed the selected HLS set inside a filter over
+the entire catalogue. The owner reported a hang; this redundant nested scan was
+removed and the selected set is now computed once per change. “Watch all favorites”
+now also writes/publishes its union once. A 10,000-entry catalogue test exercises
+69 watched cameras, mixed snapshot/HLS media, Live priority and removal; the final
+run completed this test in 0.23 s. All 34 Hub tests passed (four opt-in skips).
+
+The corrected signed build was installed. Actual native favorite-card Watch click
+changed polling from one to two watched cameras, delivered analysis and kept MCP
+and pane navigation responsive; toggling back restored the exact preceding watch
+set. The table now also includes its Watch column (visual QA caught the omission).
+Native screenshot and accessibility checks used the owner's previously authorized
+fallback. This is targeted regression evidence, not an all-day soak or a claim that
+no other crash exists. The latest observed real queue count is seven; no real queue
+entries were rejected during this continuation. Existing user favorites/blocks and
+watch choices were preserved. Recognition follow-up is documented in EVALUATION.md.

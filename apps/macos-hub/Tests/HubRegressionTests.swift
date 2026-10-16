@@ -187,6 +187,28 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertEqual(runner.activeVideoCount, 0)
     }
 
+    @MainActor func testWatchControlsStayResponsiveWithTenThousandCameraCatalogue() throws {
+        var sources: [PublicFeedSource] = []
+        for i in 0..<10000 {
+            var copy = try source("/camera.jpg")
+            copy.name = "Camera \(i)"
+            if i.isMultiple(of: 10) { copy.kind = .hls }
+            sources.append(copy)
+        }
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: sources), watchedIDs: []) { _, _ in }
+        let started = Date()
+        runner.setWatched(Set(sources.prefix(69).map(\.id)))
+        runner.setLiveVideoSource(sources[60].id)
+        runner.setLiveVideoSource(nil)
+        runner.setWatched([])
+        // A generous bound catches repeated full-catalogue scans inside the
+        // per-source loop, while allowing slow CI machines to run this check.
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        XCTAssertEqual(runner.runningCount, 0)
+    }
+
     @MainActor func testApprovingHLSDoesNotDecodeUnselectedStreams() async throws {
         HubStubProtocol.state.reset { _ in .init(body: Data()) }
         var camera = try source("/camera.m3u8")

@@ -190,7 +190,8 @@ final class FeedRunner: ObservableObject {
             stopHLS(id)
             if !blockedIDs.contains(id) { sourceStates[id] = nil }
         }
-        let added = (catalogue?.runnable ?? []).filter { ids.subtracting(old).contains($0.id) && !blockedIDs.contains($0.id) }
+        let addedIDs = ids.subtracting(old)
+        let added = (catalogue?.runnable ?? []).filter { addedIDs.contains($0.id) && !blockedIDs.contains($0.id) }
         for source in added { sourceStates[source.id] = .checking }
         for group in Dictionary(grouping: added, by: { Self.origin($0.url) }).values {
             guard let first = group.first else { continue }
@@ -317,11 +318,12 @@ final class FeedRunner: ObservableObject {
     /// Catalogue approval alone never starts hundreds of AVPlayers.
     func setLiveVideoSource(_ id: UUID?) {
         requestedHLSID = id
-        for old in Array(hlsSources.keys) where !selectedHLSIDs.contains(old) {
+        let selected = selectedHLSIDs
+        for old in Array(hlsSources.keys) where !selected.contains(old) {
             stopHLS(old)
             if !blockedIDs.contains(old) { sourceStates[old] = watchedIDs.contains(old) ? .videoIdle : nil }
         }
-        let videoOrigins = Set((catalogue?.runnable ?? []).filter { selectedHLSIDs.contains($0.id) }.map { Self.origin($0.url) })
+        let videoOrigins = Set((catalogue?.runnable ?? []).filter { selected.contains($0.id) }.map { Self.origin($0.url) })
         for origin in videoOrigins {
             checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == origin } ?? [])
         }
