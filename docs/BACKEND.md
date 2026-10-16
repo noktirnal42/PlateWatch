@@ -7,7 +7,9 @@
 > CloudKit capability, and its local moderation server was stopped. Connection diagnostics
 > now distinguish CloudKit account availability from the reference server's health.
 > The Hub review queue remains local; automatic delivery and CloudKit moderator publication
-> are not enabled. See [connection QA](BACKEND-QA-2026-10-15.md).
+> are not enabled. The development schema now declares queryable `agencyKey` fields on
+> `Agency` and `Vehicle`; deploy and populate those fields before enabling CloudKit
+> agency-scoped reports. See [connection QA](BACKEND-QA-2026-10-15.md).
 
 ## Decision: CloudKit public database is the primary backend
 
