@@ -5,19 +5,18 @@ import SwiftUI
 @main
 struct PlateWatchHubApp: App {
     let modelContainer: ModelContainer
-    let backend: any SyncBackend
     /// Owned here so ingest (folder watch + snapshot server) starts at launch, not when the
     /// menu-bar popover is first opened.
     @StateObject private var hub: HubController
 
     init() {
         let schema = Schema([PendingSubmission.self])
-        let config = ModelConfiguration("PlateWatchHub", schema: schema, isStoredInMemoryOnly: HubQAFixture.enabled)
+        // This is a local review queue, never an implicit SwiftData/CloudKit store.
+        let config = ModelConfiguration("PlateWatchHub", schema: schema, isStoredInMemoryOnly: HubQAFixture.enabled, cloudKitDatabase: .none)
         modelContainer = (try? ModelContainer(for: schema, configurations: config))
             // A hub with no local persistence still runs degraded (log-only).
             ?? (try! ModelContainer(for: schema, configurations:
-                ModelConfiguration("PlateWatchHub-fallback", schema: schema, isStoredInMemoryOnly: true)))
-        backend = SyncBackends.makeDefault()
+                ModelConfiguration("PlateWatchHub-fallback", schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)))
         HubQAFixture.prepare(context: modelContainer.mainContext)
         let controller = HubController(context: modelContainer.mainContext)
         let bridge = HubAgentBridge(hub: controller, context: modelContainer.mainContext)

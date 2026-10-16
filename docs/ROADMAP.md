@@ -4,7 +4,7 @@ Legend: ✅ done · ◐ in progress · ⬜ planned
 
 > **Status as of 2026-10-13:** the packages, server and importers are built and
 > tested (129 tests), but the iOS app does not yet complete the core loop
-> (camera → plate read → published sighting) and CloudKit is not live. See
+> (camera → plate read → published sighting) and CloudKit publication is not complete. The production schema is deployed; client delivery and moderator publishing need verification. See
 > [QA-REPORT.md](QA-REPORT.md) for the ranked list of what is blocking, and
 > **M-Alpha** below for the work that comes first.
 
@@ -19,7 +19,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Evaluation corpus + harness (`eval/`), verified on a physical iPhone
 - ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
-- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; **needs the Apple-account step** (import schema, deploy to production) and a moderator publish tool (P0-5)
+- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub client capability/diagnostics added, reviewed delivery and moderator publish tool remain (P0-5)
 - ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
 - ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors and painted icon landed (2026-10-14); full field/accessibility audit and received-history/media remain

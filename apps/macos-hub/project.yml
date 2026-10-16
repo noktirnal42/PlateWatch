@@ -33,6 +33,11 @@ targets:
         NSBonjourServices: [_platewatch-snapshot._tcp]   # advertises the snapshot ingest endpoint to IP cameras on the LAN
         CFBundleDisplayName: PlateWatch Hub
         ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Support/PlateWatchHub.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [iCloud.org.platewatch.platewatch]
+        com.apple.developer.icloud-services: [CloudKit]
     dependencies:
       - package: PlateKit
       - package: CaptureKit

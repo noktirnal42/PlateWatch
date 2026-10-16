@@ -245,6 +245,7 @@ struct SettingsPane: View {
 
     var body: some View {
         Form {
+            BackendConnectionSection()
             Section("Appearance") {
                 Picker("Color scheme", selection: $appearance) {
                     Text("System").tag("system")

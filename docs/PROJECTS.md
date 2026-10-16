@@ -104,10 +104,13 @@ tests must stay green before its status advances.
 - **Docs:** BACKEND, NEXT-STEPS §1, DECISIONS.
 - **Test:** `swift test --package-path packages/PlateSync` &&
   `swift test --package-path server` (41 tests, no database needed).
-- **Status:** schema written, not imported (owner Apple-account step);
-  moderator publish tool not started; REST mirror not deployed.
-- **Next:** import + deploy `cloudkit/schema.ckdb`; moderator publish CLI;
-  verify `_creator`-only roles; optional mirror hosting.
+- **Status:** 2026-10-15 production schema export confirms deployment and creator-only
+  submission roles. Hub capability and read-only connection diagnostics added; REST fallback
+  port now matches server 8083. Hub automatic queue delivery and CloudKit publication remain
+  unfinished; schema deployment alone does not prove either. See [connection QA](BACKEND-QA-2026-10-15.md).
+- **Next:** verify signed Hub account access, restore local REST service and native moderation
+  refresh, then explicit reviewed delivery, CloudKit moderator publication and two-account
+  isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
 ## WS6 — Trust & redaction (cross-cutting)
 
