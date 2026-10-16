@@ -68,7 +68,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 ## M4 — Network & UX
 - ✅ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save, silent-push wake, delta matching and haptic/local alert handling implemented; entitlement and physical-device push QA remain)
 - ◐ Heatmap + timeline: k-anonymous aggregate API, REST agency filter, and iOS map/timeline scope picker shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); agency scoping still needs deployed vehicle linking on CloudKit
-- ◐ "Agency report card": server-rendered report page and iOS agency directory/detail surface implemented (fleet size, 30-day sightings, active units, budget link); CloudKit aggregate delivery and agency↔vehicle deployment remain
+- ◐ "Agency report card": server-rendered report page and iOS agency directory/detail surface implemented (fleet size, 30-day sightings, active units, budget link); CloudKit now has an explicit agencyKey join and aggregate query path, pending schema deployment/population
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
 - ✅ Public feed is fleet-confirmed only (plates not persisted for unconfirmed sightings)
 - ✅ iOS UI pass: plate-style badges, privacy chip, Open Settings, sync pills, app icon, launch screen, onboarding, About, branded empty states, Explore map (full redesign still open — see M-Alpha)

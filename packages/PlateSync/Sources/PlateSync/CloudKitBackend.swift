@@ -202,7 +202,7 @@ public struct CloudKitBackend: SyncBackend {
     public func agencies() async throws -> [PublicAgencyDTO] {
         let query = CKQuery(recordType: RecordType.agency, predicate: NSPredicate(value: true))
         let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
-                                                      desiredKeys: ["name", "shortName", "level", "parentAgencyID", "publicContactURL", "budgetURL"],
+                                                      desiredKeys: ["agencyKey", "name", "shortName", "level", "parentAgencyID", "publicContactURL", "budgetURL"],
                                                       resultsLimit: 200)
         return results.compactMap { _, result in
             guard case .success(let record) = result else { return nil }
@@ -217,7 +217,52 @@ public struct CloudKitBackend: SyncBackend {
     }
 
     public func agencyReport(id: UUID) async throws -> AgencyReportDTO {
-        throw SyncError.unsupported
+        let agencyQuery = CKQuery(recordType: RecordType.agency,
+                                  predicate: NSPredicate(format: "agencyKey == %@", id.uuidString))
+        let (agencyRows, _) = try await publicDB.records(
+            matching: agencyQuery, inZoneWith: nil,
+            desiredKeys: ["agencyKey", "name", "shortName", "level", "parentAgencyID", "publicContactURL", "budgetURL"],
+            resultsLimit: 1)
+        guard let agencyRecord = agencyRows.compactMap({ result -> CKRecord? in
+            guard case .success(let record) = result.1 else { return nil }
+            return record
+        }).first else { throw SyncError.unsupported }
+
+        let agencyKey = (agencyRecord["agencyKey"] as? String) ?? id.uuidString
+        let vehicleQuery = CKQuery(recordType: RecordType.vehicle,
+                                   predicate: NSPredicate(format: "agencyKey == %@", agencyKey))
+        let (vehicles, _) = try await publicDB.records(
+            matching: vehicleQuery, inZoneWith: nil,
+            desiredKeys: ["unitNumber"], resultsLimit: 200)
+        let unitNumbers: Set<String> = Set(vehicles.compactMap { result in
+            guard case .success(let record) = result.1 else { return nil }
+            return record["unitNumber"] as? String
+        })
+
+        let since = Date().addingTimeInterval(-30 * 86_400)
+        let sightingQuery = CKQuery(recordType: RecordType.sighting,
+            predicate: NSCompoundPredicate(andPredicateWithSubpredicates: [
+                NSPredicate(format: "agencyKey == %@", agencyKey),
+                NSPredicate(format: "capturedAt >= %@", since as NSDate),
+                NSPredicate(format: "moderationState == %@", Sighting.ModerationState.fleetConfirmed.rawValue)
+            ]))
+        let (sightings, _) = try await publicDB.records(
+            matching: sightingQuery, inZoneWith: nil,
+            desiredKeys: [], resultsLimit: 200)
+        let agency = PublicAgencyDTO(
+            id: id,
+            name: agencyRecord["name"] as? String ?? "Unknown agency",
+            shortName: agencyRecord["shortName"] as? String,
+            level: agencyRecord["level"] as? String ?? "unknown",
+            parentAgencyID: (agencyRecord["parentAgencyID"] as? String).flatMap(UUID.init),
+            publicContactURL: agencyRecord["publicContactURL"] as? String,
+            budgetURL: agencyRecord["budgetURL"] as? String)
+        return AgencyReportDTO(agency: agency, fleetSize: vehicles.count,
+                               sightings30d: sightings.reduce(into: 0) { count, result in
+                                   if case .success = result.1 { count += 1 }
+                               }, activeUnits: unitNumbers.count,
+                               publicContactURL: agency.publicContactURL,
+                               budgetURL: agency.budgetURL, generatedAt: Date())
     }
 
     public func ensureWatchlistSubscription() async throws {

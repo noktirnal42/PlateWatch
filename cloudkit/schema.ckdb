@@ -48,6 +48,7 @@ RECORD TYPE Vehicle (
     "___recordID"    REFERENCE QUERYABLE,
     plateText        STRING QUERYABLE,
     unitNumber       STRING QUERYABLE,
+    agencyKey        STRING QUERYABLE,
     agencyName       STRING,
     vehicleClass     STRING,
     make             STRING,
@@ -60,6 +61,7 @@ RECORD TYPE Vehicle (
 RECORD TYPE Agency (
     "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
     "___recordID"    REFERENCE QUERYABLE,
+    agencyKey        STRING QUERYABLE,
     name             STRING QUERYABLE,
     shortName        STRING,
     level            STRING,
