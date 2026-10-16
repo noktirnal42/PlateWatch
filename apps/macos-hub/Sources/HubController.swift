@@ -753,8 +753,11 @@ final class HubController: ObservableObject {
                 context.insert(PendingSubmission(
                     idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
                     payloadJSON: payload))
-                try? context.save()
-                pendingCount += 1
+                do {
+                    try context.save()
+                    if let crop { try? EvidenceArchive.current.store(crop.jpegData, hash: crop.sha256Hex) }
+                    pendingCount += 1
+                } catch { context.rollback() }
             }
         }
         return (hits, agencyKeys)
@@ -1105,7 +1108,10 @@ final class RTSPStreamHandler: @unchecked Sendable {
                         context.insert(PendingSubmission(
                             idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
                             payloadJSON: payload))
-                        try? context.save()
+                        do {
+                            try context.save()
+                            if let crop { try? EvidenceArchive.current.store(crop.jpegData, hash: crop.sha256Hex) }
+                        } catch { context.rollback() }
                     }
                 }
             }

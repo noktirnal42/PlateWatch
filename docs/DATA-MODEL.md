@@ -137,3 +137,17 @@ omitted because of neighboring vehicles/text (LEGAL-ETHICS Rule 1, local Review 
 omits it; CloudKit maps no image field. Only the crop hash crosses that boundary. REST also
 reapplies plate/identity-registration and exact-coordinate redaction for unconfirmed fleet
 submissions, including older queued payloads. DTO wire field compatibility is unchanged.
+
+## Local hash-addressed evidence recovery (2026-10-15)
+
+After a Hub queue record saves, its intact JPEG is also stored locally at
+`Application Support/PlateWatchHub/Evidence/<sha256>.jpg`. The original inline DTO
+copy remains. Opening Review backfills valid existing images into this archive.
+Review and the local agent evidence command fall back to the archive when inline bytes
+are absent, damaged or fail their recorded hash. Every archived read verifies the SHA-256,
+bounded JPEG and file type. Archive directories/files are owner-only (0700/0600).
+
+A hash identifies bytes; it cannot reconstruct an image when no copy survives. This
+second copy protects against loss/corruption of one queue payload, not disk loss.
+Intentional rejection deletes the archive copy after the final queued reference to the
+same hash is removed. No raw frames or image bytes are uploaded by this feature.

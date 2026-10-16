@@ -162,3 +162,14 @@ overlap crop opened at 636 by 314 pixels without blackouts. The normal signed ap
 reinstalled and its real queue preserved. This affects new captures; previously omitted
 image bytes or destructively redacted pixels cannot be reconstructed from a crop hash.
 REST continues to omit image bytes and CloudKit maps no image field.
+
+## Future evidence recovery
+
+New recorded crops now have a second owner-only local copy addressed by SHA-256. Review
+backfills valid queued evidence and resolves absent/corrupt inline bytes from that archive;
+the local agent evidence command uses the same verified resolver. Both copies remain
+local. A digest without surviving bytes cannot recover older omitted photos. Intentional
+rejection cleans up an archive only after the last queued reference disappears.
+40 Hub tests pass (four opt-in skips), including missing/corrupt inline recovery, damaged
+archive refusal/repair, invalid hash/path rejection, file permissions and shared-reference
+deletion. This is protection against one payload loss, not a backup of the whole disk.

@@ -152,8 +152,8 @@ final class HubAgentBridge {
             if command == "review.evidence" {
                 guard let row = rows.first(where: { $0.idempotencyKey == args.id }),
                       let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON),
-                      let raw = dto.cropJPEGBase64, let bytes = Data(base64Encoded: raw), bytes.count <= 40_000 else { throw BridgeFailure("No bounded evidence image for this queued record") }
-                return ["mime_type": "image/jpeg", "jpeg_base64": raw, "bytes": bytes.count, "hash": dto.cropHashSHA256 ?? "",
+                      let bytes = EvidenceArchive.current.resolve(base64: dto.cropJPEGBase64, hash: dto.cropHashSHA256), bytes.count <= 40_000 else { throw BridgeFailure("No bounded evidence image for this queued record") }
+                return ["mime_type": "image/jpeg", "jpeg_base64": bytes.base64EncodedString(), "bytes": bytes.count, "hash": dto.cropHashSHA256 ?? "",
                         "note": "Stored local vehicle crop; not an original camera frame; may include incidental background content"]
             }
             return ["total": rows.count, "items": rows.dropFirst(offset).prefix(limit).map { row -> [String: Any] in
@@ -161,7 +161,7 @@ final class HubAgentBridge {
                 return ["id": row.idempotencyKey, "created_at": ISO8601DateFormatter().string(from: row.createdAt),
                         "agency": dto?.markings?.agencyText ?? dto?.identity?.agency?.agencyKey ?? "unresolved",
                         "unit": dto?.markings?.unitNumber ?? "", "fleet_confidence": dto?.fleetConfidence ?? 0,
-                        "has_evidence": dto?.cropJPEGBase64 != nil, "retries": row.retryCount, "last_error": row.lastError ?? ""]
+                        "has_evidence": dto.flatMap { EvidenceArchive.current.resolve(base64: $0.cropJPEGBase64, hash: $0.cropHashSHA256) } != nil, "retries": row.retryCount, "last_error": row.lastError ?? ""]
             }]
         case "records.list":
             let ledger = RecordsWorkspace.shared.ledger

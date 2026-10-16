@@ -53,6 +53,7 @@ targets:
     sources:
       - Tests
       - Sources/EvidenceCrop.swift
+      - Sources/EvidenceArchive.swift
       - Sources/FeedRunner.swift
       - Sources/HLSPreviewBudget.swift
       - Sources/Console/FeedPreferences.swift

@@ -35,7 +35,7 @@ struct ReviewPane: View {
                        agency: dto?.markings?.agencyText ?? dto?.identity?.agency?.agencyKey ?? "unresolved",
                        agencyKey: dto?.identity?.agency?.agencyKey,
                        confidence: dto?.fleetConfidence ?? 0, retries: r.retryCount, error: r.lastError ?? "",
-                       thumbnail: dto?.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }.flatMap(NSImage.init(data:)))
+                       thumbnail: dto.flatMap { EvidenceArchive.current.resolve(base64: $0.cropJPEGBase64, hash: $0.cropHashSHA256) }.flatMap(NSImage.init(data:)))
         }
     }
 
@@ -80,6 +80,17 @@ struct ReviewPane: View {
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding()
+        .task(id: rows.map(\.idempotencyKey)) {
+            for row in rows {
+                guard !Task.isCancelled else { return }
+                if let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON),
+                   let hash = dto.cropHashSHA256,
+                   let data = EvidenceArchive.current.resolve(base64: dto.cropJPEGBase64, hash: hash) {
+                    try? EvidenceArchive.current.store(data, hash: hash)
+                }
+                await Task.yield()
+            }
+        }
     }
 }
 
