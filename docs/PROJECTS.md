@@ -66,7 +66,7 @@ tests must stay green before its status advances.
   The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
-  readable SUV/van/pickup aliases and classifier confidence when a body label is unavailable).
+  readable SUV/van/pickup/sedan/motorbike aliases and classifier confidence when a body label is unavailable).
   iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared
   sync boundary; CloudKit directory records are supported, while aggregate report delivery remains a
   deployment/mirror gate until the required public records are present.
