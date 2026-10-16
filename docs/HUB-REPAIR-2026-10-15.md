@@ -103,8 +103,10 @@ session in place of the owner's normal app. No source credential, model weight o
 
 The HLS relay cancellation path was hardened after native QA captured an
 `EXC_CRASH` in `URLSession.bytes(for:)` during session invalidation. Relay
-shutdown now cancels active tasks individually, preserving bounded streaming
-and the slow-segment first-chunk contract. A signed build remained alive for
+shutdown now cancels active tasks individually, and upstream resource reads use
+bounded `URLSession.data(for:)` delivery so cancellation cannot cross the
+AsyncBytes/Objective-C exception boundary. The slow-segment fixture now verifies
+bounded whole-body delivery and clean cancellation. A signed build remained alive for
 the post-fix 45-second pilot on a watched-feed process (RSS sampled at
 144–284 MB; CPU varied from idle to 96% during frame work); longer
 multi-camera soak testing is still open.

@@ -282,20 +282,19 @@ private actor HLSResourceFetcher {
             guard range.range(of: #"^bytes=[0-9]+-[0-9]*$"#, options: .regularExpression) != nil else { throw URLError(.badURL) }
             request.setValue(range, forHTTPHeaderField: "Range")
         }
-        let (bytes, response) = try await session.bytes(for: request)
+        // Foundation's AsyncBytes bridge can throw an Objective-C exception when
+        // a URLSession is cancelled while a relay connection is being torn down.
+        // Use the bounded data API instead. The relay still enforces the same
+        // response and byte limits, and sends the validated body only after the
+        // policy-checked request completes.
+        try Task.checkCancellation()
+        let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200 || response.statusCode == 206,
               response.expectedContentLength <= 8_388_608 else { throw URLError(.badServerResponse) }
         let playlist = url.pathExtension.lowercased() == "m3u8" || (response.mimeType?.lowercased().contains("mpegurl") == true)
         if !playlist { try await header(response) }
-        var data = Data(), total = 0
-        for try await byte in bytes {
-            if total.isMultiple(of: 4096) { try Task.checkCancellation() }
-            guard total < (playlist ? 1_048_576 : 8_388_608) else { throw URLError(.dataLengthExceedsMaximum) }
-            data.append(byte); total += 1
-            if !playlist, data.count >= 32768 {
-                try await chunk(data); data.removeAll(keepingCapacity: true)
-            }
-        }
+        let limit = playlist ? 1_048_576 : 8_388_608
+        guard data.count <= limit else { throw URLError(.dataLengthExceedsMaximum) }
         if playlist { return .init(data: data, response: response) }
         if !data.isEmpty { try await chunk(data) }
         return nil
