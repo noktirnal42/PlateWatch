@@ -63,6 +63,7 @@ final class CaptureViewModel: ObservableObject {
     @Published var fleetHitPending = false
     @Published var permissionDenied = false
     @Published private(set) var latestEventClip: EventClip?
+    @Published private(set) var exportedEventClipURL: URL?
     @Published private(set) var modelStatus = "baseline vision"
     @Published var lastResult: CaptureResult?
     @Published private(set) var processingStill = false
@@ -130,6 +131,24 @@ final class CaptureViewModel: ObservableObject {
     func attach(context: ModelContext, backend: any SyncBackend) {
         self.modelContext = context
         self.backend = backend
+    }
+
+    /// Encodes the current bounded event buffer off the main actor and returns
+    /// a local movie suitable for an explicit Share action.
+    func exportLatestEventClip() async -> URL? {
+        guard let clip = latestEventClip else { return nil }
+        let url = FileManager.default.temporaryDirectory
+            .appending(path: "PlateWatch-event-\(UUID().uuidString).mp4")
+        do {
+            try await Task.detached(priority: .utility) {
+                try EventClipExporter.export(clip, to: url)
+            }.value
+            exportedEventClipURL = url
+            return url
+        } catch {
+            statusText = "Event clip export failed: \(error.localizedDescription)"
+            return nil
+        }
     }
 
     func start() async {

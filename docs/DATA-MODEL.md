@@ -159,6 +159,13 @@ short idempotency-key prefix. It never stores the submission DTO, plate text, cr
 raw frame, or exact location. The Sightings screen presents this as delivery history;
 receipt history is not proof of public publication.
 
+## Local event clips (2026-10-16)
+
+`EventClipExporter` encodes only the bounded frames already held in the on-device
+rolling buffer into an H.264 `.mp4` in the temporary directory. iOS exposes this
+through an explicit Save/Share control. The movie is not inserted into a submission,
+uploaded by `PlateSync`, or retained as a shared record.
+
 ## Local hash-addressed evidence recovery (2026-10-15)
 
 After a Hub queue record saves, its intact JPEG is also stored locally at

@@ -22,7 +22,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub client capability/diagnostics and operator-triggered reviewed delivery are wired, while two-account isolation and moderator publish tooling remain (P0-5)
 - ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
-- ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors, painted icon and privacy-safe backend receipt history landed (2026-10-16); full field/accessibility audit, received media and event-clip export remain
+- ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors, painted icon, privacy-safe backend receipt history and local event-clip export landed (2026-10-16); full field/accessibility audit and received media remain
 - ✅ iOS simulator startup CloudKit trap fixed in app + delegate backend selection; regression test added
 
 - ✅ Hub intact local evidence recovery by SHA-256 archive; all-vehicle body labels and explicit feed-filter reset (2026-10-15)
@@ -39,7 +39,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 
 ## M1 — Capture quality
 - ✅ Telephoto/exposure auto-tuning for moving traffic (1/500 s+ discipline) — CaptureKit selects the best available rear lens, caps auto-exposure duration, bounds ISO, disables HDR smearing, and reports live exposure; physical-device tuning remains QA
-- ✅ Rolling-buffer "event clip" retention for fleet-classified events — bounded pre/post buffers and eviction-safe extraction are implemented; encoding/export remains a follow-up
+- ✅ Rolling-buffer "event clip" retention and bounded local H.264 export for fleet-classified events — pre/post buffers and eviction-safe extraction are implemented; explicit Share is on iOS Capture (2026-10-16)
 - ✅ Hub: folder watch import (snapshot ingest from IP cameras via FTP)
 - ✅ Geo bucketing: geohash-6 utility in PlateKit + CoreLocation provider in iOS app
 - ✅ Multi-frame OCR fusion: `MultiFrameFusor` (spatial track IoU + independent-evidence voting) — 5 test cases

@@ -44,15 +44,26 @@ struct CaptureView: View {
                 }
                 Spacer()
                 if let clip = viewModel.latestEventClip {
-                    Label("Event buffer ready · \(clip.frameCount) frames · \(clip.duration, format: .number.precision(.fractionLength(1)))s", systemImage: "film.stack")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.black.opacity(0.62), in: Capsule())
-                        .accessibilityLabel("Fleet event buffer ready")
-                        .accessibilityValue("\(clip.frameCount) frames, \(clip.duration, format: .number.precision(.fractionLength(1))) seconds")
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    HStack(spacing: 8) {
+                        Label("Event buffer · \(clip.frameCount) frames · \(clip.duration, format: .number.precision(.fractionLength(1)))s", systemImage: "film.stack")
+                            .accessibilityLabel("Fleet event buffer ready")
+                            .accessibilityValue("\(clip.frameCount) frames, \(clip.duration, format: .number.precision(.fractionLength(1))) seconds")
+                        if let url = viewModel.exportedEventClipURL {
+                            ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
+                                .accessibilityLabel("Share event clip")
+                        } else {
+                            Button {
+                                Task { _ = await viewModel.exportLatestEventClip() }
+                            } label: { Image(systemName: "arrow.down.to.line.compact") }
+                                .accessibilityLabel("Save event clip")
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.62), in: Capsule())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 CaptureControls(viewModel: viewModel, photoItem: $photoItem)
                     .padding(.bottom, 4)
