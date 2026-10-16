@@ -9,6 +9,7 @@ import SwiftUI
 @MainActor
 protocol ReviewHubProviding {
     var syncStatus: String { get }
+    var lastReceiptSummary: String { get }
     func syncPending() async
 }
 
@@ -86,6 +87,12 @@ struct ReviewPane: View {
             }
             Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
                 .font(.caption).foregroundStyle(.secondary)
+            if let receipt = hub?.lastReceiptSummary, !receipt.isEmpty {
+                Label(receipt, systemImage: "checkmark.seal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
             if !rows.isEmpty && evidenceCount < rows.count {
                 Label("\(rows.count - evidenceCount) queued item(s) have no recoverable image. Hashes can verify an image when bytes exist, but cannot recreate missing bytes.", systemImage: "exclamationmark.triangle")
                     .font(.caption)

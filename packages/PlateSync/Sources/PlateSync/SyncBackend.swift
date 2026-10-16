@@ -46,12 +46,18 @@ public struct SubmissionReceipt: Sendable, Codable, Equatable {
     public var sightingID: UUID
     public var moderationState: Sighting.ModerationState
     public var serverReceivedAt: Date
+    /// Optional audit metadata. Older backends may omit these fields.
+    public var idempotencyKey: String?
+    public var operatorConfirmed: Bool?
 
     public init(sightingID: UUID, moderationState: Sighting.ModerationState,
-                serverReceivedAt: Date) {
+                serverReceivedAt: Date, idempotencyKey: String? = nil,
+                operatorConfirmed: Bool? = nil) {
         self.sightingID = sightingID
         self.moderationState = moderationState
         self.serverReceivedAt = serverReceivedAt
+        self.idempotencyKey = idempotencyKey
+        self.operatorConfirmed = operatorConfirmed
     }
 }
 

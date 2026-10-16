@@ -22,6 +22,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var feedFramesAnalyzed = 0
     @Published private(set) var pendingCount = 0
     @Published private(set) var syncStatus = "Not synced"
+    @Published private(set) var lastReceiptSummary = ""
     @Published private(set) var snapshotServerStatus = "Stopped"
     @Published private(set) var snapshotPort: UInt16 = 0
     @Published private(set) var rtspServerStatus = "Stopped"
@@ -493,15 +494,17 @@ final class HubController: ObservableObject, ReviewHubProviding {
     func syncPending() async {
         guard let modelContext else { syncStatus = "Local queue unavailable"; return }
         syncStatus = "Syncing pending…"
+        lastReceiptSummary = ""
         let backend = SyncBackends.makeDefault()
         let rows = (try? modelContext.fetch(FetchDescriptor<PendingSubmission>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        var lastReceipt: SubmissionReceipt?
         for row in rows where row.retryCount < 8 {
             guard let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON) else {
                 modelContext.delete(row)
                 continue
             }
             do {
-                _ = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                lastReceipt = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
                 modelContext.delete(row)
             } catch SyncError.quotaExceeded {
                 break
@@ -513,6 +516,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
         try? modelContext.save()
         refreshPendingCount()
         syncStatus = pendingCount == 0 ? "Queue delivered" : "\(pendingCount) still pending"
+        if let lastReceipt {
+            let confirmation = lastReceipt.operatorConfirmed == true ? "confirmed" : "legacy/unspecified confirmation"
+            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · \(confirmation)"
+        }
     }
 
     func chooseIngestFolder() {

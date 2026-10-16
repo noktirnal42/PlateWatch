@@ -98,14 +98,17 @@ public struct CloudKitBackend: SyncBackend {
             let saved = try await publicDB.save(record)
             return SubmissionReceipt(sightingID: stableID,
                                      moderationState: .pending,
-                                     serverReceivedAt: saved.modificationDate ?? Date())
+                                     serverReceivedAt: saved.modificationDate ?? Date(),
+                                     idempotencyKey: idempotencyKey,
+                                     operatorConfirmed: sighting.userConfirmed)
         } catch let error as CKError {
             switch error.code {
             case .quotaExceeded, .requestRateLimited: throw SyncError.quotaExceeded
             case .serverRecordChanged, .unknownItem:
                 // Retry loop hit an existing idempotent write → treat published.
                 return SubmissionReceipt(sightingID: stableID, moderationState: .pending,
-                                         serverReceivedAt: Date())
+                                         serverReceivedAt: Date(), idempotencyKey: idempotencyKey,
+                                         operatorConfirmed: sighting.userConfirmed)
             case .notAuthenticated: throw SyncError.notAuthenticated
             default: throw SyncError.serverRejected(reason: error.localizedDescription)
             }

@@ -146,6 +146,10 @@ re-encodes the payload with `true`. The reference server treats omitted values a
 client confirmation, while explicit `false` remains pending and cannot become a
 fleet-confirmed publication row.
 
+Submission receipts may also carry optional `idempotencyKey` and `operatorConfirmed`
+fields. They are audit metadata only: older clients may omit them, and they never grant
+publication or bypass the moderation state returned by the backend.
+
 ## Local hash-addressed evidence recovery (2026-10-15)
 
 After a Hub queue record saves, its intact JPEG is also stored locally at

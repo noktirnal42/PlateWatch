@@ -86,6 +86,8 @@ struct SubmissionReceiptDTO: Content {
     var sightingID: UUID
     var moderationState: String
     var serverReceivedAt: Date
+    var idempotencyKey: String?
+    var operatorConfirmed: Bool?
 }
 
 struct PublicSightingDTO: Content {

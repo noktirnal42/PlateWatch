@@ -115,10 +115,11 @@ tests must stay green before its status advances.
   submission roles. Hub capability and read-only connection diagnostics added; REST fallback
   port now matches server 8083. Signed installed Hub account access and native REST moderation
   refresh/reconnect verified; local per-user reference service restored. REST submissions now strip
-  thumbnail bytes and reapply plate/location privacy (18 PlateSync tests, 53 server tests pass).
+  thumbnail bytes and reapply plate/location privacy (19 PlateSync tests, 53 server tests pass).
   Hub automatic queue delivery and CloudKit publication remain
-  unfinished; schema deployment alone does not prove either. See [connection QA](BACKEND-QA-2026-10-15.md).
-- **Next:** explicit reviewed delivery with receipts, CloudKit moderator publication and two-account
+  unfinished; schema deployment alone does not prove either. Receipts now carry optional idempotency and
+  operator-confirmation metadata for audit surfaces. See [connection QA](BACKEND-QA-2026-10-15.md).
+- **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
 ## WS6 — Trust & redaction (cross-cutting)

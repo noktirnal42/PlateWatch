@@ -16,6 +16,8 @@ final class RESTPrivacyTests: XCTestCase {
             plate: .init(text: "PRIVATE-FIXTURE"), vehicle: .init(vehicleClass: "unknown", classConfidence: 0.5))
         let receipt = try await backend.submit(local, idempotencyKey: "privacy-fixture")
         XCTAssertEqual(receipt.sightingID.uuidString, "00000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(receipt.idempotencyKey, "privacy-fixture")
+        XCTAssertEqual(receipt.operatorConfirmed, false)
     }
 
     func testLocalThumbnailNeverLeavesDeviceEvenForFleetConfirmedSubmission() throws {
@@ -74,7 +76,7 @@ private final class PrivacyProbeProtocol: URLProtocol, @unchecked Sendable {
             && request.value(forHTTPHeaderField: "Idempotency-Key") == "privacy-fixture"
         let response = HTTPURLResponse(url: request.url!, statusCode: safe ? 200 : 422,
                                        httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
-        let body = Data(#"{"sightingID":"00000000-0000-0000-0000-000000000001","moderationState":"pending","serverReceivedAt":"2026-10-15T12:00:00Z"}"#.utf8)
+        let body = Data(#"{"sightingID":"00000000-0000-0000-0000-000000000001","moderationState":"pending","serverReceivedAt":"2026-10-15T12:00:00Z","idempotencyKey":"privacy-fixture","operatorConfirmed":false}"#.utf8)
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
