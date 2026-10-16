@@ -266,7 +266,13 @@ private actor HLSResourceFetcher {
         configuration.httpAdditionalHeaders = ["User-Agent": "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)"]
         session = URLSession(configuration: configuration, delegate: HLSRedirectPolicy(policy), delegateQueue: nil)
     }
-    nonisolated func stop() { session.invalidateAndCancel() }
+    nonisolated func stop() {
+        // URLSession.invalidateAndCancel() can abort AsyncBytes with an
+        // Objective-C exception while a relay task is being torn down. Cancel
+        // active tasks individually; the request timeout still bounds any
+        // task that does not observe cancellation immediately.
+        session.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
+    }
     func load(_ url: URL, range: String?,
               header: @Sendable (HTTPURLResponse) async throws -> Void,
               chunk: @Sendable (Data) async throws -> Void) async throws -> Result? {
