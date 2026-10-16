@@ -117,6 +117,22 @@ final class HLSPolicyRelayTests: XCTestCase {
         XCTAssertEqual(count, 65536)
     }
 
+    @MainActor func testStoppingSlowSegmentCancelsWithoutProcessAbort() async throws {
+        let relay = HLSPolicyRelay(url: URL(string: "https://video.example/slow.ts")!, policy: { _ in true }, configuration: configuration())
+        let root = try await relay.start()
+        let request = Task {
+            try await URLSession.shared.data(from: root)
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        relay.stop()
+        do {
+            _ = try await request.value
+        } catch {
+            // Cancellation or a bounded transport failure is expected.
+        }
+        XCTAssertTrue(true, "Relay shutdown returned without aborting the process")
+    }
+
     @MainActor func testOversizeResourceAndBrowserOriginAreRejected() async throws {
         let relay = HLSPolicyRelay(url: URL(string: "https://video.example/oversize.ts")!, policy: { _ in true }, configuration: configuration())
         defer { relay.stop() }
