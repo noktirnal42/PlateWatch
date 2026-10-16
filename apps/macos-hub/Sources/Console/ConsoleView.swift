@@ -70,7 +70,7 @@ struct ConsoleView: View {
                         .allowsHitTesting(selection == .research).accessibilityHidden(selection != .research).disabled(selection != .research)
                 }
                 if selection == .review || visited.contains(.review) {
-                    ReviewPane(onQueueChange: hub.refreshPendingCount).opacity(selection == .review ? 1 : 0)
+                    ReviewPane(hub: hub, onQueueChange: hub.refreshPendingCount).opacity(selection == .review ? 1 : 0)
                         .allowsHitTesting(selection == .review).accessibilityHidden(selection != .review).disabled(selection != .review)
                 }
                 Group {

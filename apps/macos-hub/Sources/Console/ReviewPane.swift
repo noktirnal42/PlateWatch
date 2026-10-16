@@ -7,6 +7,7 @@ import SwiftUI
 /// Local outbox review: what this Hub has recorded and queued for sync. Discarding removes only the local copy.
 /// Each identified vehicle carries its evidence crop when one could be captured (`SightingSubmissionDTO.cropJPEGBase64`).
 struct ReviewPane: View {
+    let hub: HubController
     var onQueueChange: () -> Void = {}
     @Environment(\.modelContext) private var context
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var rows: [PendingSubmission]
@@ -59,7 +60,13 @@ struct ReviewPane: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(selection.isEmpty)
+                Button("Sync pending", systemImage: "arrow.up.circle") {
+                    Task { await hub.syncPending() }
+                }
+                .disabled(rows.isEmpty || hub.syncStatus == "Syncing pending…")
+                .help("Deliver queued, redaction-gated submissions to the configured backend; moderation remains separate")
             }
+            Text(hub.syncStatus).font(.caption).foregroundStyle(.secondary)
             if !rows.isEmpty && evidenceCount < rows.count {
                 Label("\(rows.count - evidenceCount) queued item(s) have no recoverable image. Hashes can verify an image when bytes exist, but cannot recreate missing bytes.", systemImage: "exclamationmark.triangle")
                     .font(.caption)

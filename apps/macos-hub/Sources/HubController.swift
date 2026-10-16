@@ -21,6 +21,7 @@ final class HubController: ObservableObject {
     @Published private(set) var fleetHitsToday = 0
     @Published private(set) var feedFramesAnalyzed = 0
     @Published private(set) var pendingCount = 0
+    @Published private(set) var syncStatus = "Not synced"
     @Published private(set) var snapshotServerStatus = "Stopped"
     @Published private(set) var snapshotPort: UInt16 = 0
     @Published private(set) var rtspServerStatus = "Stopped"
@@ -485,6 +486,33 @@ final class HubController: ObservableObject {
     func refreshPendingCount() {
         guard let modelContext else { return }
         if let count = try? modelContext.fetchCount(FetchDescriptor<PendingSubmission>()) { pendingCount = count }
+    }
+
+    /// Delivers only locally queued, redaction-gated submissions. Moderation and
+    /// world-readable publication remain separate server-side steps.
+    func syncPending() async {
+        guard let modelContext else { syncStatus = "Local queue unavailable"; return }
+        syncStatus = "Syncing pending…"
+        let backend = SyncBackends.makeDefault()
+        let rows = (try? modelContext.fetch(FetchDescriptor<PendingSubmission>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        for row in rows where row.retryCount < 8 {
+            guard let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON) else {
+                modelContext.delete(row)
+                continue
+            }
+            do {
+                _ = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                modelContext.delete(row)
+            } catch SyncError.quotaExceeded {
+                break
+            } catch {
+                row.retryCount += 1
+                row.lastError = String(describing: error)
+            }
+        }
+        try? modelContext.save()
+        refreshPendingCount()
+        syncStatus = pendingCount == 0 ? "Queue delivered" : "\(pendingCount) still pending"
     }
 
     func chooseIngestFolder() {
