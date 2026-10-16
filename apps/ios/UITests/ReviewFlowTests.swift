@@ -33,7 +33,8 @@ final class ReviewFlowTests: XCTestCase {
         capture("ios-watchlist", app)
         let field = app.textFields["fleet-plate-input"]
         field.tap(); field.typeText("demo1")
-        XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].exists)
+        app.keyboards.buttons["done"].tap()
+        XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
         field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + "GOV123")
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)

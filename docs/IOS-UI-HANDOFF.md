@@ -94,3 +94,10 @@ A screenshot audit does not replace a full spoken VoiceOver pass.
    tint/dark/layered icon variants, and smallest-device/RTL accessibility audits remain.
 
 See `NEXT-STEPS.md` for sequencing and `PROJECTS.md` for ownership.
+
+## CI follow-up — 2026-10-16
+
+The watchlist duplicate-validation UI test asserted a message while the keyboard could
+obscure it. It now dismisses the keyboard and waits for the same duplicate warning,
+without changing validation or weakening the assertion. The targeted add/mute/delete
+flow passed on the local iOS 27 iPhone 18 Pro simulator. Full CI remains a separate check.
