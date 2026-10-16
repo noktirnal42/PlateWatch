@@ -82,7 +82,7 @@ struct ReviewPane: View {
                     Task { await hub?.syncPending() }
                 }
                 .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
-                .help("Deliver queued, redaction-gated submissions to the configured backend; moderation remains separate")
+                .help("Deliver confirmed, redaction-gated submissions to the configured backend; moderation remains separate")
             }
             Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
                 .font(.caption).foregroundStyle(.secondary)

@@ -13,7 +13,7 @@ struct BackendConnectionSection: View {
         Section("Backend connections") {
             connectionRow(title: "CloudKit", value: cloudKit, systemImage: "icloud")
             connectionRow(title: "Reference server", value: server, systemImage: "server.rack")
-            Text("Local review items remain on this Mac. Automatic outbox delivery is not enabled. Server moderation and CloudKit publication are separate paths; CloudKit publication tooling is still pending.")
+            Text("Review items remain on this Mac until you confirm them and choose Sync pending. Delivery is operator-triggered; server moderation and CloudKit publication are separate paths.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Button(checking ? "Checking…" : "Check connections", systemImage: "arrow.clockwise") { Task { await check() } }
