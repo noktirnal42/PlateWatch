@@ -31,6 +31,9 @@ tests must stay green before its status advances.
   adds observation detail/export, retry recovery, validated fleet watchlists,
   local cleanup and simulator CloudKit startup-crash fix. See
   [IOS-UI-HANDOFF.md](IOS-UI-HANDOFF.md) for validation and screenshot boundaries.
+  CaptureKit now selects the best available rear lens, applies bounded auto-exposure/ISO tuning,
+  records exposure diagnostics, and retains eviction-safe pre/post event clips; physical-device
+  tuning and clip export remain QA/follow-up gates.
   Handheld live-camera field testing remains pending. CloudKit watchlist subscription registration,
   watchOS silent-push delta matching, haptics and local alert presentation are implemented; signed
   entitlement and physical-device push delivery remain external QA gates.

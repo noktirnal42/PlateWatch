@@ -38,8 +38,8 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ⬜ Record video of ≥ 99% plate detection on a test reel (blocked on QA P0-1…P0-4)
 
 ## M1 — Capture quality
-- ⬜ Telephoto/exposure auto-tuning for moving traffic (1/500 s+ discipline) — hooks exist in CaptureKit (`minimumShutterSeconds`), tuning pass pending
-- ⬜ Rolling-buffer "event clip" retention for fleet-classified events
+- ✅ Telephoto/exposure auto-tuning for moving traffic (1/500 s+ discipline) — CaptureKit selects the best available rear lens, caps auto-exposure duration, bounds ISO, disables HDR smearing, and reports live exposure; physical-device tuning remains QA
+- ✅ Rolling-buffer "event clip" retention for fleet-classified events — bounded pre/post buffers and eviction-safe extraction are implemented; encoding/export remains a follow-up
 - ✅ Hub: folder watch import (snapshot ingest from IP cameras via FTP)
 - ✅ Geo bucketing: geohash-6 utility in PlateKit + CoreLocation provider in iOS app
 - ✅ Multi-frame OCR fusion: `MultiFrameFusor` (spatial track IoU + independent-evidence voting) — 5 test cases
@@ -47,7 +47,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Outbox drain loops wired in iOS app (timer + scene activation) and Hub
 - ✅ Apple FoundationModels fleet-markings parser wired into the iOS capture path with heuristic fallback
 - ✅ Hub: Bonjour-advertised snapshot endpoint (filesystem watch shipped first)
-- ⬜ Hub: RTSP ingest (VLCKit or AVF HLS interstitial)
+- ◐ Hub: HLS ingest is production-wired with policy relay, child-playlist handling, bounded cancellation and NV511 fixtures; raw RTSP still needs the separately licensed VLCKit/GStreamer path
 
 ## M2 — Identification depth
 - ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
