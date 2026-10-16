@@ -8,6 +8,14 @@ struct AgencyDirectoryView: View {
     @State private var agencies: [PublicAgencyDTO] = []
     @State private var errorText: String?
     @State private var loading = false
+    @State private var searchText = ""
+
+    private var visibleAgencies: [PublicAgencyDTO] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return agencies
+            .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || ($0.shortName?.localizedCaseInsensitiveContains(query) ?? false) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 
     var body: some View {
         List {
@@ -19,8 +27,10 @@ struct AgencyDirectoryView: View {
             } else if agencies.isEmpty {
                 ContentUnavailableView("No public agencies yet", systemImage: "building.columns",
                                        description: Text("The reference server has not published agency records."))
+            } else if visibleAgencies.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             } else {
-                ForEach(agencies) { agency in
+                ForEach(visibleAgencies) { agency in
                     NavigationLink {
                         AgencyReportDetailView(agency: agency)
                     } label: {
@@ -30,11 +40,13 @@ struct AgencyDirectoryView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityHint("Opens the public aggregate report card")
                 }
             }
         }
         .safeAreaInset(edge: .top) { PreviewBanner() }
         .navigationTitle("Agency reports")
+        .searchable(text: $searchText, prompt: "Search agencies")
         .refreshable { await load() }
         .task { await load() }
     }
@@ -113,7 +125,13 @@ struct AgencyReportDetailView: View {
         loading = true
         defer { loading = false }
         do { report = try await backend.agencyReport(id: agency.id); errorText = nil }
-        catch { errorText = "Pull to retry, or check the backend connection." }
+        catch {
+            if case SyncError.unsupported = error {
+                errorText = "This backend has not deployed aggregate agency reports yet."
+            } else {
+                errorText = "Pull to retry, or check the backend connection."
+            }
+        }
     }
 }
 
@@ -128,5 +146,8 @@ private struct ReportMetric: View {
         } label: {
             Label(title, systemImage: icon)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityValue(value.formatted())
     }
 }
