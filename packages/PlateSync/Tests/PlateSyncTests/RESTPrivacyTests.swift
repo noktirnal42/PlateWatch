@@ -4,6 +4,23 @@ import XCTest
 @testable import PlateSync
 
 final class RESTPrivacyTests: XCTestCase {
+    func testAgencyDirectoryAndReportUsePublicRoutes() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AgencyProbeProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let backend = RESTBackend(baseURL: URL(string: "https://local.agency.test")!, session: session)
+        let id = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let agencies = try await backend.agencies()
+        let report = try await backend.agencyReport(id: id)
+
+        XCTAssertEqual(agencies.first?.id, id)
+        XCTAssertEqual(report.agency.id, id)
+        XCTAssertEqual(report.fleetSize, 42)
+        XCTAssertEqual(AgencyProbeProtocol.paths, ["/v1/agencies", "/v1/agencies/11111111-1111-1111-1111-111111111111/report"])
+    }
+
     func testActualRESTRequestOmitsPrivateFields() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PrivacyProbeProtocol.self]
@@ -77,6 +94,35 @@ private final class PrivacyProbeProtocol: URLProtocol, @unchecked Sendable {
         let response = HTTPURLResponse(url: request.url!, statusCode: safe ? 200 : 422,
                                        httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         let body = Data(#"{"sightingID":"00000000-0000-0000-0000-000000000001","moderationState":"pending","serverReceivedAt":"2026-10-15T12:00:00Z","idempotencyKey":"privacy-fixture","operatorConfirmed":false}"#.utf8)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+private final class AgencyProbeProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var recordedPaths: [String] = []
+    static var paths: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return recordedPaths
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        let path = request.url?.path ?? ""
+        Self.lock.lock(); Self.recordedPaths.append(path); Self.lock.unlock()
+        let body: Data
+        if path == "/v1/agencies" {
+            body = Data(#"[{"id":"11111111-1111-1111-1111-111111111111","name":"Example Police Department","shortName":"EPD","level":"city"}]"#.utf8)
+        } else {
+            body = Data(#"{"agency":{"id":"11111111-1111-1111-1111-111111111111","name":"Example Police Department","shortName":"EPD","level":"city"},"fleetSize":42,"sightings30d":17,"activeUnits":31,"generatedAt":"2026-10-15T12:00:00Z"}"#.utf8)
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
