@@ -28,6 +28,7 @@ struct ConsoleView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var selection: Pane? = .dashboard
     @State private var feedsVisited = false
+    @State private var visited: Set<Pane> = []
     @AppStorage("hubAppearance") private var appearance = "system"
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
@@ -47,17 +48,30 @@ struct ConsoleView: View {
                     FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live })
                         .opacity(selection == .feeds ? 1 : 0)
                         .allowsHitTesting(selection == .feeds)
-                        .accessibilityHidden(selection != .feeds)
+                        .accessibilityHidden(selection != .feeds).disabled(selection != .feeds)
+                }
+                if selection == .live || visited.contains(.live) {
+                    LivePane(hub: hub, isActive: selection == .live)
+                        .opacity(selection == .live ? 1 : 0).allowsHitTesting(selection == .live)
+                        .accessibilityHidden(selection != .live).disabled(selection != .live)
+                }
+                if selection == .records || visited.contains(.records) {
+                    RecordsPane().opacity(selection == .records ? 1 : 0)
+                        .allowsHitTesting(selection == .records).accessibilityHidden(selection != .records).disabled(selection != .records)
+                }
+                if selection == .review || visited.contains(.review) {
+                    ReviewPane(onQueueChange: hub.refreshPendingCount).opacity(selection == .review ? 1 : 0)
+                        .allowsHitTesting(selection == .review).accessibilityHidden(selection != .review).disabled(selection != .review)
                 }
                 Group {
                 switch selection ?? .dashboard {
                 case .dashboard: DashboardPane(hub: hub)
-                case .live: LivePane(hub: hub)
-                case .review: ReviewPane()
+                case .live: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+                case .review: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .feeds: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
-                case .records: RecordsPane()
+                case .records: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .moderation: ModerationPane(onSignOut: { moderator = false; selection = .dashboard })
                 case .settings: SettingsPane(hub: hub, moderator: $moderator)
                 }
@@ -67,6 +81,7 @@ struct ConsoleView: View {
         }
         .onChange(of: selection) { _, pane in
             if pane == .feeds { feedsVisited = true }
+            if let pane { visited.insert(pane) }
             hub.agentBridge?.currentPane = String(describing: pane ?? .dashboard)
         }
         .onAppear { hub.agentBridge?.currentPane = String(describing: selection ?? .dashboard) }
@@ -77,7 +92,7 @@ struct ConsoleView: View {
             }
         }
         .task { moderator = await Task.detached { ModeratorAccess.isEnrolled }.value }
-        .navigationTitle(selection?.rawValue ?? "PlateWatch Hub")
+        .navigationTitle((HubQAFixture.enabled ? "Synthetic QA · " : "") + (selection?.rawValue ?? "PlateWatch Hub"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Hub Help", systemImage: "questionmark.circle") { openWindow(id: "hub-help") }

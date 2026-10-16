@@ -1,15 +1,12 @@
 # CAMERA-SOURCES.md — every way frames reach the analyzer
 
-> **2026-10-14 update:** the Hub compiles and runs. [WS2 handoff](HUB-HANDOFF-2026-10-14.md) supersedes
-> historical "does not compile" notes below. Local/Continuity/UVC capture and video-file controls exist;
-> hardware permission/continuous transport validation remains pending. Public feeds are snapshots with
-> background analysis, favorites, reversible blocks and Open in Live overlays.
-> **Public HLS is wired:** `.hls` feed entries run continuous background analysis through
-> `FeedIngest.HLSFrameSource` (decoded frames take the same concurrency cap, tier, gate, dedupe,
-> evidence-crop and Live-overlay paths as snapshots; the manifest origin must pass robots and terms
-> are person-confirmed; AVPlayer fetches its own CDN segments — a custom `AVURLAssetResourceLoader`
-> is the future fix for per-segment robots). `.rtsp` entries state honestly that they need the
-> VLCKit fallback (not bundled) instead of being fetched as images.
+> **2026-10-15 update:** [Hub repair / verification](HUB-REPAIR-2026-10-15.md) is the current
+> continuation record. Snapshot feeds retain background analysis. A selected HLS feed decodes continuously
+> through AVPlayerItemVideoOutput, with sampled analysis and Live overlays; unselected HLS entries remain idle.
+> Real NV511 playback/analysis, preview extraction and navigation retention were verified in the signed app.
+> Terms and manifest policy remain mandatory. AVPlayer owns its segment/CDN fetches; full per-segment policy
+> is still open. RTSP needs the unbundled VLCKit fallback. Physical Continuity/UVC permission QA is separate.
+
 
 
 PlateWatch treats *frame sources* as interchangeable: anything that can produce

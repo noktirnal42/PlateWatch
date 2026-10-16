@@ -27,6 +27,7 @@ public actor RobotsCache {
         var serverErrorStatus: Int?
         var refusalStatus: Int?
         var failure: String?
+        var wowzaPlaceholder = false
     }
 
     public init(session: URLSession, userAgent: String, ttl: TimeInterval = 86_400,
@@ -95,7 +96,9 @@ public actor RobotsCache {
                     case 200..<300:
                         let mime = http.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
                         guard !mime.contains("text/html"), !body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") else {
-                            last = .init(failure: "robots.txt returned an HTML page instead of a policy (HTTP \(code)).")
+                            let placeholder = body.localizedCaseInsensitiveContains("<title>Wowza Streaming Engine")
+                            last = .init(failure: "robots.txt returned an HTML page instead of a policy (HTTP \(code)).", wowzaPlaceholder: placeholder)
+                            if placeholder, publicAPIPermissions.contains(where: { $0.allowsWowzaPlaceholder(url) }) { return last }
                             continue
                         }
                         return CachedPolicy(policy: RobotsPolicy(parsing: body, userAgent: userAgent))
@@ -145,6 +148,7 @@ public actor RobotsCache {
         if cached.policy.isAllowed(path: path) { return .allowed }
         if let code = cached.serverErrorStatus,
            publicAPIPermissions.contains(where: { $0.allows(url, robotsHTTPStatus: code) }) { return .allowed }
+        if cached.wowzaPlaceholder, publicAPIPermissions.contains(where: { $0.allowsWowzaPlaceholder(url) }) { return .allowed }
         if let code = cached.refusalStatus { return .disallowed("robots.txt answered HTTP \(code); the host refused or rate-limited access.") }
         if let failure = cached.failure { return .unavailable(failure) }
         return .disallowed("robots.txt disallows this camera path.")

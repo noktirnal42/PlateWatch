@@ -35,9 +35,11 @@ final class HubController: ObservableObject {
     /// Public camera feeds (docs/FEED-SOURCES.md). Only sources a person confirmed the terms of are polled.
     let feedRunner = FeedRunner()
     let favorites = FeedFavorites()
+    let feedBrowserState = FeedBrowserState()
     private var activeFeedSources: [UUID: PublicFeedSource] = [:]
     var feedsFile: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        if HubQAFixture.enabled { return HubQAFixture.directory.appendingPathComponent("feeds.json") }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appending(path: "PlateWatchHub/feeds.json")
     }
     @Published private(set) var modelStatus = "baseline vision"
@@ -81,6 +83,8 @@ final class HubController: ObservableObject {
         self.modelManager = ModelManager(config: .init(
             registryURL: URL(string: "https://raw.githubusercontent.com/noktirnal42/PlateWatch/main/models/registry.json")!,
             cacheDirectory: support))
+        refreshPendingCount()
+        if HubQAFixture.enabled { startFeeds(); return }
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
         Task { await refreshModels() }
@@ -134,6 +138,7 @@ final class HubController: ObservableObject {
 
     enum OpenCatalogue: String, CaseIterable, Identifiable {
         case arizona = "Arizona — AZ511 (needs API key)"
+        case nevada = "Nevada — NV511 (needs API key)"
         case caltrans = "California — Caltrans (about 3,400 cameras)"
         case wsdot = "Washington — WSDOT (about 1,700; low-volume use only)"
         case iowa = "Iowa DOT (about 1,300)"
@@ -144,6 +149,7 @@ final class HubController: ObservableObject {
         var key: String {
             switch self {
             case .arizona: "arizona"
+            case .nevada: "nevada"
             case .caltrans: "caltrans"
             case .wsdot: "wsdot"
             case .iowa: "iowa"
@@ -199,6 +205,20 @@ final class HubController: ObservableObject {
                 let (data, response) = try await fetchSigned(request)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
                 result = try AZ511Cameras.sources(fromJSON: data, key: key)
+            case .nevada:
+                // One catalogue request per import — well inside the 10 calls / 60 s the API allows.
+                guard let key = SourceCredentials.key(for: "nv511"), !key.isEmpty else {
+                    importStatus = "Nevada 511 needs an API key. Add one in Settings › Source API keys — the signup link is next to the key field."
+                    return
+                }
+                var request = URLRequest(url: NV511Cameras.endpoint
+                    .appending(queryItems: [URLQueryItem(name: "key", value: key),
+                                            URLQueryItem(name: "format", value: "json")]))
+                request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 60
+                let (data, response) = try await fetchSigned(request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                result = try NV511Cameras.sources(fromJSON: data, key: key)
             case .caltrans:
                 let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
                                             attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300, state: "CA")
@@ -270,6 +290,7 @@ final class HubController: ObservableObject {
         } analyseVideoFrame: { [weak self] box, source in
             await self?.analyseFeedVideoFrame(box.buffer, from: source)
         }
+        feedRunner.setLiveVideoSource(liveFeed?.kind == .hls ? liveFeed?.id : nil)
     }
 
     @Published private(set) var liveFeed: PublicFeedSource?
@@ -277,19 +298,29 @@ final class HubController: ObservableObject {
     @Published private(set) var liveFeedStatus = ""
 
     func openFeedInLive(_ source: PublicFeedSource) {
-        guard source.kind == .snapshotJPEG, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
+        guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
         liveFeedFrame = nil
         liveFeedStatus = "Waiting for a frame…"
         liveFeed = source
+        feedRunner.setLiveVideoSource(source.kind == .hls ? source.id : nil)
     }
 
     func stopLiveFeed() {
+        feedRunner.setLiveVideoSource(nil)
         liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
     }
 
     /// An immediate, rate-limited first frame; subsequent frames come from the existing background poller.
     func loadLiveFeed() async {
         guard let source = liveFeed else { return }
+        if source.kind == .hls {
+            feedRunner.setLiveVideoSource(source.id)
+            while !Task.isCancelled, liveFeed?.id == source.id {
+                if liveFeedFrame == nil { liveFeedStatus = feedRunner.state(of: source).text }
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            }
+            return
+        }
         while !Task.isCancelled, liveFeed?.id == source.id {
             do {
                 let data = try await feedRunner.fetchPreview(of: source)
@@ -418,6 +449,12 @@ final class HubController: ObservableObject {
 
     func attach(context: ModelContext) {
         self.modelContext = context
+        refreshPendingCount()
+    }
+
+    func refreshPendingCount() {
+        guard let modelContext else { return }
+        if let count = try? modelContext.fetchCount(FetchDescriptor<PendingSubmission>()) { pendingCount = count }
     }
 
     func chooseIngestFolder() {

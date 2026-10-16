@@ -7,9 +7,11 @@ import SwiftUI
 /// Local outbox review: what this Hub has recorded and queued for sync. Discarding removes only the local copy.
 /// Each identified vehicle carries its evidence crop when one could be captured (`SightingSubmissionDTO.cropJPEGBase64`).
 struct ReviewPane: View {
+    var onQueueChange: () -> Void = {}
     @Environment(\.modelContext) private var context
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var rows: [PendingSubmission]
-    @State private var selection: PersistentIdentifier?
+    @State private var selection: Set<PersistentIdentifier> = []
+    @State private var discardError = ""
 
     private struct Row: Identifiable {
         let id: PersistentIdentifier
@@ -42,25 +44,39 @@ struct ReviewPane: View {
             HStack {
                 Text("\(rows.count) queued").font(.headline)
                 Spacer()
-                Button("Discard selected (local only)") {
-                    if let id = selection, let row = rows.first(where: { $0.persistentModelID == id }) {
-                        context.delete(row); try? context.save(); selection = nil
-                    }
+                Text("\(selection.count) selected").font(.caption).foregroundStyle(.secondary)
+                Button("Select all") { selection = Set(rows.map(\.persistentModelID)) }.disabled(rows.isEmpty).accessibilityLabel("Select all queued sightings")
+                Button("Clear selection") { selection.removeAll() }.disabled(selection.isEmpty)
+                Button("Reject selected (local only)", role: .destructive) {
+                    do { try ReviewQueue.reject(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
+                    catch { discardError = "Could not reject selected items: \(error.localizedDescription)" }
                 }
                 .buttonStyle(.bordered)
-                .disabled(selection == nil)
+                .disabled(selection.isEmpty)
             }
+            if !discardError.isEmpty { Text(discardError).foregroundStyle(.red) }
+            Text("Use Command-click or Shift-click to select multiple items. Rejection removes the selected local queue entries.")
+                .font(.caption).foregroundStyle(.secondary)
             Table(table, selection: $selection) {
                 TableColumn("Image") { EvidenceThumbnail(image: $0.thumbnail) }.width(min: 72, ideal: 80)
-                TableColumn("Captured") { Text($0.captured, format: .dateTime) }
-                TableColumn("Agency") { Text($0.agency) }
-                TableColumn("Unit") { Text($0.unit) }
-                TableColumn("Area") { Text($0.area).monospaced() }
-                TableColumn("Fleet") { Text($0.confidence, format: .percent.precision(.fractionLength(0))) }
-                TableColumn("Retries") { Text("\($0.retries)") }
-                TableColumn("Last error") { Text($0.error).foregroundStyle(.secondary) }
+                TableColumn("Captured") { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.captured, format: .dateTime.month(.twoDigits).day(.twoDigits).year(.twoDigits))
+                        Text(row.captured, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
+                    }.font(.caption).help(row.captured.formatted())
+                }.width(110)
+                TableColumn("Agency") { Text($0.agency).lineLimit(2).help($0.agency) }.width(min: 110, ideal: 170, max: 280)
+                TableColumn("Unit") { Text($0.unit).help($0.unit) }.width(64)
+                TableColumn("Area") { Text($0.area).monospaced() }.width(65)
+                TableColumn("Fleet") { Text($0.confidence, format: .percent.precision(.fractionLength(0))) }.width(55)
+                TableColumn("Retries") { Text("\($0.retries)") }.width(48)
+                TableColumn("Last error") { Text($0.error).foregroundStyle(.secondary).help($0.error) }.width(min: 80, ideal: 140)
             }
-            if let row = table.first(where: { $0.id == selection }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
+            .overlay {
+                if rows.isEmpty { ContentUnavailableView("Nothing queued for review", systemImage: "tray", description: Text("Fleet sightings appear here after on-device analysis.")) }
+            }
+            .onChange(of: rows.map(\.persistentModelID)) { _, ids in selection.formIntersection(ids) }
+            if selection.count == 1, let row = table.first(where: { selection.contains($0.id) }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding()
@@ -90,7 +106,7 @@ private struct EvidenceThumbnail: View {
             Image(systemName: "photo")
                 .foregroundStyle(.tertiary)
                 .frame(width: 64, height: 40)
-                .help("No evidence image was captured for this sighting")
+                .help("No image saved: an older record, unavailable frame, or a crop omitted by privacy rules")
         }
     }
 }
@@ -115,7 +131,7 @@ private struct EvidenceViewer: View {
             }
         }
         .padding()
-        .frame(minWidth: 520, minHeight: 400)
+        .frame(minWidth: max(520, image.size.width + 48), minHeight: max(400, image.size.height + 100))
     }
 }
 

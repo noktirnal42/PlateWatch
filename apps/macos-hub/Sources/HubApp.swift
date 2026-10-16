@@ -12,24 +12,25 @@ struct PlateWatchHubApp: App {
 
     init() {
         let schema = Schema([PendingSubmission.self])
-        let config = ModelConfiguration("PlateWatchHub", schema: schema)
+        let config = ModelConfiguration("PlateWatchHub", schema: schema, isStoredInMemoryOnly: HubQAFixture.enabled)
         modelContainer = (try? ModelContainer(for: schema, configurations: config))
             // A hub with no local persistence still runs degraded (log-only).
             ?? (try! ModelContainer(for: schema, configurations:
                 ModelConfiguration("PlateWatchHub-fallback", schema: schema, isStoredInMemoryOnly: true)))
         backend = SyncBackends.makeDefault()
+        HubQAFixture.prepare(context: modelContainer.mainContext)
         let controller = HubController(context: modelContainer.mainContext)
         let bridge = HubAgentBridge(hub: controller, context: modelContainer.mainContext)
         controller.agentBridge = bridge
-        bridge.start()
+        if !HubQAFixture.enabled { bridge.start() }
         _hub = StateObject(wrappedValue: controller)
         let port = UInt16(clamping: UserDefaults.standard.integer(forKey: "hubSnapshotPort"))
-        Task { await controller.startSnapshotServer(port: port == 0 ? 8088 : port) }
+        if !HubQAFixture.enabled { Task { await controller.startSnapshotServer(port: port == 0 ? 8088 : port) } }
     }
 
     var body: some Scene {
         // The main desktop console.
-        WindowGroup("PlateWatch Hub", id: "console") {
+        Window("PlateWatch Hub", id: "console") {
             ConsoleView(hub: hub)
                 .modelContainer(modelContainer)
                 .onAppear { hub.attach(context: modelContainer.mainContext) }

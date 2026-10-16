@@ -47,17 +47,21 @@ targets:
     platform: macOS
     sources:
       - Tests
+      - Sources/EvidenceCrop.swift
       - Sources/FeedRunner.swift
       - Sources/Console/FeedPreferences.swift
       - Sources/Console/ModeratorAccess.swift
       - Sources/Console/ModerationStore.swift
       - Sources/Console/RecordsWorkspace.swift
+      - Sources/Console/ReviewPane.swift
+      - Sources/Console/ReviewQueue.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - package: FeedIngest
       - package: PlateKit
+      - package: PlateSync
       - package: AccountabilityKit
 
 packages:

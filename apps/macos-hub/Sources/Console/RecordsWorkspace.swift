@@ -135,7 +135,10 @@ final class RecordsWorkspace {
     }
 
     static var defaultDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #if DEBUG
+        if CommandLine.arguments.contains("-PWVisualQA") { return FileManager.default.temporaryDirectory.appendingPathComponent("PlateWatchVisualQA/records") }
+        #endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PlateWatchHub/records", isDirectory: true)
     }
 

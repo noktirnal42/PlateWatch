@@ -8,11 +8,13 @@ public struct PublicAPIPermission: Sendable {
     public let host: String
     public let pathPrefixes: [String]
     public let citation: SourceCitation
+    private let permitsWowzaPlaceholder: Bool
 
-    public init(host: String, pathPrefixes: [String], citation: SourceCitation) {
+    public init(host: String, pathPrefixes: [String], citation: SourceCitation, permitsWowzaPlaceholder: Bool = false) {
         self.host = host.lowercased()
         self.pathPrefixes = pathPrefixes
         self.citation = citation
+        self.permitsWowzaPlaceholder = permitsWowzaPlaceholder
     }
 
     public func allows(_ url: URL, robotsHTTPStatus: Int) -> Bool {
@@ -22,6 +24,25 @@ public struct PublicAPIPermission: Sendable {
         guard !url.path.split(separator: "/").contains(".."), !url.path.contains("\\") else { return false }
         return pathPrefixes.contains { url.path.hasPrefix($0) }
     }
+
+    /// NV511 publishes these exact operator hosts and .stream HLS routes in its
+    /// documented camera API. Their missing robots route sometimes responds
+    /// with Wowza's generic HTTP 200 welcome page, rather than a robots policy.
+    /// This exception never applies to a real policy, auth refusal or TLS error.
+    public func allowsWowzaPlaceholder(_ url: URL) -> Bool {
+        permitsWowzaPlaceholder && citation.url?.scheme == "https" && url.scheme?.lowercased() == "https"
+            && url.host?.lowercased() == host && (url.port == nil || url.port == 443)
+            && !url.path.split(separator: "/").contains("..") && !url.path.contains("\\")
+            && url.path.contains(".stream/") && url.path.hasSuffix(".m3u8")
+            && pathPrefixes.contains { url.path.hasPrefix($0) }
+    }
+
+    public static let nevada511Video: [PublicAPIPermission] =
+        ["d2wse2", "d2wse1", "d3wse1", "d1wse5", "d1wse2", "d1wse3", "d1wse4", "d1wse1"].map {
+            PublicAPIPermission(host: "\($0).its.nv.gov", pathPrefixes: ["/renoxcd", "/vegasxcd", "/elko"],
+                citation: .init(sourceType: .officialPost, url: URL(string: "https://www.nvroads.com/help/endpoint/cameras")!,
+                    retrievedAt: Date(timeIntervalSince1970: 1_792_102_400)), permitsWowzaPlaceholder: true)
+        }
 
     /// Caltrans explicitly provides these CWWP2 files for application integration. Verified 2026-10-14:
     /// catalogues return 200; /robots.txt is an nginx 500. Scope only published CCTV image branches, not the whole site.

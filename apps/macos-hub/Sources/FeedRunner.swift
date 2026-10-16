@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreVideo
+import CoreImage
 import FeedIngest
 import Foundation
 import SwiftUI
@@ -56,14 +57,16 @@ final class FeedRunner: ObservableObject {
     static let userAgent = "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)"
 
     enum SourceState: Equatable {
-        case checking, polling, blockedByRobots, blockedByUser, suspended
+        case checking, polling, blockedByRobots, blockedByUser, suspended, videoIdle, videoConnecting
         case policyUnavailable(String)
-        case videoUnavailable(String)
+        case videoUnavailable(String), imageUnavailable(String)
     }
     /// Per-camera status. Deliberately **not** `@Published`: thousands of cameras change state in bursts (start-up, a host's
     /// robots.txt answering), and a publish per camera re-rendered the whole table thousands of times and froze the UI.
     /// Changes are coalesced into at most one refresh per half second instead.
     private(set) var sourceStates: [UUID: SourceState] = [:] { didSet { scheduleStateRefresh() } }
+    @Published private(set) var stateRevision = 0
+    private(set) var lastReceivedAt: [UUID: Date] = [:]
     private var stateRefreshPending = false
     private func scheduleStateRefresh() {
         guard !stateRefreshPending else { return }
@@ -71,11 +74,12 @@ final class FeedRunner: ObservableObject {
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             self?.stateRefreshPending = false
-            self?.objectWillChange.send()
+            self?.stateRevision &+= 1
         }
     }
     enum StatusKind: String, CaseIterable, Identifiable {
         case checking = "Checking robots.txt", polling = "Polling", confirmed = "Confirmed (idle)"
+        case frameUnavailable = "Camera image unavailable"
         case unavailable = "Policy temporarily unavailable"
         case awaiting = "Awaiting terms", blocked = "Blocked / refused", userBlocked = "Blocked by you", suspended = "Suspended"
         var id: String { rawValue }
@@ -91,6 +95,9 @@ final class FeedRunner: ObservableObject {
         case .policyUnavailable: return .init(text: "Policy temporarily unavailable", icon: "arrow.clockwise", color: .orange, kind: .unavailable)
         case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
+        case .imageUnavailable(let reason): return .init(text: reason, icon: "photo.badge.exclamationmark", color: .orange, kind: .frameUnavailable)
+        case .videoConnecting: return .init(text: "Connecting HLS…", icon: "video", color: .secondary, kind: .checking)
+        case .videoIdle: return .init(text: "HLS ready · open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
         case .suspended: return source.kind == .rtsp
             ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
             : .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .orange, kind: .suspended)
@@ -106,6 +113,7 @@ final class FeedRunner: ObservableObject {
     private var sink: ClosureSink?
     private var videoSink: ClosureVideoSink?
     /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
+    private var requestedHLSID: UUID?
     private var hlsSources: [UUID: HLSFrameSource] = [:]
     private var blockedIDs: Set<UUID> = []
     private let session: URLSession
@@ -113,7 +121,7 @@ final class FeedRunner: ObservableObject {
     private let throttle: HostThrottle
     private let retryInterval: Duration
 
-    init(session: URLSession? = nil, throttleInterval: TimeInterval = 1, retryInterval: Duration = .seconds(60), publicAPIPermissions: [PublicAPIPermission] = [.caltransCCTV]) {
+    init(session: URLSession? = nil, throttleInterval: TimeInterval = 1, retryInterval: Duration = .seconds(60), publicAPIPermissions: [PublicAPIPermission] = [.caltransCCTV] + PublicAPIPermission.nevada511Video) {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 20
@@ -220,7 +228,9 @@ final class FeedRunner: ObservableObject {
         guard let sink else { return }
         let id = source.id, robots = self.robots, throttle = self.throttle
         sourceStates[id] = .polling
-        let poller = SnapshotPoller(source: source, sink: sink, session: session, gate: { [weak self] url in
+        let poller = SnapshotPoller(source: source, sink: sink, session: session, onOutcome: { [weak self] outcome in
+            await self?.recordSnapshotOutcome(outcome, sourceID: id, run: run)
+        }, gate: { [weak self] url in
             guard !Task.isCancelled, await robots.isAllowed(url) else {
                 await self?.markRobotsBlocked(id, run: run)
                 return false
@@ -235,9 +245,23 @@ final class FeedRunner: ObservableObject {
             await poller.run(sink: sink)
             guard let self, !Task.isCancelled, self.generation == run else { return }
             self.tasks[id] = nil
-            if self.sourceStates[id] == .polling { self.sourceStates[id] = .suspended }
+            switch self.sourceStates[id] {
+            case .polling, .imageUnavailable: self.sourceStates[id] = .suspended
+            default: break
+            }
             self.updateStatus()
         }
+    }
+
+    private func recordSnapshotOutcome(_ outcome: SnapshotPoller.Outcome, sourceID: UUID, run: UUID) {
+        guard mayFetch(sourceID, run: run) else { return }
+        switch outcome {
+        case .received(let date): lastReceivedAt[sourceID] = date; sourceStates[sourceID] = .polling
+        case .httpFailure(let code): sourceStates[sourceID] = .imageUnavailable("Camera HTTP \(code) · retrying")
+        case .unreadableImage: sourceStates[sourceID] = .imageUnavailable("Camera returned unreadable media · retrying")
+        case .networkFailure(let code): sourceStates[sourceID] = .imageUnavailable("Camera connection failed (\(code)) · retrying")
+        }
+        updateStatus()
     }
 
     private func mayFetch(_ id: UUID, run: UUID) -> Bool { generation == run && !blockedIDs.contains(id) }
@@ -250,18 +274,35 @@ final class FeedRunner: ObservableObject {
     /// Known limitation (documented, not hidden): AVPlayer itself fetches
     /// playlist segments/CDN chunks, so those requests are not routed through
     /// our robots cache; a custom AVAssetResourceLoader is the future fix.
+    /// Only the selected Live stream decodes continuously. Approving a large
+    /// catalogue must never start hundreds of AVPlayers at once.
+    func setLiveVideoSource(_ id: UUID?) {
+        requestedHLSID = id
+        for old in Array(hlsSources.keys) where old != id {
+            stopHLS(old)
+            if !blockedIDs.contains(old) { sourceStates[old] = .videoIdle }
+        }
+        if let id, let source = catalogue?.sources.first(where: { $0.id == id }),
+           source.kind == .hls, source.mayBeAnalysed, !blockedIDs.contains(id) {
+            checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(source.url) } ?? [])
+        }
+        updateStatus()
+    }
+
     private func beginHLSPolling(_ source: PublicFeedSource, run: UUID) {
         guard let videoSink, !hlsSources.keys.contains(source.id) else {
             if videoSink == nil { sourceStates[source.id] = .suspended }
             return
         }
+        guard source.id == requestedHLSID else { sourceStates[source.id] = .videoIdle; return }
         let id = source.id
-        sourceStates[id] = .checking
+        sourceStates[id] = .videoConnecting
         let decoder = HLSFrameSource(source: source)
+        decoder.tapInterval = 1
         decoder.onStateChange = { [weak self] state in
             guard let self, self.generation == run, !self.blockedIDs.contains(id), self.hlsSources[id] != nil else { return }
             switch state {
-            case .connecting: self.sourceStates[id] = .checking
+            case .connecting: self.sourceStates[id] = .videoConnecting
             case .streaming: self.sourceStates[id] = .polling
             case .retrying(let reason): self.sourceStates[id] = .videoUnavailable(reason)
             case .stopped: break
@@ -290,11 +331,15 @@ final class FeedRunner: ObservableObject {
     private func updateStatus() {
         runningCount = sourceStates.values.filter { $0 == .polling }.count
         let checking = sourceStates.values.filter { $0 == .checking }.count
+        let imageFailures = sourceStates.values.filter { if case .imageUnavailable = $0 { true } else { false } }.count
+        let videoConnecting = sourceStates.values.filter { $0 == .videoConnecting }.count
         let refused = sourceStates.values.filter { $0 == .blockedByRobots }.count
         let suspended = sourceStates.values.filter { $0 == .suspended }.count
         let unavailable = sourceStates.values.filter { if case .policyUnavailable = $0 { true } else { false } }.count
         var parts: [String] = []
         if runningCount > 0 { parts.append("Polling \(runningCount) feed(s)") }
+        if videoConnecting > 0 { parts.append("\(videoConnecting) video connecting") }
+        if imageFailures > 0 { parts.append("\(imageFailures) camera images retrying") }
         if checking > 0 { parts.append("\(checking) checking robots.txt") }
         if awaitingTermsCount > 0 { parts.append("\(awaitingTermsCount) awaiting terms") }
         if unavailable > 0 { parts.append("\(unavailable) policy lookups retrying") }
@@ -307,7 +352,7 @@ final class FeedRunner: ObservableObject {
 
     enum PreviewError: Error, LocalizedError {
         case notConfirmed, blockedLocally, badResponse(Int), notAnImage
-        case policyUnavailable(String), policyRefused(String)
+        case policyUnavailable(String), policyRefused(String), videoUnavailable(String)
         var policyRetryDelay: TimeInterval? {
             if case .policyUnavailable = self { 60 } else { nil }
         }
@@ -318,6 +363,7 @@ final class FeedRunner: ObservableObject {
             case .notConfirmed: return "Terms for this host are not confirmed yet."
             case .blockedLocally: return "Blocked on this Mac. Unblock this camera to view it again."
             case .badResponse(let code): return "The camera answered HTTP \(code). Use ⦸ to block an unavailable camera."
+            case .videoUnavailable(let reason): return "Video unavailable: \(reason)"
             case .notAnImage: return "The camera did not return an image. Use ⦸ to block this camera."
             }
         }
@@ -348,7 +394,10 @@ final class FeedRunner: ObservableObject {
             try Task.checkCancellation()
             if source.kind == .hls {
                 // No single JPEG exists: pull one decoded frame from the stream for the preview tile.
-                return try await Self.hlsPreviewFrame(url: source.url)
+                let data = try await Self.hlsPreviewFrame(source: source)
+                try Task.checkCancellation()
+                guard self.mayFetch(source.id, run: run) else { throw PreviewError.blockedLocally }
+                return data
             }
             let (data, response) = try await session.data(from: source.url)
             try Task.checkCancellation()
@@ -356,6 +405,10 @@ final class FeedRunner: ObservableObject {
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard (200..<300).contains(code) else { throw PreviewError.badResponse(code) }
             guard data.starts(with: [0xFF, 0xD8]) || data.starts(with: [0x89, 0x50, 0x4E, 0x47]) else { throw PreviewError.notAnImage }
+            if retryFailedPolicy, self.catalogue?.sources.contains(where: { $0.id == source.id }) == true {
+                if self.sourceStates[source.id] == .suspended { self.beginPolling(source, run: run) }
+                self.recordSnapshotOutcome(.received(Date()), sourceID: source.id, run: run)
+            }
             return data
         }
         previewTasks[source.id, default: [:]][requestID] = task
@@ -363,22 +416,22 @@ final class FeedRunner: ObservableObject {
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
-    /// One frame from an HLS playlist for preview tiles. AVAssetImageGenerator
-    /// decodes from the manifest (background analysis taps the live decoder
-    /// instead). Fails honestly when the stream is not reachable.
-    static func hlsPreviewFrame(url: URL) async throws -> Data {
-        let asset = AVURLAsset(url: url)
-        guard (try? await asset.load(.isPlayable)) == true else { throw PreviewError.notAnImage }
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 640, height: 640)
-        generator.requestedTimeToleranceBefore = .positiveInfinity
-        generator.requestedTimeToleranceAfter = .positiveInfinity
-        let (image, _) = try await generator.image(at: .zero)
-        guard let jpeg = NSBitmapImageRep(cgImage: image).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
-            throw PreviewError.notAnImage
+    /// Decode ordinary live HLS without requiring the optional I-frame rendition
+    /// needed by AVAssetImageGenerator. The bounded decoder is always released.
+    static func hlsPreviewFrame(source: PublicFeedSource, timeout: TimeInterval = 15) async throws -> Data {
+        guard source.mayBeAnalysed else { throw PreviewError.notConfirmed }
+        let sink = HLSPreviewSink()
+        let decoder = HLSFrameSource(source: source)
+        decoder.start(sink: sink)
+        defer { decoder.stop() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(timeout))
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            if let jpeg = sink.jpeg { return jpeg }
+            if case .retrying(let reason) = decoder.state { throw PreviewError.videoUnavailable(reason) }
+            try await Task.sleep(for: .milliseconds(50))
         }
-        return jpeg
+        throw PreviewError.videoUnavailable("No decoded frame within \(Int(timeout)) seconds. The stream may be offline or require provider access.")
     }
 
     func stop() {
@@ -387,6 +440,7 @@ final class FeedRunner: ObservableObject {
         hostTasks.values.forEach { $0.cancel() }; hostTasks.removeAll()
         previewTasks.values.forEach { $0.values.forEach { $0.cancel() } }; previewTasks.removeAll()
         hlsSources.values.forEach { $0.stop() }; hlsSources.removeAll()
+        requestedHLSID = nil
         sourceStates.removeAll(); runningCount = 0; awaitingTermsCount = 0
         catalogue = nil; sink = nil; videoSink = nil
         status = "Stopped"
@@ -420,4 +474,20 @@ private struct ClosureVideoSink: LiveFrameSink {
     func accept(_ pixelBuffer: CVPixelBuffer, from source: PublicFeedSource) async {
         await handler(PixelBufferBox(pixelBuffer), source)
     }
+}
+
+
+@MainActor
+private final class HLSPreviewSink: LiveFrameSink {
+    private(set) var jpeg: Data?
+    nonisolated func accept(_ pixelBuffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        let ci = CIImage(cvPixelBuffer: pixelBuffer)
+        let scale = min(1, 640 / max(ci.extent.width, ci.extent.height))
+        let fitted = ci.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let context = CIContext()
+        guard let image = context.createCGImage(fitted, from: fitted.extent),
+              let bytes = NSBitmapImageRep(cgImage: image).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return }
+        await store(bytes)
+    }
+    private func store(_ data: Data) { if jpeg == nil { jpeg = data } }
 }

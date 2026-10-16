@@ -124,7 +124,11 @@ final class HubAgentBridge {
                     "state": source.state ?? "", "kind": source.kind.rawValue, "terms_confirmed": source.mayBeAnalysed,
                     "favorite": hub.favorites.contains(source.id), "blocked": hub.favorites.isBlocked(source.id),
                     "status": state.text, "refresh_interval": source.refreshInterval]
-                if case .policyUnavailable(let reason) = hub.feedRunner.sourceStates[source.id] { out["diagnostic"] = reason }
+                switch hub.feedRunner.sourceStates[source.id] {
+                case .policyUnavailable(let reason), .imageUnavailable(let reason), .videoUnavailable(let reason): out["diagnostic"] = reason
+                default: break
+                }
+                if let received = hub.feedRunner.lastReceivedAt[source.id] { out["last_received_at"] = ISO8601DateFormatter().string(from: received) }
                 if command == "feeds.get" { out["source"] = try? Self.json(source) }
                 return out
             }]

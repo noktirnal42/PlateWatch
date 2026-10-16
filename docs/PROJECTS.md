@@ -45,16 +45,13 @@ tests must stay green before its status advances.
 - **Test:** `swift test --package-path packages/FeedIngest` + Hub scheme tests (see handoff).
 - **CSV import:** standard header mapping, agency and citation URL fields added; [export/source research](research/BRADY-CSV-EXPORTS-2026-10-14.md) records verified conversions and next sources.
 - **QA follow-up:** see [HUB-QA-2026-10-14.md](HUB-QA-2026-10-14.md) for post-Claude/GLM render fixes, source links and outstanding visual checks.
-- **Status:** 2026-10-14 desktop console builds and runs; favorites/block, shared polite polling,
-  Caltrans's scoped robots fallback, selected snapshot analysis in Live, and moderator audit refresh
-  implemented. Feed browser state survives sidebar navigation; Records & FOIA exposes the fleet FOIA
-  builder, a cited public-records directory and the programme boundary. Merged with the evidence-image
-  work: recorded fleet hits carry redacted vehicle crops (≤40 KB JPEG + SHA-256), shown as Review-pane
-  thumbnails with click-to-enlarge. `.hls` feed entries now run continuous background analysis through
-  `FeedIngest.HLSFrameSource` (same gates/tiering/crops as snapshots; manifest-origin robots; AVPlayer's
-  own CDN segment fetches are a documented limitation); `.rtsp` states it needs the unbundled VLCKit
-  fallback. Oregon/Utah/New Mexico imports added; new hosts remain unconfirmed. Continuous HLS and raw
-  RTSP are not yet validated against real streams end-to-end.
+- **Status:** 2026-10-15 Hub repair builds, tests and signed local installation verified; see
+  [repair evidence](HUB-REPAIR-2026-10-15.md). Nevada's keyed catalogue now preserves snapshots and HLS
+  per view. Real NV511 HLS playback/analysis and all ten existing favorite previews verified.
+  HLS decodes on demand for the selected Live camera; ordinary previews use the bounded live decoder.
+  Review multi-rejection/enlargement and pane persistence repaired; original eight queued records
+  preserved (their payloads lacked image bytes before this repair). Snapshot failures, policy failures
+  and manual recovery are distinct. Full segment/CDN policy and physical camera QA remain open.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
 - **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.

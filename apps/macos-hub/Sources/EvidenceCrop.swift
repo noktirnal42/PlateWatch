@@ -66,7 +66,7 @@ enum EvidenceCrop {
                      others: [VehicleObservation]) -> Output? {
         guard let frame = source.image else { return nil }
         let size = CGSize(width: frame.width, height: frame.height)
-        let cropBox = expanded(vehicle.boundingBox, in: size)
+        guard let cropBox = expanded(vehicle.boundingBox, in: size) else { return nil }
 
         // A vehicle substantially inside the crop area would contribute
         // plate/text we cannot reliably attribute or redact (its own boxes
@@ -97,19 +97,21 @@ enum EvidenceCrop {
                 }
             }
         }
-        return encoded(redact(foreign, in: cropped))
+        guard let redacted = redact(foreign, in: cropped) else { return nil }
+        return encoded(redacted)
     }
 
     // MARK: - Geometry
 
     /// Grows the box by `margin` of its own extent per side (context for
     /// roof/door lettering), clamped to the image.
-    private static func expanded(_ box: NormalizedBox, in size: CGSize) -> NormalizedBox {
+    private static func expanded(_ box: NormalizedBox, in size: CGSize) -> NormalizedBox? {
+        guard [box.x, box.y, box.width, box.height].allSatisfy(\.isFinite), box.width > 0, box.height > 0 else { return nil }
         let dx = box.width * margin, dy = box.height * margin
-        let x = max(0, box.x - dx), y = max(0, box.y - dy)
-        return NormalizedBox(x: x, y: y,
-                             width: min(box.width + 2 * dx, 1 - x),
-                             height: min(box.height + 2 * dy, 1 - y))
+        let rect = box.cgRect.insetBy(dx: -dx, dy: -dy)
+            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard !rect.isNull, !rect.isEmpty else { return nil }
+        return NormalizedBox(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
     }
 
     // MARK: - Redaction
@@ -117,13 +119,13 @@ enum EvidenceCrop {
     /// Opaque dark blocks over the given pixel-space rects (top-left origin
     /// coordinates). Deliberately a visible FOIA-style redaction, not an
     /// erase: what was covered stays evident.
-    private static func redact(_ rects: [CGRect], in image: CGImage) -> CGImage {
+    private static func redact(_ rects: [CGRect], in image: CGImage) -> CGImage? {
         guard !rects.isEmpty else { return image }
         let width = image.width, height = image.height
         guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                   bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                                      | CGBitmapInfo.byteOrder32Little.rawValue) else { return image }
+                                      | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         ctx.setFillColor(CGColor(gray: 0.12, alpha: 1))
         for rect in rects {
@@ -132,7 +134,7 @@ enum EvidenceCrop {
                                  width: rect.width, height: rect.height)
             ctx.fill(flipped.insetBy(dx: -2, dy: -2))
         }
-        return ctx.makeImage() ?? image
+        return ctx.makeImage()
     }
 
     // MARK: - Encoding

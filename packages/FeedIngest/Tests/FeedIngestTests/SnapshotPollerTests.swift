@@ -84,6 +84,24 @@ final class SnapshotPollerTests: XCTestCase {
         StubProtocol.requestCount = 0
     }
 
+    func testOutcomeSeparatesCameraHTTPAndMediaFailuresFromSuccess() async {
+        let log = PollOutcomeLog()
+        let source = makeSource()
+        let sink = CollectingSink()
+        let poller = SnapshotPoller(source: source, sink: sink, session: makeSession(), onOutcome: { await log.add($0) })
+        var schedule = FeedSchedule(refreshInterval: 1, now: .distantPast)
+        StubProtocol.responder = { _ in (503, "text/html", Data("busy".utf8)) }
+        _ = await poller.pollOnce(schedule: &schedule, now: Date(timeIntervalSince1970: 10))
+        StubProtocol.responder = { _ in (200, "text/html", Data("<html>offline</html>".utf8)) }
+        _ = await poller.pollOnce(schedule: &schedule, now: Date(timeIntervalSince1970: 20))
+        StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
+        let received = Date(timeIntervalSince1970: 30)
+        _ = await poller.pollOnce(schedule: &schedule, now: received)
+        let outcomes = await log.outcomes
+        XCTAssertEqual(outcomes, [.httpFailure(503), .unreadableImage, .received(received)])
+        XCTAssertEqual(schedule.consecutiveFailures, 0)
+    }
+
     func testFetchesDeliverJPEGsToSink() async {
         StubProtocol.responder = { _ in (200, "image/jpeg", self.jpeg) }
         let source = makeSource()
@@ -170,4 +188,9 @@ final class SnapshotPollerTests: XCTestCase {
 actor GateRecorder {
     private(set) var urls: [URL] = []
     func record(_ url: URL) { urls.append(url) }
+}
+
+private actor PollOutcomeLog {
+    var outcomes: [SnapshotPoller.Outcome] = []
+    func add(_ outcome: SnapshotPoller.Outcome) { outcomes.append(outcome) }
 }

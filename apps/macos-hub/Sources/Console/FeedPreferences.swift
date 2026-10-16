@@ -24,3 +24,46 @@ final class FeedFavorites: ObservableObject {
         defaults.set(blockedIDs.map(\.uuidString).sorted(), forKey: "hubBlockedFeeds")
     }
 }
+
+/// Persisted feed-browser UI state (tab, search, filters, sort, selection).
+@MainActor
+final class FeedBrowserState: ObservableObject {
+    enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites", blocked = "Blocked"; var id: String { rawValue } }
+    enum SortKey: String, CaseIterable, Identifiable { case state = "State", name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
+
+    @Published var tab: Tab = .all
+    @Published var query: String = ""
+    @Published var hostFilter: String = ""
+    @Published var statusFilter: FeedRunner.StatusKind?
+    @Published var sortKey: SortKey = .state
+    @Published var ascending: Bool = true
+    @Published var favoritesFirst: Bool = false
+    @Published var selected: Set<UUID> = []
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let tabRaw = defaults.string(forKey: "hubFeedBrowserTab"), let t = Tab(rawValue: tabRaw) { tab = t }
+        query = defaults.string(forKey: "hubFeedBrowserQuery") ?? ""
+        hostFilter = defaults.string(forKey: "hubFeedBrowserHostFilter") ?? ""
+        if let statusRaw = defaults.string(forKey: "hubFeedBrowserStatusFilter"), let s = FeedRunner.StatusKind(rawValue: statusRaw) { statusFilter = s }
+        if let sortRaw = defaults.string(forKey: "hubFeedBrowserSortKey"), let s = SortKey(rawValue: sortRaw) { sortKey = s }
+        ascending = (defaults.object(forKey: "hubFeedBrowserAscending") as? Bool) ?? true
+        favoritesFirst = defaults.bool(forKey: "hubFeedBrowserFavoritesFirst")
+        if let selectedStrings = defaults.stringArray(forKey: "hubFeedBrowserSelected") {
+            selected = Set(selectedStrings.compactMap(UUID.init(uuidString:)))
+        }
+    }
+
+    func save() {
+        defaults.set(tab.rawValue, forKey: "hubFeedBrowserTab")
+        defaults.set(query, forKey: "hubFeedBrowserQuery")
+        defaults.set(hostFilter, forKey: "hubFeedBrowserHostFilter")
+        defaults.set(statusFilter?.rawValue, forKey: "hubFeedBrowserStatusFilter")
+        defaults.set(sortKey.rawValue, forKey: "hubFeedBrowserSortKey")
+        defaults.set(ascending, forKey: "hubFeedBrowserAscending")
+        defaults.set(favoritesFirst, forKey: "hubFeedBrowserFavoritesFirst")
+        defaults.set(selected.map(\.uuidString).sorted(), forKey: "hubFeedBrowserSelected")
+    }
+}

@@ -2,25 +2,16 @@ import FeedIngest
 import SwiftUI
 
 struct FeedsPane: View {
-    enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites", blocked = "Blocked"; var id: String { rawValue } }
-    enum SortKey: String, CaseIterable, Identifiable { case state = "State", name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
 
     let hub: HubController
     let isActive: Bool
     var onOpenLive: () -> Void
     @ObservedObject private var favorites: FeedFavorites
     @ObservedObject private var runner: FeedRunner
+    @ObservedObject private var browser: FeedBrowserState
     @State private var catalogue: FeedCatalogue?
-    @State private var tab: Tab = .all
-    @State private var query = ""
-    @State private var hostFilter = ""
-    @State private var statusFilter: FeedRunner.StatusKind?
-    @State private var sortKey: SortKey = .state
-    @State private var ascending = true
-    @State private var favoritesFirst = false
     @State private var termsExpanded = false
     @State private var reviewing: FeedHostSummary?
-    @State private var selected: Set<UUID> = []
 
     init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void) {
         self.hub = hub
@@ -28,7 +19,17 @@ struct FeedsPane: View {
         self.onOpenLive = onOpenLive
         _favorites = ObservedObject(wrappedValue: hub.favorites)
         _runner = ObservedObject(wrappedValue: hub.feedRunner)
+        _browser = ObservedObject(wrappedValue: hub.feedBrowserState)
     }
+
+    private var tab: FeedBrowserState.Tab { browser.tab }
+    private var query: String { browser.query }
+    private var hostFilter: String { browser.hostFilter }
+    private var statusFilter: FeedRunner.StatusKind? { browser.statusFilter }
+    private var sortKey: FeedBrowserState.SortKey { browser.sortKey }
+    private var ascending: Bool { browser.ascending }
+    private var favoritesFirst: Bool { browser.favoritesFirst }
+    private var selected: Set<UUID> { browser.selected }
 
     @State private var hosts: [FeedHostSummary] = []
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
@@ -75,10 +76,10 @@ struct FeedsPane: View {
         VStack(alignment: .leading, spacing: 10) {
             if !needReview.isEmpty { termsBanner }
             HStack {
-                Picker("", selection: $tab) {
-                    Text("All feeds (\(totalCount))").tag(Tab.all)
-                    Text("★ Favorites (\(favorites.ids.subtracting(favorites.blockedIDs).count))").tag(Tab.favorites)
-                    Text("⦸ Blocked (\(favorites.blockedIDs.count))").tag(Tab.blocked)
+                Picker("", selection: Binding(get: { browser.tab }, set: { browser.tab = $0; browser.save() })) {
+                    Text("All feeds (\(totalCount))").tag(FeedBrowserState.Tab.all)
+                    Text("★ Favorites (\(favorites.ids.subtracting(favorites.blockedIDs).count))").tag(FeedBrowserState.Tab.favorites)
+                    Text("⦸ Blocked (\(favorites.blockedIDs.count))").tag(FeedBrowserState.Tab.blocked)
                 }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 490)
                 Spacer()
                 Menu("Add cameras") {
@@ -113,10 +114,10 @@ struct FeedsPane: View {
         .onChange(of: favorites.ids) { _, _ in refreshRows() }
         .onChange(of: favorites.blockedIDs) { _, _ in refreshRows() }
         // Camera statuses only matter to the list when it is filtered or sorted by status.
-        .onChange(of: runner.status) { _, _ in if statusFilter != nil || sortKey == .status { refreshRows() } }
+        .onChange(of: runner.stateRevision) { _, _ in if statusFilter != nil || sortKey == .status { refreshRows() } }
         .onChange(of: tab) { _, _ in refreshRows() }
         .onChange(of: tab) { _, value in
-            if value == .blocked { query = ""; hostFilter = ""; statusFilter = nil }
+            if value == .blocked { browser.query = ""; browser.hostFilter = ""; browser.statusFilter = nil; browser.save() }
         }
         .onChange(of: hub.importStatus) { _, _ in reload() }
         .sheet(item: Binding(get: { reviewing.map(HostBox.init) }, set: { reviewing = $0?.host })) { box in
@@ -167,8 +168,8 @@ struct FeedsPane: View {
         HStack(spacing: 10) {
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search name, host or area", text: $query).textFieldStyle(.plain)
-                if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary) }
+                TextField("Search name, host or area", text: Binding(get: { browser.query }, set: { browser.query = $0; browser.save() })).textFieldStyle(.plain)
+                if !query.isEmpty { Button { browser.query = ""; browser.save() } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary) }
             }
             .padding(6).background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8)).frame(maxWidth: 300)
         }
@@ -176,14 +177,14 @@ struct FeedsPane: View {
     }
 
     private var sourceControl: some View {
-        Picker("Source", selection: $hostFilter) {
+        Picker("Source", selection: Binding(get: { browser.hostFilter }, set: { browser.hostFilter = $0; browser.save() })) {
             Text("All sources").tag("")
             ForEach(hosts, id: \.host) { Text("\($0.host) (\($0.totalCount))").tag($0.host) }
         }.frame(maxWidth: 260).help("Filter cameras by their image host")
     }
 
     private var statusControl: some View {
-        Picker("Status", selection: $statusFilter) {
+        Picker("Status", selection: Binding(get: { browser.statusFilter }, set: { browser.statusFilter = $0; browser.save() })) {
             Text("Any status").tag(FeedRunner.StatusKind?.none)
             ForEach(FeedRunner.StatusKind.allCases) { Text($0.rawValue).tag(FeedRunner.StatusKind?.some($0)) }
         }.frame(maxWidth: 200).help("Filter by terms, robots policy, polling or local block status")
@@ -191,17 +192,17 @@ struct FeedsPane: View {
 
     private var sortControl: some View {
         HStack(spacing: 10) {
-            Picker("Sort", selection: $sortKey) { ForEach(SortKey.allCases) { Text($0.rawValue).tag($0) } }.frame(maxWidth: 150)
-            Button { ascending.toggle() } label: { Image(systemName: ascending ? "arrow.up" : "arrow.down") }
+            Picker("Sort", selection: Binding(get: { browser.sortKey }, set: { browser.sortKey = $0; browser.save() })) { ForEach(FeedBrowserState.SortKey.allCases) { Text($0.rawValue).tag($0) } }.frame(maxWidth: 150)
+            Button { browser.ascending.toggle(); browser.save() } label: { Image(systemName: ascending ? "arrow.up" : "arrow.down") }
                 .help(ascending ? "Ascending; click for descending" : "Descending; click for ascending")
-            Toggle("Favorites first", isOn: $favoritesFirst).toggleStyle(.checkbox)
+            Toggle("Favorites first", isOn: Binding(get: { browser.favoritesFirst }, set: { browser.favoritesFirst = $0; browser.save() })).toggleStyle(.checkbox)
                 .help("Place starred cameras before the selected sort order")
         }
     }
 
     private var listAndPreview: some View {
         HSplitView {
-            Table(rows, selection: $selected) {
+            Table(rows, selection: Binding(get: { browser.selected }, set: { browser.selected = $0; browser.save() })) {
                 TableColumn("") { s in
                     Button { favorites.toggle(s.id) } label: {
                         Image(systemName: favorites.contains(s.id) ? "star.fill" : "star")
@@ -342,7 +343,7 @@ struct CameraPreviewPanel: View {
                     FeedBlockButton(hub: hub, preferences: favorites, source: source)
                 }
                 Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
-                Label("Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: "photo")
+                Label(source.kind == .hls ? "HLS video · sampled analysis" : "Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: source.kind == .hls ? "video" : "photo")
                     .font(.caption).foregroundStyle(.secondary)
                 ZStack {
                     Rectangle().fill(.black.opacity(0.85))

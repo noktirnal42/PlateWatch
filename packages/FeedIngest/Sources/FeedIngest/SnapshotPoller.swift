@@ -17,16 +17,21 @@ public struct SnapshotPoller: Sendable {
     /// the poller stops: it never contacts a URL it was told not to fetch, and picks up policy changes within the cache TTL.
     public typealias FetchGate = @Sendable (URL) async -> Bool
     private let gate: FetchGate?
+    public enum Outcome: Sendable, Equatable {
+        case received(Date), httpFailure(Int), unreadableImage, networkFailure(Int)
+    }
+    private let onOutcome: (@Sendable (Outcome) async -> Void)?
 
     /// True when this poller is allowed to contact the source at all.
     public var isPermitted: Bool { !enforceTerms || source.mayBeAnalysed }
 
     public init(source: PublicFeedSource, sink: FeedFrameSink, session: URLSession? = nil,
-                enforceTerms: Bool = true, gate: FetchGate? = nil) {
+                enforceTerms: Bool = true, onOutcome: (@Sendable (Outcome) async -> Void)? = nil, gate: FetchGate? = nil) {
         self.source = source
         self.sink = sink
         self.enforceTerms = enforceTerms
         self.gate = gate
+        self.onOutcome = onOutcome
         self.session = session ?? {
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = 10
@@ -47,18 +52,24 @@ public struct SnapshotPoller: Sendable {
                 throw URLError(.badServerResponse)
             }
             guard (200..<300).contains(http.statusCode) else {
-                throw URLError(.badServerResponse)
+                schedule.recordFailure(now: now)
+                await onOutcome?(.httpFailure(http.statusCode))
+                return schedule
             }
             // A snapshot feed must at least look like an image; refuse to
             // feed HTML error pages into the pipeline.
             let type = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
             guard type.isEmpty || type.contains("image") || data.starts(with: [0xFF, 0xD8]) else {
-                throw URLError(.cannotDecodeContentData)
+                schedule.recordFailure(now: now)
+                await onOutcome?(.unreadableImage)
+                return schedule
             }
             await sink.accept(data, from: source)
             schedule.recordSuccess(now: now)
+            await onOutcome?(.received(now))
         } catch {
             schedule.recordFailure(now: now)
+            if !Task.isCancelled { await onOutcome?(.networkFailure((error as? URLError)?.errorCode ?? -1)) }
         }
         return schedule
     }
