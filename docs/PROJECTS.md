@@ -58,7 +58,8 @@ tests must stay green before its status advances.
   Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
   163 FeedIngest and 45 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
   with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
-  Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes.
+  Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
+  readable SUV/van/pickup aliases and classifier confidence when a body label is unavailable).
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
