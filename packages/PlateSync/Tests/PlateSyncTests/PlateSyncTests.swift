@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import SwiftData
 @testable import PlateSync
 import PlateKit
 
@@ -47,6 +48,22 @@ final class OutboxTests: XCTestCase {
         // Compile-time contract: any SyncBackend can be used existentially.
         let backend: any SyncBackend = RESTBackend(baseURL: URL(string: "http://localhost:8080")!)
         _ = backend
+    }
+
+    func testReceiptLedgerKeepsOnlyBoundedAuditMetadata() {
+        let sightingID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let receipt = ReceivedSubmissionReceipt(
+            sightingID: sightingID,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            moderationState: .fleetConfirmed,
+            operatorConfirmed: true,
+            idempotencyKey: "0123456789abcdef")
+
+        XCTAssertEqual(receipt.sightingID, sightingID)
+        XCTAssertEqual(receipt.moderationState, .fleetConfirmed)
+        XCTAssertEqual(receipt.idempotencyPrefix, "0123456789ab")
+        XCTAssertTrue(receipt.operatorConfirmed)
+        XCTAssertFalse(Mirror(reflecting: receipt).children.contains { $0.label == "payloadJSON" })
     }
 }
 
