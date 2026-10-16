@@ -13,7 +13,7 @@ struct BackendConnectionSection: View {
         Section("Backend connections") {
             connectionRow(title: "CloudKit", value: cloudKit, systemImage: "icloud")
             connectionRow(title: "Reference server", value: server, systemImage: "server.rack")
-            Text("Review items remain on this Mac until you confirm them and choose Sync pending. Delivery is operator-triggered; server moderation and CloudKit publication are separate paths.")
+            Text("Review items remain on this Mac until you confirm them and choose Sync pending. The probe checks the iCloud account and a read-only public-database query; delivery is operator-triggered, and moderation/publication remain separate paths.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Button(checking ? "Checking…" : "Check connections", systemImage: "arrow.clockwise") { Task { await check() } }
@@ -77,9 +77,13 @@ struct BackendConnectionSection: View {
             case .available:
                 do {
                     _ = try await container.userRecordID()
-                    return "Connected · account and container record access available"
+                    let query = CKQuery(recordType: "Sighting", predicate: NSPredicate(value: true))
+                    _ = try await container.publicCloudDatabase.records(matching: query, inZoneWith: nil,
+                                                                          desiredKeys: [], resultsLimit: 1)
+                    return "Connected · public database readable"
                 } catch {
-                    return "Account available · container record access failed (\((error as NSError).code))"
+                    let nsError = error as NSError
+                    return "Account available · public database query failed (\(nsError.domain) \(nsError.code))"
                 }
             case .noAccount: return "Sign in to iCloud in System Settings"
             case .restricted: return "iCloud access is restricted"

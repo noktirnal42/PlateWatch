@@ -86,6 +86,8 @@ struct SettingsView: View {
     @Query private var watchlist: [WatchlistItem]
     @State private var confirmClear = false
     @State private var errorText: String?
+    @State private var connectionStatus = "Not checked"
+    @State private var checkingConnection = false
 
     private var backendName: String {
         backend is CloudKitBackend ? "iCloud (CloudKit public database)" : "Self-hosted server"
@@ -112,6 +114,17 @@ struct SettingsView: View {
                 }
                 Section("Analysis & delivery") {
                     LabeledContent("Shared database") { Text(backendName).multilineTextAlignment(.trailing) }
+                    LabeledContent("Connection") {
+                        HStack(spacing: 6) {
+                            Image(systemName: connectionIcon)
+                                .foregroundStyle(connectionStatus.localizedCaseInsensitiveContains("Connected") ? .green : .secondary)
+                            Text(connectionStatus).multilineTextAlignment(.trailing)
+                        }
+                    }
+                    Button(checkingConnection ? "Checking…" : "Check connection", systemImage: "arrow.clockwise") {
+                        Task { await checkConnection() }
+                    }
+                    .disabled(checkingConnection)
                     LabeledContent("Analysis") {
                         Text(PassiveCaptureStatus.shared.modelStatus == "baseline vision"
                              ? "Apple Vision (on-device)" : PassiveCaptureStatus.shared.modelStatus)
@@ -154,6 +167,7 @@ struct SettingsView: View {
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("About")
+            .task { await checkConnection() }
             .confirmationDialog("Clear local data?", isPresented: $confirmClear, titleVisibility: .visible) {
                 Button("Clear queue & watchlist", role: .destructive) { clearLocalData() }
             } message: { Text("This removes \(queued.count) queued observations and \(watchlist.count) watchlist entries from this device. Backend records and transfers already in progress are unaffected.") }
@@ -162,6 +176,22 @@ struct SettingsView: View {
             } message: { Text(errorText ?? "") }
         }
     }
+
+    private var connectionIcon: String {
+        if connectionStatus == "Not checked" { return "questionmark.circle" }
+        if connectionStatus == "Checking…" { return "hourglass" }
+        return connectionStatus.localizedCaseInsensitiveContains("Connected") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    @MainActor
+    private func checkConnection() async {
+        guard !checkingConnection else { return }
+        checkingConnection = true
+        connectionStatus = "Checking…"
+        connectionStatus = await BackendDiagnostics.status(for: backend)
+        checkingConnection = false
+    }
+
     private func clearLocalData() {
         for row in queued { modelContext.delete(row) }
         for row in watchlist { modelContext.delete(row) }

@@ -5,12 +5,17 @@ import SwiftUI
 import UIKit
 
 /// The outbox is paired with a privacy-safe receipt history. Payloads leave
-/// the device after acknowledgement; only delivery metadata remains locally.
+/// the device after acknowledgement; only delivery metadata and an optional
+/// bounded review crop remain locally.
 struct SightingsListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.syncBackend) private var backend
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var outbox: [PendingSubmission]
     @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var errorText: String?
+    @State private var publicSightings: [PublicSightingDTO] = []
+    @State private var publicError: String?
+    @State private var loadingPublic = false
 
     var body: some View {
         NavigationStack {
@@ -39,6 +44,25 @@ struct SightingsListView: View {
                     }
                 }
                 Section {
+                    if loadingPublic {
+                        HStack { ProgressView(); Text("Loading published sightings…") }
+                    } else if let publicError {
+                        Label(publicError, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    } else if publicSightings.isEmpty {
+                        Label("No published sightings yet", systemImage: "dot.radiowaves.left.and.right")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(publicSightings, id: \.id) { sighting in
+                            PublicSightingRow(sighting: sighting)
+                        }
+                    }
+                } header: {
+                    Text("Public feed · \(publicSightings.count)")
+                } footer: {
+                    Text("Only moderator-published fleet sightings appear here. Plates and exact locations are withheld from this mobile list.")
+                }
+                Section {
                     if receipts.isEmpty {
                         Label("No received submissions yet", systemImage: "tray")
                             .foregroundStyle(.secondary)
@@ -53,11 +77,13 @@ struct SightingsListView: View {
                 } header: {
                     Text("Received · \(receipts.count)")
                 } footer: {
-                    Text("Receipts confirm backend acceptance and moderation state. They do not mean the sighting is publicly published. Payloads and evidence media are not retained in this history.")
+                    Text("Receipts confirm backend acceptance and moderation state. They do not mean the sighting is publicly published. Only a bounded local review crop may remain in this history.")
                 }
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Sightings")
+            .refreshable { await loadPublicSightings() }
+            .task { await loadPublicSightings() }
             .alert("Could not save", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(errorText ?? "") }
@@ -67,6 +93,44 @@ struct SightingsListView: View {
     private func discard(_ offsets: IndexSet) {
         for index in offsets { modelContext.delete(outbox[index]) }
         do { try modelContext.save() } catch { modelContext.rollback(); errorText = error.localizedDescription }
+    }
+
+    private func loadPublicSightings() async {
+        guard !loadingPublic else { return }
+        loadingPublic = true
+        publicError = nil
+        defer { loadingPublic = false }
+        do {
+            let delta = try await backend.pullSightings(since: nil)
+            publicSightings = Array(delta.sightings.prefix(100))
+        } catch {
+            publicSightings = []
+            publicError = "Public sightings could not be loaded. Check the connection in About."
+        }
+    }
+}
+
+private struct PublicSightingRow: View {
+    let sighting: PublicSightingDTO
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "car.fill")
+                .foregroundStyle(PWStyle.fleetText)
+                .frame(width: 36, height: 36)
+                .background(PWStyle.fleet.opacity(0.15), in: .rect(cornerRadius: 10))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(sighting.agencyName ?? "Fleet vehicle").font(.headline)
+                Text(sighting.capturedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Area \(sighting.geohash6) · fleet \(Int(sighting.fleetConfidence * 100))%")
+                    .font(.caption2.monospaced()).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Published fleet sighting")
     }
 }
 
@@ -329,6 +393,7 @@ struct WatchlistView: View {
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Watchlist")
+            .task { plateFocused = true }
             .alert("Could not save watchlist", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(errorText ?? "") }

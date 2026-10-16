@@ -311,9 +311,9 @@ private struct CameraPreview: UIViewRepresentable {
     }
 }
 
-/// Draws detections over the preview. Fleet vehicles get corner brackets
-/// (a "targeting" look that reads as a classification, not a generic box);
-/// everything else is a faint, dashed outline so it does not draw the eye.
+/// Draws every detected vehicle over the preview. Fleet vehicles get corner
+/// brackets; ordinary vehicles get a quieter outline, while both retain a
+/// readable body-class label so the phone view matches Hub Live.
 /// Coordinates arrive in our NormalizedBox (top-left origin).
 private struct DetectionOverlay: View {
     let frame: DetectionFrame?
@@ -345,17 +345,60 @@ private struct DetectionOverlay: View {
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                 }
-                if let plate = vehicle.plates.first?.best {
-                    PlateBadge(text: plate.text, compact: true)
-                        .position(x: rect.midX, y: max(16, rect.minY - 14))
+                if rect.width >= 58, rect.height >= 34 {
+                    Text(IOSVehicleOverlayLabel.text(for: vehicle))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .foregroundStyle(.black)
+                        .background(vehicle.vehicleClass.isFleet ? PWStyle.fleet : .white.opacity(0.86), in: Capsule())
+                        .position(x: min(max(rect.midX, 52), geo.size.width - 52),
+                                  y: max(12, rect.minY + 12))
                 }
             }
         }
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Vehicle detections")
-        .accessibilityValue("\(frame?.vehicles.filter { $0.vehicleClass.isFleet }.count ?? 0) fleet vehicles in view")
+        .accessibilityValue("\(frame?.vehicles.count ?? 0) vehicles in view; \(frame?.vehicles.filter { $0.vehicleClass.isFleet }.count ?? 0) fleet vehicles")
         .animation(.easeOut(duration: 0.15), value: frame?.vehicles.count ?? 0)
+    }
+}
+
+private enum IOSVehicleOverlayLabel {
+    static func text(for vehicle: VehicleObservation) -> String {
+        let body = vehicle.attributes?.bodyType.flatMap { value -> String? in
+            switch value.lowercased().replacingOccurrences(of: "_", with: " ") {
+            case "car", "automobile", "sedan", "coupe", "hatchback": return "Car"
+            case "truck", "lorry": return "Truck"
+            case "bus", "coach": return "Bus"
+            case "motorcycle", "motorbike": return "Motorcycle"
+            case "suv", "sport utility vehicle", "sport utility": return "SUV"
+            case "van", "minivan": return "Van"
+            case "pickup", "pickup truck": return "Pickup"
+            default: return nil
+            }
+        }
+        guard vehicle.vehicleClass.isFleet else {
+            let score = Int(min(1, max(0, vehicle.classConfidence)) * 100)
+            return "\(body ?? "Vehicle") · class \(score)%"
+        }
+        let fleet = switch vehicle.vehicleClass {
+        case .patrol: "Patrol"
+        case .fireEngine: "Fire engine"
+        case .ambulance: "Ambulance"
+        case .publicWorks: "Public works"
+        case .transit: "Transit"
+        case .schoolBus: "School bus"
+        case .federal: "Federal"
+        case .military: "Military"
+        case .parkRanger: "Park ranger"
+        case .highway: "Highway"
+        default: "Fleet"
+        }
+        return [body, fleet].compactMap { $0 }.joined(separator: " · ")
     }
 }
 

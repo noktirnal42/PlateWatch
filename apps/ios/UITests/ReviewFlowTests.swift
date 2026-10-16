@@ -85,7 +85,13 @@ final class ReviewFlowTests: XCTestCase {
         let field = app.textFields["fleet-plate-input"]
         if !field.isHittable { app.swipeUp() }
         XCTAssertTrue(field.isHittable)
-        field.tap(); field.typeText("GOV123")
+        // Dynamic Type can place the SwiftUI field inside a List cell whose
+        // accessibility tap does not promote the UIKit responder on iOS 27.
+        // A coordinate tap exercises the same visible control and is stable
+        // across the large-text layout.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 3))
+        field.typeText("GOV123")
         app.keyboards.buttons["done"].tap()
         let attestation = app.switches["fleet-attestation"]
         if !attestation.isHittable { app.swipeUp() }

@@ -347,6 +347,18 @@ final class HubController: ObservableObject, ReviewHubProviding {
         guard let source = liveFeed else { return }
         if source.kind == .hls {
             feedRunner.setLiveVideoSource(source.id)
+            // Do not wait for the rotating background decoder to deliver the
+            // first frame. Opening a feed is an interactive action, so obtain
+            // one bounded preview immediately and put it through the same
+            // on-device analysis path as the continuing HLS sink.
+            do {
+                let data = try await feedRunner.fetchPreview(of: source)
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                await analyseFeedFrame(data, from: source)
+            } catch {
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                liveFeedStatus = error.localizedDescription
+            }
             while !Task.isCancelled, liveFeed?.id == source.id {
                 if liveFeedFrame == nil { liveFeedStatus = feedRunner.state(of: source).text }
                 do { try await Task.sleep(for: .milliseconds(500)) } catch { return }

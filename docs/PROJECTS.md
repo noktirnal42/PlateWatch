@@ -27,14 +27,16 @@ tests must stay green before its status advances.
   path, review flow, on-device self-test.
 - **Docs:** NEXT-STEPS §2 (field test), QA-REPORT, EVALUATION.
 - **Test:** `swift test --package-path packages/CaptureKit` + iOS build.
-- **Status:** still-photo core loop inherited; 2026-10-14 iOS review/branding pass
+- **Status:** still-photo core loop inherited; 2026-10-16 iOS mobile extension pass adds published-fleet sightings, backend connection diagnostics, all-vehicle class overlays, and reliable large-text watchlist focus; 2026-10-14 iOS review/branding pass
   adds observation detail/export, retry recovery, validated fleet watchlists,
   local cleanup and simulator CloudKit startup-crash fix. See
   [IOS-UI-HANDOFF.md](IOS-UI-HANDOFF.md) for validation and screenshot boundaries.
   CaptureKit now selects the best available rear lens, applies bounded auto-exposure/ISO tuning,
   records exposure diagnostics, and retains eviction-safe pre/post event clips; physical-device
   tuning and clip export remain QA/follow-up gates.
-  Handheld live-camera field testing remains pending. CloudKit watchlist subscription registration,
+  Handheld live-camera field testing remains pending. The simulator now proves the REST health path and
+  renders the published-fleet feed (empty state is explicit when the backend has no published records);
+  signed CloudKit account/database verification remains external. CloudKit watchlist subscription registration,
   watchOS silent-push delta matching, haptics and local alert presentation are implemented; signed
   entitlement and physical-device push delivery remain external QA gates.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
