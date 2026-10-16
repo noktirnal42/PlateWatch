@@ -100,8 +100,12 @@ struct FeedsPane: View {
                         Button(c.rawValue) { Task { await hub.importCatalogue(c); reload() } }
                     }
                 }
-                Button("Watch all favorites") { hub.watchAllFavorites() }
-                    .help("Analyse starred cameras in the background")
+                Label("\(favorites.watchedIDs.count) watched", systemImage: "eye.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Cameras selected for background analysis")
+                Button("Watch \(favorites.ids.count) favorites") { hub.watchAllFavorites() }
+                    .disabled(favorites.ids.isEmpty)
+                    .help("Analyse all starred cameras in the background")
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
             FeedStatusRow(runner: hub.feedRunner)
