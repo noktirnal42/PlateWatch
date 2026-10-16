@@ -31,7 +31,7 @@ public protocol SyncBackend: Sendable {
     /// k-anonymous heatmap/timeline. A requirement (not just an extension
     /// method) so a backend's own implementation — REST's server-side
     /// aggregate — is what `any SyncBackend` actually dispatches to.
-    func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO
+    func heatmap(since: Date?, until: Date?, agencyID: UUID?) async throws -> HeatmapAggregateDTO
 }
 
 public struct SyncCursor: Sendable, Codable, Equatable {
@@ -191,9 +191,15 @@ public enum HeatmapAggregator {
 }
 
 extension SyncBackend {
+    /// Unscoped aggregate convenience used by the public Explore surface.
+    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+        try await heatmap(since: since, until: until, agencyID: nil)
+    }
+
     /// Default: aggregate client-side from the public sightings feed
     /// (CloudKit serves records, not aggregates). Reads at most a few pages.
-    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+    public func heatmap(since: Date?, until: Date?, agencyID: UUID?) async throws -> HeatmapAggregateDTO {
+        guard agencyID == nil else { throw SyncError.unsupported }
         let end = until ?? Date()
         let start = since ?? end.addingTimeInterval(-30 * 86_400)
         var all: [PublicSightingDTO] = []

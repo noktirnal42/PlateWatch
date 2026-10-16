@@ -63,13 +63,14 @@ public struct RESTBackend: SyncBackend {
     }
 
     /// k-anonymous heatmap/timeline from the reference server.
-    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+    public func heatmap(since: Date?, until: Date?, agencyID: UUID?) async throws -> HeatmapAggregateDTO {
         var comps = URLComponents(url: baseURL.appending(path: "v1/aggregates/heatmap"),
                                   resolvingAgainstBaseURL: false)!
         var items: [URLQueryItem] = []
         let iso = ISO8601DateFormatter()
         if let since { items.append(URLQueryItem(name: "since", value: iso.string(from: since))) }
         if let until { items.append(URLQueryItem(name: "until", value: iso.string(from: until))) }
+        if let agencyID { items.append(URLQueryItem(name: "agencyID", value: agencyID.uuidString)) }
         if !items.isEmpty { comps.queryItems = items }
         let request = try JSONRequest.get(comps.url!)
         return try await request.sendEmpty(using: session)

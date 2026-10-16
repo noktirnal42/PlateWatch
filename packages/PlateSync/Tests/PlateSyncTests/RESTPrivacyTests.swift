@@ -5,6 +5,7 @@ import XCTest
 
 final class RESTPrivacyTests: XCTestCase {
     func testAgencyDirectoryAndReportUsePublicRoutes() async throws {
+        AgencyProbeProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [AgencyProbeProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -19,6 +20,21 @@ final class RESTPrivacyTests: XCTestCase {
         XCTAssertEqual(report.agency.id, id)
         XCTAssertEqual(report.fleetSize, 42)
         XCTAssertEqual(AgencyProbeProtocol.paths, ["/v1/agencies", "/v1/agencies/11111111-1111-1111-1111-111111111111/report"])
+    }
+
+    func testAgencyScopedHeatmapCarriesPrivacySafeFilter() async throws {
+        AgencyProbeProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AgencyProbeProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let backend = RESTBackend(baseURL: URL(string: "https://local.agency.test")!, session: session)
+        let id = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let result = try await backend.heatmap(since: nil, until: nil, agencyID: id)
+
+        XCTAssertEqual(result.k, 5)
+        XCTAssertTrue(AgencyProbeProtocol.lastURL?.query?.contains("agencyID=11111111-1111-1111-1111-111111111111") == true)
     }
 
     func testActualRESTRequestOmitsPrivateFields() async throws {
@@ -103,9 +119,17 @@ private final class PrivacyProbeProtocol: URLProtocol, @unchecked Sendable {
 private final class AgencyProbeProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var recordedPaths: [String] = []
+    nonisolated(unsafe) private static var recordedURL: URL?
     static var paths: [String] {
         lock.lock(); defer { lock.unlock() }
         return recordedPaths
+    }
+    static var lastURL: URL? {
+        lock.lock(); defer { lock.unlock() }
+        return recordedURL
+    }
+    static func reset() {
+        lock.lock(); recordedPaths.removeAll(); recordedURL = nil; lock.unlock()
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -114,10 +138,12 @@ private final class AgencyProbeProtocol: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         let path = request.url?.path ?? ""
-        Self.lock.lock(); Self.recordedPaths.append(path); Self.lock.unlock()
+        Self.lock.lock(); Self.recordedPaths.append(path); Self.recordedURL = request.url; Self.lock.unlock()
         let body: Data
         if path == "/v1/agencies" {
             body = Data(#"[{"id":"11111111-1111-1111-1111-111111111111","name":"Example Police Department","shortName":"EPD","level":"city"}]"#.utf8)
+        } else if path == "/v1/aggregates/heatmap" {
+            body = Data(#"{"k":5,"since":"2026-10-01T00:00:00Z","until":"2026-10-15T00:00:00Z","cells":[],"timeline":[],"withheldCells":0,"withheldDays":0}"#.utf8)
         } else {
             body = Data(#"{"agency":{"id":"11111111-1111-1111-1111-111111111111","name":"Example Police Department","shortName":"EPD","level":"city"},"fleetSize":42,"sightings30d":17,"activeUnits":31,"generatedAt":"2026-10-15T12:00:00Z"}"#.utf8)
         }

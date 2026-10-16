@@ -11,12 +11,27 @@ import SwiftUI
 struct HeatmapView: View {
     @Environment(\.syncBackend) private var backend
     @State private var aggregate: HeatmapAggregateDTO?
+    @State private var agencies: [PlateSync.PublicAgencyDTO] = []
+    @State private var selectedAgencyID: UUID?
     @State private var errorText: String?
     @State private var loading = false
 
     var body: some View {
         NavigationStack {
             List {
+                if !agencies.isEmpty {
+                    Section("Scope") {
+                        Picker("Agency", selection: $selectedAgencyID) {
+                            Text("All agencies").tag(Optional<UUID>.none)
+                            ForEach(agencies) { agency in
+                                Text(agency.shortName ?? agency.name).tag(Optional(agency.id))
+                            }
+                        }
+                        .onChange(of: selectedAgencyID) { _, _ in
+                            Task { await loadAggregate() }
+                        }
+                    }
+                }
                 if let aggregate {
                     Section("Coverage") {
                         LabeledContent("Window") {
@@ -141,13 +156,22 @@ struct HeatmapView: View {
             errorText = "Public aggregates are disabled in the local demo preview."
             return
         }
+        agencies = (try? await backend.agencies()) ?? []
+        await loadAggregate()
+    }
+
+    private func loadAggregate() async {
         loading = true
         defer { loading = false }
         errorText = nil
         do {
-            aggregate = try await backend.heatmap(since: nil, until: nil)
+            aggregate = try await backend.heatmap(since: nil, until: nil, agencyID: selectedAgencyID)
         } catch {
-            errorText = "Public activity couldn’t be loaded right now. Pull to refresh, or check your connection."
+            if case SyncError.unsupported = error {
+                errorText = "This backend does not publish agency-scoped aggregates yet. Choose All agencies or use the REST mirror."
+            } else {
+                errorText = "Public activity couldn’t be loaded right now. Pull to refresh, or check your connection."
+            }
         }
     }
 }
