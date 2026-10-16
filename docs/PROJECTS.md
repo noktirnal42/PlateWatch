@@ -134,6 +134,9 @@ tests must stay green before its status advances.
   content-free audit details. Public agency directory/report DTOs and REST routes now cross the shared
   sync boundary, with an iOS directory/detail surface; CloudKit aggregate report delivery remains a
   deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
+- CloudKit record-name identity is now deterministic across launches (SHA-256
+  UUID derivation); receipt and delta reconciliation no longer depends on Swift's
+  randomized `Hasher` seed.
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 

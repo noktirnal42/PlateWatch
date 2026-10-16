@@ -1,4 +1,5 @@
 import CloudKit
+import CryptoKit
 import Foundation
 import PlateKit
 
@@ -29,13 +30,13 @@ public struct CloudKitBackend: SyncBackend {
     /// meaningful across pulls.
     static func uuid(fromRecordName name: String) -> UUID {
         if let direct = UUID(uuidString: name) { return direct }
-        var hasher = Hasher()
-        hasher.combine(name)
-        var bytes = [UInt8](repeating: 0, count: 16)
-        var h = UInt64(bitPattern: Int64(hasher.finalize()))
-        for i in 0..<8 { bytes[i] = UInt8((h >> (i * 8)) & 0xff) }
-        h ^= 0x9E3779B97F4A7C15
-        for i in 8..<16 { bytes[i] = UInt8((h >> ((i - 8) * 8)) & 0xff) }
+        // Swift's Hasher is deliberately re-seeded for every process. Using
+        // it here made a CloudKit record appear as a different sighting after
+        // every relaunch, breaking receipt reconciliation and delta identity.
+        // SHA-256 gives us a stable, cross-process mapping without exposing
+        // the record name as a public identifier.
+        let digest = SHA256.hash(data: Data(name.utf8))
+        var bytes = Array(digest.prefix(16))
         bytes[6] = (bytes[6] & 0x0F) | 0x50  // version 5-ish marker
         bytes[8] = (bytes[8] & 0x3F) | 0x80
         return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],

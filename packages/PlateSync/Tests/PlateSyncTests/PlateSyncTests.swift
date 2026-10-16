@@ -131,6 +131,15 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertEqual(CloudKitBackend.RecordType.submission, "SightingSubmission")
         XCTAssertEqual(CloudKitBackend.RecordType.sighting, "Sighting")
     }
+
+    func testCloudKitRecordIdentityIsStableAcrossCalls() {
+        let first = CloudKitBackend.uuid(fromRecordName: "sighting-opaque-record-name")
+        let second = CloudKitBackend.uuid(fromRecordName: "sighting-opaque-record-name")
+        let different = CloudKitBackend.uuid(fromRecordName: "sighting-other-record-name")
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(first, different)
+        XCTAssertEqual(first.uuidString.count, 36)
+    }
 }
 
 final class AgencyReportDTOTests: XCTestCase {

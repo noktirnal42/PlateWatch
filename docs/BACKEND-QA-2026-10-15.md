@@ -67,5 +67,13 @@ were inserted. Database counts before connection QA: zero sightings, two audit e
 3. CloudKit moderator publication tool with audit/provenance and withdrawal behavior.
 4. Optional REST/CloudKit mirroring, hosted service and device-to-device proof.
 
+## Cross-launch identity correction — 2026-10-16
+
+CloudKit record names that are not UUIDs now map to IDs using SHA-256 rather than
+Swift's process-randomized `Hasher`. The previous mapping could change a public
+agency, vehicle or sighting ID after every app relaunch, which made delta and
+receipt reconciliation unreliable even when the CloudKit record itself was
+unchanged. A PlateSync regression test covers repeat calls and distinct names.
+
 The local REST moderation queue and CloudKit are separate stores. A healthy server or an
 available iCloud account must never be labeled a completed end-to-end publication pipeline.
