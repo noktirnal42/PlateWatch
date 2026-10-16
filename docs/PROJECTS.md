@@ -62,9 +62,9 @@ tests must stay green before its status advances.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
-- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.
+- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Local MLX and on-device Foundation Models now complete bounded tasks in the signed Hub; seven agent-core tests and 45 Hub tests pass (four Hub opt-in skips). Stop/journal verified. PCC and optional NIM remain pending.
 - **Next:** extend the mediated real-camera proof into
-  a sustained quality/freshness/CPU pilot, then follow the internal-agent implementation sequence
+  a sustained quality/freshness/CPU pilot and broader internal-agent task/attribution evaluation
   in AGENT-INTEGRATION.md. Credentialed source expansion and physical hardware/permission QA remain.
   Current continuation evidence and remaining gates: [repair report](HUB-REPAIR-2026-10-15.md).
 

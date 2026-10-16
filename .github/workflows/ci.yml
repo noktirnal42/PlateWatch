@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters, AccountabilityKit, FeedIngest]
+        package: [PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters, AccountabilityKit, FeedIngest, HubAgents]
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4

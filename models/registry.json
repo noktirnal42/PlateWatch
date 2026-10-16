@@ -79,5 +79,17 @@
       "format": "aar",
       "notes": "OSNet x0.25 trained on MSMT17 (person re-ID), transfers to vehicle re-ID. Converted via deep-person-reid (torchreid) PyTorch trace -> CoreML mlprogram. Complements the Vision feature-print fallback."
     }
+  ],
+  "agentModels": [
+    {
+      "name": "hub-local-qwen-1.5b",
+      "task": "bounded-local-agent",
+      "repository": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "license": "Apache-2.0",
+      "format": "mlx-safetensors-4bit",
+      "sourceURL": "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit/tree/8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "notes": "Read-only shared Hugging Face cache. No automatic download; all cached blobs verified before first load. Agent metadata is separate from CoreML registry entries. See docs/AGENT-INTEGRATION.md."
+    }
   ]
 }

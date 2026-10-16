@@ -107,6 +107,7 @@ final class HubAgentBridge {
         switch command {
         case "status":
             return ["bridge_version": 1, "current_pane": currentPane, "frames_analyzed": hub.framesAnalyzed, "feed_frames_analyzed": hub.feedFramesAnalyzed,
+                    "assistant_status": hub.assistant.status, "assistant_actions": hub.assistant.activities.map { $0.action.rawValue },
                     "fleet_hits": hub.fleetHitsToday, "outbox_pending": hub.pendingCount, "models": hub.modelStatus,
                     "feeds": hub.feedRunner.status, "snapshot_server": hub.snapshotServerStatus,
                     "terms_and_moderation": "Human review only", "raw_frame_access": false]

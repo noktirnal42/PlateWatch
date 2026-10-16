@@ -33,6 +33,7 @@ final class HubController: ObservableObject {
     private let identityResolver = IdentityResolver()
     private var deduper = SightingDeduper()
     /// Public camera feeds (docs/FEED-SOURCES.md). Only sources a person confirmed the terms of are polled.
+    let assistant = HubAssistant()
     let feedRunner = FeedRunner()
     let favorites = FeedFavorites()
     let feedBrowserState = FeedBrowserState()

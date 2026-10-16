@@ -137,7 +137,7 @@ struct HubStatusView: View {
 private struct HubWindowCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @AppStorage("hubAppearance") private var appearance = "system"
-    private let destinations: [ConsoleView.Pane] = [.dashboard, .live, .feeds, .cameras, .review, .models, .records, .settings]
+    private let destinations: [ConsoleView.Pane] = [.dashboard, .live, .feeds, .cameras, .review, .models, .records, .settings, .assistant]
     var body: some Commands {
         CommandMenu("Navigate") {
             ForEach(Array(destinations.enumerated()), id: \.element.id) { index, pane in

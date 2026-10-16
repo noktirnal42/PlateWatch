@@ -10,7 +10,7 @@ flowchart LR
   Claude --> MCP
   OpenCode --> MCP
   MCP --> Commands[Hub command boundary]
-  Internal[Future internal agent] -.-> Commands
+  Internal[Local MLX / Apple agent] --> Commands
   Commands --> Feeds
   Commands --> Review
   Commands --> Records
@@ -46,22 +46,66 @@ For development testing, use the runtime interpreter printed by the installer; S
 
 MCP is the implemented interoperable tool interface for Codex, Claude Code/Desktop and OpenCode. ACP is not implemented: it exposes a conversational agent to an editor, whereas this request needs agents to operate the app. Add an ACP frontend only when PlateWatch has an internal agent runtime worth exposing; reuse the same command boundary rather than introducing independent mutation logic.
 
-## Internal agents — planned, not implemented
+## Internal agents — local runtime checkpoint, October 16, 2026
 
-Owner direction: PlateWatch should eventually contain agents that can drive its own app. Three inference providers are planned:
+The Hub now has an Assistant pane (⌘9). Its local MLX and on-device Apple Foundation
+Models adapters use `HubAgents.AgentModel` and the same validated app commands as MCP.
+Supported tasks check status, search/detail approved feeds, open Live or another pane,
+and read queued metadata or cited incident records. Commands cannot approve terms,
+accept/reject evidence, submit, publish, browse arbitrary URLs, run shell, or access images.
+Model summaries are explicitly separate from the actual command results.
 
-1. **Apple Foundation Models on device.** Reuse availability checks, guided generation and tool calling. The existing FoundationModelsParser is a markings parser, not an internal agent runtime.
-2. **Apple Foundation Models over Private Cloud Compute.** Apple's current framework documents server-model access, subject to platform support, provisioning/entitlement, account approval and availability. An actual request from the signed PlateWatch bundle is the acceptance gate. A claimed-ready model or entitlement preflight alone does not prove inference. No raw frames, plates, precise locations, private records or credentials should be routed to a remote model by default; retain the project's on-device-first boundary and explicit payload policy.
-3. **Local MLX models from Hugging Face.** Reuse the universal store established in Axiom RE, not a new per-app weight cache. The store is the standard Hugging Face `models--org--repo/{blobs,refs,snapshots}` layout. Honor `HF_HUB_CACHE`, then `HF_HOME/hub`, then the standard home cache, with an optional PlateWatch override. On this machine the existing home cache resolves to the removable drive; do not hardcode that volume or commit links to it. Preserve pinned revisions, licenses, hash verification, resumable downloads and deduplication. If a configured/symlinked volume is absent, report it and stop; never silently create a replacement weight store on the boot disk. See Axiom RE's `docs/UNIVERSAL_MODEL_STORE.md` and `Sources/AxiomCore/Intelligence/ModelStore.swift` before extracting a reusable component.
+Each run has six planning steps, a 90-second deadline, 256 generated tokens per step,
+strict JSON/argument validation, duplicate-command refusal and a visible Stop control.
+Cancellation is checked before commands, during blob hashing and per generated token.
+An in-progress native model load may finish before cancellation is observed; this is
+cooperative cancellation, not a hard process kill. Navigation already performed remains.
+Task/result text lives only in the current pane. A private 0700/0600 action journal
+retains up to 100 run identities, timestamps, provider/revision, outcomes and command
+names; it does not persist prompts, results, images, plates or credentials.
 
-Build sequence:
+### Shared MLX store and provenance
 
-- Define a model-provider protocol and capability/availability result independently from app commands. Never turn model-generated strings into arbitrary command names or selectors.
-- Add a local planner/executor using the same validated commands, with tool allowlists, request IDs, bounded steps/time/tokens, cancellation, task history and visible progress. Separate read-only plans from mutations; preserve the user's chosen authorization policy.
-- Persist a local action journal with redacted arguments, outcome, provider/model/revision and citations. Do not log credentials, raw images or private plate data. Add an agent activity pane and stop control.
-- Add Foundation Models on-device and MLX adapters first, then PCC only after its signed-provider/data-boundary checks pass. Do not download or delete shared models without an explicit model-management action.
-- Evaluate tool selection, unsupported-command rejection, prompt injection in source excerpts, offline/missing-volume behavior, cancellation, false-positive handling and source attribution against fixed fixtures. Runtime task completion requires observable app-state evidence.
-- Keep terms confirmation, record acceptance and moderation outside autonomous workflows until a separately reviewed design supports the intended human review. No face identification, person sightings map, presence alerts or name-only automatic identity confirmation.
+The resolver adapts Axiom RE's read-only cache discovery/hash patterns; resident serial
+inference adapts System5's MLX service pattern. AILab informed provider availability and
+streaming checks. These projects are provenance references, not build dependencies;
+see [reuse audit](research/LOCAL-AGENT-REUSE-2026-10-15.md).
+The pinned stack is mlx-swift-examples 2.29.1 and mlx-swift 0.29.1 (upstream MIT licenses).
+
+The selected model is `mlx-community/Qwen2.5-1.5B-Instruct-4bit`, revision
+`8b403126fc14f14cfc99bb4cfa72ecbc129ea677`, Apache-2.0 per its
+[pinned model card](https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit/blob/8b403126fc14f14cfc99bb4cfa72ecbc129ea677/README.md).
+Its license/provenance lives in `models/registry.json` under `agentModels`, separately
+from the CoreML download catalogue. No model weights are tracked or copied into the app.
+
+Cache precedence is `PLATEWATCH_MODEL_STORE`, `HF_HUB_CACHE`, `HF_HOME/hub`, then
+`~/.cache/huggingface/hub`. The standard `models--org--repo/{blobs,snapshots}` layout
+is required. Missing volumes/snapshots produce an error without creating a fallback,
+downloading or deleting anything. Before first load all files must resolve into the
+repository's blob directory, have bounded sizes and match SHA-256 LFS or Git blob SHA-1
+names. Only that verified local directory reaches MLX. Apple Intelligence reports its
+actual device/account/model availability; Private Cloud Compute is not implemented.
+
+### Verification and limits
+
+Seven HubAgentCore tests pass: strict/unsupported plans, tool feedback, duplicate and
+step limits, cancellation, premature finish, missing-store refusal and blob tamper/path
+escape checks. CI builds the providers and runs these fixtures without downloading weights.
+The Hub's 45 tests pass (four unrelated opt-in skips).
+
+In the signed packaged Hub, real local MLX inference completed status plus feed-search
+commands and a finish response; Apple Intelligence completed status plus finish. The
+native Stop button produced `Stopped`, an empty command list and a cancelled journal row.
+The journal's filesystem modes were 0700/0600. The real pending queue remained two.
+Early MLX runs repeated commands and exhausted their budgets; conversation feedback and
+a duplicate guard corrected that failure mode. These small smoke tasks do not establish
+broad planning reliability, prompt-injection robustness or accuracy of model summaries.
+Longer-task fixtures, source-attribution evaluation, memory/thermal pilots and physical
+hardware QA remain. No remote inference or evidence publication was exercised.
+
+NVIDIA NIM is a researched optional provider, pending the owner's implementation choice;
+see [candidate roles and payload boundary](research/NVIDIA-NIM-OPTIONS-2026-10-16.md).
+PCC remains pending signed-provider/data-boundary proof. ACP is deferred until needed.
 
 ### Provider references checked October 14, 2026
 

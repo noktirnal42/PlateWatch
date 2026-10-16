@@ -7,7 +7,7 @@ import SwiftUI
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
         case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
-        case moderation = "Moderation", settings = "Settings"
+        case moderation = "Moderation", settings = "Settings", assistant = "Assistant"
         var id: String { rawValue }
         var icon: String {
             switch self {
@@ -20,6 +20,7 @@ struct ConsoleView: View {
             case .records: return "doc.text.magnifyingglass"
             case .moderation: return "checkmark.shield"
             case .settings: return "gearshape"
+            case .assistant: return "sparkles"
             }
         }
     }
@@ -59,6 +60,10 @@ struct ConsoleView: View {
                     RecordsPane().opacity(selection == .records ? 1 : 0)
                         .allowsHitTesting(selection == .records).accessibilityHidden(selection != .records).disabled(selection != .records)
                 }
+                if selection == .assistant || visited.contains(.assistant) {
+                    AssistantPane(hub: hub, assistant: hub.assistant).opacity(selection == .assistant ? 1 : 0)
+                        .allowsHitTesting(selection == .assistant).accessibilityHidden(selection != .assistant).disabled(selection != .assistant)
+                }
                 if selection == .review || visited.contains(.review) {
                     ReviewPane(onQueueChange: hub.refreshPendingCount).opacity(selection == .review ? 1 : 0)
                         .allowsHitTesting(selection == .review).accessibilityHidden(selection != .review).disabled(selection != .review)
@@ -74,6 +79,7 @@ struct ConsoleView: View {
                 case .records: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .moderation: ModerationPane(onSignOut: { moderator = false; selection = .dashboard })
                 case .settings: SettingsPane(hub: hub, moderator: $moderator)
+                case .assistant: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 }
                 }
             }

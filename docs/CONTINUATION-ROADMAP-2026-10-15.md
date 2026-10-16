@@ -66,3 +66,14 @@ these connection states from delivery/publication. REST image bytes and unconfir
 fields are stripped at the network boundary (18 PlateSync and 53 server tests pass).
 Explicit reviewed delivery/receipts, CloudKit publication and two-account proof remain next;
 see [connection QA](BACKEND-QA-2026-10-15.md).
+
+## Priority 3 local checkpoint — October 16
+
+Assistant now uses the app command boundary with MLX and Apple on-device providers,
+visible progress, bounded plans, Stop and a private metadata-only journal. Both providers
+completed smoke tasks in the signed Hub; cancelled MLX runs executed no subsequent
+commands. Seven core tests and 45 Hub tests pass (four Hub opt-ins skipped). Broader
+planning/attribution quality and resource pilots remain; PCC is not implemented.
+The iOS duplicate-watch UI regression test also passes after dismissing its keyboard
+before checking the validation message. NVIDIA research is documented separately and
+implementation awaits the owner's selection; no remote provider was enabled.
