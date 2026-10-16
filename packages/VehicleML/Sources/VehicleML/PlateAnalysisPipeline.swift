@@ -81,7 +81,7 @@ public struct PlateAnalysisPipeline: Sendable {
 
         var vehicleObservations: [VehicleObservation] = []
         if context.models["vehicle-detection"] != nil {
-            let stage = CoreMLDetectorStage(task: "vehicle-detection")
+            let stage = CameraDetailDetectorStage()
             if let detected = try? await stage.process(frame, context: context) {
                 vehicleObservations = detected.observations.map {
                     let cls = VehicleClass(rawValue: $0.label) ?? ($0.label.hasPrefix("police") ? .patrol : .unknown)

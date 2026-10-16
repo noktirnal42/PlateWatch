@@ -99,3 +99,29 @@ hand-labelled agencies and plates (`agency` / `plates` keys in the manifest).
 - **De-slanting italic lettering does not help** (tried shear −0.5…+0.5 on the US Mint image: every angle garbles the text; the plain read is the best). Dropped.
 - What would move recall: a recogniser trained on stylised vehicle lettering (Create ML has no OCR template — needs a CLI-trained model), more tolerant fuzzy matching for state-agency phrases, and appearance cues (the vehicle-crop classifier, MODEL-TRAINING §7) for vehicles with no readable text.
 - Caveat: 62 images; do not tune the gate to these failures.
+
+## 2026-10-15: missed vehicle in wide Arlington camera view
+
+The owner identified the white SUV at the right of a supplied Arlington airport
+screenshot as the missed police vehicle. A local holdout extracted only the camera
+viewport from that screenshot; the screenshot and model remain outside Git.
+The ordinary installed vehicle detector returned one box on the extracted viewport.
+The bounded detail stage returned five boxes, including one covering the SUV's
+known center (top-left normalized 0.80, 0.72). One warm detail call took 0.034 s on
+this Mac. This is a coverage regression check on a dimmed screenshot, not a general
+recall benchmark, proof of police classification, or a sustained CPU measurement.
+
+`CameraDetailDetectorStage` keeps the whole-frame detection and adds four overlapping
+60% views only for thorough fixed-camera inputs at least 960 pixels on the long side.
+It uses the existing installed model and unchanged 0.25 threshold. Crop results are
+projected to the full frame; internal-edge truncations are rejected and overlapping
+boxes are suppressed across labels. Local/handheld inputs retain the single pass.
+The existing fleet scoring, plate permission, moderation and evidence redaction paths
+remain downstream. A generic car box cannot establish government ownership.
+
+All 31 VehicleML tests passed with the local holdout enabled. Offline runs skip that
+one test unless `PLATEWATCH_DETAIL_IMAGE` points to the locally extracted Arlington
+viewport and `PLATEWATCH_DETAIL_MODEL` points to the installed compiled detector.
+Projection, duplicate-class suppression and neighboring-vehicle preservation have
+ordinary offline tests. Broader labeled public-camera evaluation remains required;
+the historical 62-photo precision/recall numbers above are not new measurements.

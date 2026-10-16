@@ -71,7 +71,9 @@ tests must stay green before its status advances.
 - **Status:** baseline 59 % auto recall / 100 % precision (62-image corpus);
   official-plate reading landed; CoreML plate detector lifts plate reads
   10→15/62 images; vehicle-detector fusion fixed to not erase text-inferred
-  fleet class. Plate OCR model + ground-truth labels still open.
+  fleet class. 2026-10-15: bounded detail detection recovers the owner-reported Arlington
+  SUV in a local screenshot holdout; 31 VehicleML tests pass with that opt-in enabled.
+  See EVALUATION.md for limited coverage evidence. Plate OCR labels and broader fleet recall remain open.
 - **Next:** ground-truth `plate` labels + exact-match/CER scoring in the
   harness; grow corpus (USA, licensed, challenging low-contrast examples);
   make/model/color classifier (Create ML GUI path); fleet-specific
