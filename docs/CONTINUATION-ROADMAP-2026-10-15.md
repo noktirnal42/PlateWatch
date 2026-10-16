@@ -54,3 +54,15 @@ vehicle overlays and advancing analysis timestamps. Closing that temporary Live
 view restored Dashboard; explicit watch/block selections were preserved. A sustained
 CPU/memory pilot is still open. The older CI SwiftUI type-check timeout was addressed
 by splitting the feed browser into smaller view expressions; remote CI must confirm.
+
+## Priority 5 connectivity checkpoint
+
+The owner-reported moderation outage was a stopped local server; the installed Hub also
+lacked CloudKit entitlements and silently had no outbox delivery loop. Production schema
+export, signed Hub iCloud account availability, authenticated native moderation reads and
+server reconnect now pass. A per-user local service runs the reference server; automatic
+SwiftData cloud sync is explicitly disabled for the local review store. Settings separates
+these connection states from delivery/publication. REST image bytes and unconfirmed plate/geo
+fields are stripped at the network boundary (18 PlateSync and 53 server tests pass).
+Explicit reviewed delivery/receipts, CloudKit publication and two-account proof remain next;
+see [connection QA](BACKEND-QA-2026-10-15.md).

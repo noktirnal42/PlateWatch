@@ -129,3 +129,10 @@ content is stored as released, never summarized beyond the filing.
 `UnitAssignment` (existing) gains the person reference + an `inference`
 confidence. Auto-inferred links never auto-publish; publication requires a
 moderator confirmation that itself carries a citation.
+
+## Network crop boundary (2026-10-15)
+
+`SightingSubmissionDTO.cropJPEGBase64` is a local review payload. REST submission explicitly
+omits it; CloudKit maps no image field. Only the crop hash crosses that boundary. REST also
+reapplies plate/identity-registration and exact-coordinate redaction for unconfirmed fleet
+submissions, including older queued payloads. DTO wire field compatibility is unchanged.

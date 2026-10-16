@@ -25,6 +25,20 @@ any outbox delivery, so a local Review item was never proof of server delivery.
   SightingSubmission and Vehicle exist; submissions grant creator read/write and iCloud create.
   Two-account isolation and moderator publication are still unverified/unimplemented.
 
+## Final boundary and recovery checks
+
+REST now strips `cropJPEGBase64` from outgoing requests regardless of fleet confidence.
+Unconfirmed submissions also strip plate, identity registration and exact coordinates before
+encoding. Local evidence is unchanged. An intercepted actual REST request fails the test if
+any forbidden field arrives. All 18 PlateSync tests and 53 reference-server tests pass.
+The build/run verifier now requires the process to survive five seconds rather than claiming
+success from an instant PID check.
+
+Native stop/reconnect QA: stopping the local service and clicking Refresh produced
+“Queue unavailable” with the server-unavailable explanation. Restarting the service and
+clicking Refresh restored the authenticated empty queue without restarting the app.
+The installed app is signed and its local Review queue remains two items; no items were sent.
+
 ## Local reference service
 
 Built `server/` from the repair checkout. PostgreSQL 17 was already running and its existing

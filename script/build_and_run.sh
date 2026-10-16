@@ -16,11 +16,15 @@ fi
 /usr/bin/open -n "$APP_BUNDLE"
 case "$MODE" in
   --verify)
-    for attempt in {1..20}; do
-      if pgrep -x PlateWatchHub >/dev/null; then echo 'PlateWatch Hub launched'; exit 0; fi
-      sleep 0.2
+    # A process existing for one instant misses early startup traps (for example
+    # SwiftData rejecting a schema after a capability change).
+    for attempt in {1..10}; do
+      sleep 0.5
+      if ! pgrep -x PlateWatchHub >/dev/null; then
+        echo 'PlateWatch Hub exited during startup verification' >&2; exit 1
+      fi
     done
-    echo 'PlateWatch Hub did not remain running' >&2; exit 1 ;;
+    echo 'PlateWatch Hub remained running through startup verification'; exit 0 ;;
   --logs|--telemetry)
     exec /usr/bin/log stream --info --style compact --predicate 'process == "PlateWatchHub"' ;;
 esac
