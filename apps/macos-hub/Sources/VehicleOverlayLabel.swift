@@ -3,14 +3,14 @@ import PlateKit
 enum VehicleOverlayLabel {
     static func text(for vehicle: VehicleObservation, fleetConfidence: Double) -> String {
         let body = vehicle.attributes?.bodyType.flatMap { value -> String? in
-            switch value.lowercased() {
-            case "car": return "Car"
-            case "truck": return "Truck"
-            case "bus": return "Bus"
-            case "motorcycle": return "Motorcycle"
-            case "suv": return "SUV"
-            case "van": return "Van"
-            case "pickup", "pickup_truck": return "Pickup"
+            switch value.lowercased().replacingOccurrences(of: "_", with: " ") {
+            case "car", "automobile", "sedan", "coupe", "hatchback": return "Car"
+            case "truck", "lorry": return "Truck"
+            case "bus", "coach": return "Bus"
+            case "motorcycle", "motorbike": return "Motorcycle"
+            case "suv", "sport utility vehicle", "sport utility": return "SUV"
+            case "van", "minivan": return "Van"
+            case "pickup", "pickup truck": return "Pickup"
             default: return nil
             }
         }
