@@ -20,4 +20,17 @@ final class VehicleOverlayLabelTests: XCTestCase {
         let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1))
         XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "Vehicle")
     }
+
+    func testClassifierConfidenceRemainsVisibleWhenBodyLabelIsMissing() {
+        let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1), classConfidence: 0.61)
+        XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "Vehicle · class 61%")
+    }
+
+    func testCommonBodyAliasesAreReadable() {
+        for (body, expected) in [("suv", "SUV"), ("van", "Van"), ("pickup_truck", "Pickup")] {
+            let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1),
+                classConfidence: 0.7, attributes: .init(bodyType: body))
+            XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "\(expected) · class 70%")
+        }
+    }
 }

@@ -8,14 +8,18 @@ enum VehicleOverlayLabel {
             case "truck": return "Truck"
             case "bus": return "Bus"
             case "motorcycle": return "Motorcycle"
+            case "suv": return "SUV"
+            case "van": return "Van"
+            case "pickup", "pickup_truck": return "Pickup"
             default: return nil
             }
         }
         guard vehicle.vehicleClass.isFleet else {
-            guard let body else { return "Vehicle" }
-            guard vehicle.classConfidence.isFinite, vehicle.classConfidence > 0 else { return body }
+            guard vehicle.classConfidence.isFinite, vehicle.classConfidence > 0 else {
+                return body ?? "Vehicle"
+            }
             let score = Int(min(1, max(0, vehicle.classConfidence)) * 100)
-            return "\(body) · class \(score)%"
+            return "\(body ?? "Vehicle") · class \(score)%"
         }
         let fleet: String
         switch vehicle.vehicleClass {
