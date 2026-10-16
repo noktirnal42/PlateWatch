@@ -52,14 +52,16 @@ tests must stay green before its status advances.
   Review multi-rejection/enlargement and pane persistence repaired; original eight queued records
   preserved (their payloads lacked image bytes before this repair). Snapshot failures, policy failures
   and manual recovery are distinct. OpenCode watch controls reconciled: persisted selective polling,
-  four-stream HLS budget and Live priority; 33 Hub tests pass (four opt-in skips).
+  four-stream HLS budget and Live priority; watch scan hang fixed and native toggling verified.
+  All 34 Hub tests pass (four opt-in skips).
   Full segment/CDN policy and physical camera QA remain open.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
 - **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.
-- **Next:** follow [HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md): verify a real permitted HLS
-  camera end-to-end,
-  credentialed US sources, hardware/permission QA and a small camera-quality pilot.
+- **Next:** enforce HLS child-playlist/segment/redirect policy, extend the real-camera proof into
+  a sustained quality/freshness/CPU pilot, then follow the internal-agent implementation sequence
+  in AGENT-INTEGRATION.md. Credentialed source expansion and physical hardware/permission QA remain.
+  Current continuation evidence and remaining gates: [repair report](HUB-REPAIR-2026-10-15.md).
 
 ## WS3 — Recognition & evaluation
 
