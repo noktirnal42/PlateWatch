@@ -97,7 +97,7 @@ final class FeedRunner: ObservableObject {
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
         case .imageUnavailable(let reason): return .init(text: reason, icon: "photo.badge.exclamationmark", color: .orange, kind: .frameUnavailable)
         case .videoConnecting: return .init(text: "Connecting HLS…", icon: "video", color: .secondary, kind: .checking)
-        case .videoIdle: return .init(text: "HLS ready · open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
+        case .videoIdle: return .init(text: watchedIDs.contains(source.id) && explicitWatchSelection ? "HLS waiting · four-stream limit" : "HLS ready · watch or open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
         case .suspended: return source.kind == .rtsp
             ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
             : .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .orange, kind: .suspended)
@@ -113,8 +113,22 @@ final class FeedRunner: ObservableObject {
     private var sink: ClosureSink?
     private var videoSink: ClosureVideoSink?
     /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
+    var activeVideoCount: Int { hlsSources.count }
     private var requestedHLSID: UUID?
     private var hlsSources: [UUID: HLSFrameSource] = [:]
+    private var watchedIDs: Set<UUID> = []
+    private var explicitWatchSelection = false
+    static let maxConcurrentHLS = 4
+    private var selectedHLSIDs: Set<UUID> {
+        let eligible = (catalogue?.runnable ?? []).filter { source in
+            source.kind == .hls && !blockedIDs.contains(source.id) && watchedIDs.contains(source.id) && (explicitWatchSelection || source.id == requestedHLSID)
+        }.sorted { a, b in
+            if a.id == requestedHLSID { return true }
+            if b.id == requestedHLSID { return false }
+            return a.id.uuidString < b.id.uuidString
+        }
+        return Set(eligible.prefix(Self.maxConcurrentHLS).map(\.id))
+    }
     private var blockedIDs: Set<UUID> = []
     private let session: URLSession
     private let robots: RobotsCache
@@ -134,19 +148,21 @@ final class FeedRunner: ObservableObject {
         self.retryInterval = retryInterval
     }
 
-    func start(catalogue: FeedCatalogue, blockedIDs: Set<UUID> = [],
+    func start(catalogue: FeedCatalogue, blockedIDs: Set<UUID> = [], watchedIDs: Set<UUID>? = nil,
                analyse: @escaping @Sendable @MainActor (Data, PublicFeedSource) async -> Void,
                analyseVideoFrame: (@Sendable @MainActor (PixelBufferBox, PublicFeedSource) async -> Void)? = nil) {
         stop()
         self.catalogue = catalogue
+        self.explicitWatchSelection = watchedIDs != nil
+        self.watchedIDs = watchedIDs ?? Set(catalogue.runnable.map(\.id))
         let run = generation
         self.sink = ClosureSink { [weak self] data, source in
-            guard let self, self.mayFetch(source.id, run: run), !Task.isCancelled else { return }
+            guard let self, self.mayFetch(source.id, run: run), self.watchedIDs.contains(source.id), !Task.isCancelled else { return }
             await analyse(data, source)
         }
         self.videoSink = analyseVideoFrame.map { handler in
             ClosureVideoSink { [weak self] buffer, source in
-                guard let self, self.mayFetch(source.id, run: run), !Task.isCancelled else { return }
+                guard let self, self.mayFetch(source.id, run: run), self.watchedIDs.contains(source.id), !Task.isCancelled else { return }
                 await handler(buffer, source)
             }
         }
@@ -154,11 +170,33 @@ final class FeedRunner: ObservableObject {
         awaitingTermsCount = catalogue.awaitingTerms.filter { !blockedIDs.contains($0.id) }.count
         sourceStates = Dictionary(uniqueKeysWithValues: catalogue.sources.compactMap { source in
             if blockedIDs.contains(source.id) { return (source.id, .blockedByUser) }
+            guard self.watchedIDs.contains(source.id) else { return nil }
             return source.mayBeAnalysed ? (source.id, .checking) : nil
         })
-        for sources in Dictionary(grouping: catalogue.runnable, by: { Self.origin($0.url) }).values {
+        for sources in Dictionary(grouping: catalogue.runnable.filter { self.watchedIDs.contains($0.id) }, by: { Self.origin($0.url) }).values {
             checkPolicy(for: sources)
         }
+        updateStatus()
+    }
+
+    /// Replace background selection without restarting unrelated cameras or previews.
+    func setWatched(_ ids: Set<UUID>) {
+        let old = watchedIDs
+        guard old != ids else { return }
+        watchedIDs = ids
+        explicitWatchSelection = true
+        for id in old.subtracting(ids) {
+            tasks.removeValue(forKey: id)?.cancel()
+            stopHLS(id)
+            if !blockedIDs.contains(id) { sourceStates[id] = nil }
+        }
+        let added = (catalogue?.runnable ?? []).filter { ids.subtracting(old).contains($0.id) && !blockedIDs.contains($0.id) }
+        for source in added { sourceStates[source.id] = .checking }
+        for group in Dictionary(grouping: added, by: { Self.origin($0.url) }).values {
+            guard let first = group.first else { continue }
+            checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(first.url) } ?? [])
+        }
+        setLiveVideoSource(requestedHLSID)
         updateStatus()
     }
 
@@ -173,11 +211,12 @@ final class FeedRunner: ObservableObject {
         } else {
             blockedIDs.remove(id)
             sourceStates[id] = nil
-            if let source = catalogue?.sources.first(where: { $0.id == id }), source.mayBeAnalysed {
+            if let source = catalogue?.sources.first(where: { $0.id == id }), source.mayBeAnalysed, watchedIDs.contains(id) {
                 sourceStates[id] = .checking
                 checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(source.url) } ?? [])
             }
         }
+        setLiveVideoSource(requestedHLSID)
         awaitingTermsCount = catalogue?.awaitingTerms.filter { !blockedIDs.contains($0.id) }.count ?? 0
         updateStatus()
     }
@@ -190,12 +229,12 @@ final class FeedRunner: ObservableObject {
         hostTasks[origin] = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.generation == run else { return }
-                let pending = sources.filter { !self.blockedIDs.contains($0.id) && self.tasks[$0.id] == nil && self.sourceStates[$0.id] != .suspended }
+                let pending = sources.filter { self.watchedIDs.contains($0.id) && !self.blockedIDs.contains($0.id) && self.tasks[$0.id] == nil && self.sourceStates[$0.id] != .suspended }
                 var decisions: [UUID: RobotsDecision] = [:]
                 let answers = await self.robots.decisions(for: pending.map(\.url))      // one hop for the whole host
                 guard !Task.isCancelled, self.generation == run else { return }
                 for (source, answer) in zip(pending, answers) { decisions[source.id] = answer }
-                for source in pending where !self.blockedIDs.contains(source.id) {
+                for source in pending where self.watchedIDs.contains(source.id) && !self.blockedIDs.contains(source.id) {
                     switch decisions[source.id] {
                     case .allowed: self.beginPolling(source, run: run)
                     case .unavailable(let reason): self.sourceStates[source.id] = .policyUnavailable(reason)
@@ -210,7 +249,7 @@ final class FeedRunner: ObservableObject {
     }
 
     private func beginPolling(_ source: PublicFeedSource, run: UUID) {
-        guard tasks[source.id] == nil, !blockedIDs.contains(source.id) else { return }
+        guard tasks[source.id] == nil, !blockedIDs.contains(source.id), watchedIDs.contains(source.id) else { return }
         switch source.kind {
         case .snapshotJPEG:
             guard sink != nil else { return }
@@ -254,7 +293,7 @@ final class FeedRunner: ObservableObject {
     }
 
     private func recordSnapshotOutcome(_ outcome: SnapshotPoller.Outcome, sourceID: UUID, run: UUID) {
-        guard mayFetch(sourceID, run: run) else { return }
+        guard mayFetch(sourceID, run: run), watchedIDs.contains(sourceID) else { return }
         switch outcome {
         case .received(let date): lastReceivedAt[sourceID] = date; sourceStates[sourceID] = .polling
         case .httpFailure(let code): sourceStates[sourceID] = .imageUnavailable("Camera HTTP \(code) · retrying")
@@ -274,17 +313,17 @@ final class FeedRunner: ObservableObject {
     /// Known limitation (documented, not hidden): AVPlayer itself fetches
     /// playlist segments/CDN chunks, so those requests are not routed through
     /// our robots cache; a custom AVAssetResourceLoader is the future fix.
-    /// Only the selected Live stream decodes continuously. Approving a large
-    /// catalogue must never start hundreds of AVPlayers at once.
+    /// Explicit watches decode at most four streams, prioritizing Live.
+    /// Catalogue approval alone never starts hundreds of AVPlayers.
     func setLiveVideoSource(_ id: UUID?) {
         requestedHLSID = id
-        for old in Array(hlsSources.keys) where old != id {
+        for old in Array(hlsSources.keys) where !selectedHLSIDs.contains(old) {
             stopHLS(old)
-            if !blockedIDs.contains(old) { sourceStates[old] = .videoIdle }
+            if !blockedIDs.contains(old) { sourceStates[old] = watchedIDs.contains(old) ? .videoIdle : nil }
         }
-        if let id, let source = catalogue?.sources.first(where: { $0.id == id }),
-           source.kind == .hls, source.mayBeAnalysed, !blockedIDs.contains(id) {
-            checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(source.url) } ?? [])
+        let videoOrigins = Set((catalogue?.runnable ?? []).filter { selectedHLSIDs.contains($0.id) }.map { Self.origin($0.url) })
+        for origin in videoOrigins {
+            checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == origin } ?? [])
         }
         updateStatus()
     }
@@ -294,7 +333,7 @@ final class FeedRunner: ObservableObject {
             if videoSink == nil { sourceStates[source.id] = .suspended }
             return
         }
-        guard source.id == requestedHLSID else { sourceStates[source.id] = .videoIdle; return }
+        guard selectedHLSIDs.contains(source.id) else { sourceStates[source.id] = .videoIdle; return }
         let id = source.id
         sourceStates[id] = .videoConnecting
         let decoder = HLSFrameSource(source: source)
@@ -337,7 +376,9 @@ final class FeedRunner: ObservableObject {
         let suspended = sourceStates.values.filter { $0 == .suspended }.count
         let unavailable = sourceStates.values.filter { if case .policyUnavailable = $0 { true } else { false } }.count
         var parts: [String] = []
-        if runningCount > 0 { parts.append("Polling \(runningCount) feed(s)") }
+        if runningCount > 0 { parts.append("Polling \(runningCount) watched feed(s)") }
+        let idle = (catalogue?.runnable ?? []).filter { !blockedIDs.contains($0.id) && !watchedIDs.contains($0.id) }.count
+        if idle > 0 { parts.append("\(idle) confirmed · not watched") }
         if videoConnecting > 0 { parts.append("\(videoConnecting) video connecting") }
         if imageFailures > 0 { parts.append("\(imageFailures) camera images retrying") }
         if checking > 0 { parts.append("\(checking) checking robots.txt") }

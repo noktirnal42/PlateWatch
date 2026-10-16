@@ -6,15 +6,20 @@ import SwiftUI
 final class FeedFavorites: ObservableObject {
     @Published private(set) var ids: Set<UUID>
     @Published private(set) var blockedIDs: Set<UUID>
+    /// Cameras chosen for background analysis (the eye toggle). Nothing is
+    /// polled or decoded unless it is watched (or open in Live).
+    @Published private(set) var watchedIDs: Set<UUID>
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         ids = Set((defaults.stringArray(forKey: "hubFavoriteFeeds") ?? []).compactMap(UUID.init(uuidString:)))
         blockedIDs = Set((defaults.stringArray(forKey: "hubBlockedFeeds") ?? []).compactMap(UUID.init(uuidString:)))
+        watchedIDs = Set((defaults.stringArray(forKey: "hubWatchedFeeds") ?? []).compactMap(UUID.init(uuidString:)))
     }
     func contains(_ id: UUID) -> Bool { ids.contains(id) }
     func isBlocked(_ id: UUID) -> Bool { blockedIDs.contains(id) }
+    func isWatched(_ id: UUID) -> Bool { watchedIDs.contains(id) }
     func toggle(_ id: UUID) {
         if ids.contains(id) { ids.remove(id) } else { ids.insert(id) }
         defaults.set(ids.map(\.uuidString).sorted(), forKey: "hubFavoriteFeeds")
@@ -22,6 +27,14 @@ final class FeedFavorites: ObservableObject {
     func toggleBlocked(_ id: UUID) {
         if blockedIDs.contains(id) { blockedIDs.remove(id) } else { blockedIDs.insert(id) }
         defaults.set(blockedIDs.map(\.uuidString).sorted(), forKey: "hubBlockedFeeds")
+    }
+    func setWatched(_ id: UUID, watched: Bool) {
+        if watched { watchedIDs.insert(id) } else { watchedIDs.remove(id) }
+        defaults.set(watchedIDs.map(\.uuidString).sorted(), forKey: "hubWatchedFeeds")
+    }
+    func toggleWatched(_ id: UUID) -> Bool {
+        setWatched(id, watched: !watchedIDs.contains(id))
+        return watchedIDs.contains(id)
     }
 }
 

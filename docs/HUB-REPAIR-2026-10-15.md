@@ -107,3 +107,20 @@ session in place of the owner's normal app. No source credential, model weight o
    interface is working; it is not an implemented internal agent runtime.
 4. Remaining release/CloudKit/two-account/publication and broader cross-platform work stays in ROADMAP.md.
    No notarization, server deployment, paid court query or publication is claimed here.
+
+## OpenCode continuation: selective feed analysis
+
+Reconciled the older checkout's uncommitted watch controls with this repair baseline.
+The persisted eye selection and the feed open in Live are now the only background
+analysis inputs. Favorites and blocks remain independent; previews do not enroll a
+camera. No existing stars, blocks or explicit watch choices are migrated or removed.
+Snapshots that are confirmed but unwatched show idle. HLS watches are bounded to
+four decoders, with Live taking priority; additional watches show their capacity wait.
+Unwatch/block releases the decoder, and closing Live removes its temporary enrollment.
+The existing HLS transport retry/stall state machine is retained rather than stacking
+another watchdog over it. The caption filter already exists on this newer baseline.
+
+Hub verification: 33 tests, four opt-in skips, zero failures. New coverage verifies
+watch persistence, selective requests, enrollment/removal, cancellation during policy
+lookup, preview independence, HLS decoder capacity, Live priority and decoder release.
+The original OpenCode checkout and its unfinished edits remain untouched.

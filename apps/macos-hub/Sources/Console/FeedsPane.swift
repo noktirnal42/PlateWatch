@@ -88,6 +88,8 @@ struct FeedsPane: View {
                         Button(c.rawValue) { Task { await hub.importCatalogue(c); reload() } }
                     }
                 }
+                Button("Watch all favorites") { hub.watchAllFavorites() }
+                    .help("Analyse starred cameras in the background")
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
             }
             FeedStatusRow(runner: hub.feedRunner)
@@ -98,7 +100,7 @@ struct FeedsPane: View {
             if tab != .favorites {
                 Text(tab == .blocked
                      ? "Blocked cameras are saved on this Mac and receive no polling or preview requests. Use ↶ to unblock."
-                     : "\(rows.count) of \(totalCount) cameras. Use ☆ to favorite or ⦸ to block a missing feed. Requests share a one-per-host-per-second budget.")
+                     : "\(rows.count) of \(totalCount) cameras · \(favorites.watchedIDs.count) watched. Use the eye to choose background analysis, ☆ to favorite, or ⦸ to block. Requests share a one-per-host-per-second budget.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -113,6 +115,7 @@ struct FeedsPane: View {
         .onChange(of: favoritesFirst) { _, _ in refreshRows() }
         .onChange(of: favorites.ids) { _, _ in refreshRows() }
         .onChange(of: favorites.blockedIDs) { _, _ in refreshRows() }
+        .onChange(of: favorites.watchedIDs) { _, _ in refreshRows() }
         // Camera statuses only matter to the list when it is filtered or sorted by status.
         .onChange(of: runner.stateRevision) { _, _ in if statusFilter != nil || sortKey == .status { refreshRows() } }
         .onChange(of: tab) { _, _ in refreshRows() }
@@ -291,6 +294,7 @@ struct FavoriteTile: View {
                     .buttonStyle(.plain).help("Remove from favorites")
                     .accessibilityLabel("Remove \(source.name) from favorites")
                 FeedBlockButton(hub: hub, preferences: favorites, source: source)
+                FeedWatchButton(hub: hub, favorites: favorites, source: source)
             }
             Button("Open in Live", systemImage: "play.rectangle") {
                 hub.openFeedInLive(source); onOpenLive()
@@ -341,6 +345,7 @@ struct CameraPreviewPanel: View {
                     }.buttonStyle(.plain).help("Favorite")
                         .accessibilityLabel("Favorite \(source.name)")
                     FeedBlockButton(hub: hub, preferences: favorites, source: source)
+                FeedWatchButton(hub: hub, favorites: favorites, source: source)
                 }
                 Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
                 Label(source.kind == .hls ? "HLS video · sampled analysis" : "Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: source.kind == .hls ? "video" : "photo")
@@ -412,5 +417,24 @@ struct FeedBlockButton: View {
         .buttonStyle(.plain)
         .help(preferences.isBlocked(source.id) ? "Unblock camera on this Mac" : "Block camera on this Mac (stops polling and previews)")
         .accessibilityLabel("\(preferences.isBlocked(source.id) ? "Unblock" : "Block") \(source.name)")
+    }
+}
+
+/// Chooses whether this camera is analysed in the background. Unwatched
+/// confirmed cameras stay idle; a feed open in Live is analysed while open
+/// regardless of this toggle.
+struct FeedWatchButton: View {
+    @ObservedObject var hub: HubController
+    @ObservedObject var favorites: FeedFavorites
+    let source: PublicFeedSource
+
+    var body: some View {
+        Button { hub.toggleFeedWatch(source.id) } label: {
+            Image(systemName: favorites.isWatched(source.id) ? "eye.fill" : "eye.slash")
+                .foregroundStyle(favorites.isWatched(source.id) ? Color.accentColor : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(favorites.isWatched(source.id) ? "Stop background analysis of this camera" : "Analyse this camera in the background")
+        .accessibilityLabel("\(favorites.isWatched(source.id) ? "Stop watching" : "Watch") \(source.name)")
     }
 }

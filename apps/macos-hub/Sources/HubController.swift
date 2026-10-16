@@ -285,12 +285,39 @@ final class HubController: ObservableObject {
         }
         activeFeedSources = Dictionary(uniqueKeysWithValues: catalogue.sources.map { ($0.id, $0) })
         if let liveFeed, activeFeedSources[liveFeed.id]?.mayBeAnalysed != true { stopLiveFeed() }
-        feedRunner.start(catalogue: catalogue, blockedIDs: favorites.blockedIDs) { [weak self] data, source in
+        feedRunner.start(catalogue: catalogue, blockedIDs: favorites.blockedIDs, watchedIDs: watchedForRunner) { [weak self] data, source in
             await self?.analyseFeedFrame(data, from: source)
         } analyseVideoFrame: { [weak self] box, source in
             await self?.analyseFeedVideoFrame(box.buffer, from: source)
         }
         feedRunner.setLiveVideoSource(liveFeed?.kind == .hls ? liveFeed?.id : nil)
+    }
+
+    /// Watched selection = the persisted eye toggles, plus whatever feed is
+    /// open in Live (it is analysed while open, regardless of its toggle).
+    private var watchedForRunner: Set<UUID> {
+        var watched = favorites.watchedIDs
+        if let liveFeed { watched.insert(liveFeed.id) }
+        return watched
+    }
+
+    /// Re-apply the watched union after a toggle or Live open/close, without
+    /// restarting the whole runner.
+    private func syncRunnerWatch() {
+        feedRunner.setWatched(watchedForRunner)
+    }
+
+    /// Toggle background analysis for one camera and apply it immediately.
+    func toggleFeedWatch(_ id: UUID) {
+        favorites.toggleWatched(id)
+        syncRunnerWatch()
+    }
+
+    /// Convenience: watch every favorite (the curated set), keeping non-favorite
+    /// watches as they are.
+    func watchAllFavorites() {
+        for id in favorites.ids { favorites.setWatched(id, watched: true) }
+        syncRunnerWatch()
     }
 
     @Published private(set) var liveFeed: PublicFeedSource?
@@ -302,12 +329,14 @@ final class HubController: ObservableObject {
         liveFeedFrame = nil
         liveFeedStatus = "Waiting for a frame…"
         liveFeed = source
+        syncRunnerWatch()
         feedRunner.setLiveVideoSource(source.kind == .hls ? source.id : nil)
     }
 
     func stopLiveFeed() {
         feedRunner.setLiveVideoSource(nil)
         liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
+        syncRunnerWatch()
     }
 
     /// An immediate, rate-limited first frame; subsequent frames come from the existing background poller.

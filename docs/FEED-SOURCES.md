@@ -280,3 +280,12 @@ See the [repair record](HUB-REPAIR-2026-10-15.md) for scope, tests and the remai
 Camera HTTP/media/network failures now have separate diagnostics from unavailable policy lookups.
 A successful Refresh now clears stale image failure state and restarts a suspended snapshot poller.
 Received-frame timestamps represent receipt/processing, not a verified upstream capture time.
+
+### Selective background analysis (2026-10-15)
+
+Use the eye control beside a camera to watch it, or **Watch all favorites** to add
+starred cameras to the selection. Opening Live temporarily includes that source.
+An approved, unwatched source stays idle; its preview still works. Stars, watch
+choices and blocks persist independently. HLS uses at most four concurrent decoders,
+prioritizing Live; additional watched streams show a capacity wait. Closing Live
+releases its temporary selection, while explicit watches continue in the background.

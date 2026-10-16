@@ -163,6 +163,30 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertEqual(HubStubProtocol.state.count(path: camera.url.path), 0)
     }
 
+    @MainActor func testWatchedHLSBudgetPrioritizesLiveAndReleasesUnwatchedDecoders() async throws {
+        HubStubProtocol.state.reset { _ in .init(body: Data()) }
+        var cameras = try (0..<6).map { try source("/camera\($0).m3u8") }
+        for i in cameras.indices {
+            cameras[i].kind = .hls
+            cameras[i].url = URL(string: "https://127.0.0.1:1/camera\(i).m3u8")!
+        }
+        cameras.sort { $0.id.uuidString < $1.id.uuidString }
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: cameras), watchedIDs: Set(cameras.map(\.id)), analyse: { _, _ in }, analyseVideoFrame: { _, _ in })
+        let started = await eventually { runner.activeVideoCount == 4 }
+        XCTAssertTrue(started)
+        XCTAssertEqual(runner.sourceStates[cameras[5].id], .videoIdle)
+        runner.setLiveVideoSource(cameras[5].id)
+        let prioritized = await eventually { runner.sourceStates[cameras[5].id] != .videoIdle && runner.activeVideoCount == 4 }
+        XCTAssertTrue(prioritized)
+        runner.setWatched([cameras[5].id])
+        let released = await eventually { runner.activeVideoCount == 1 }
+        XCTAssertTrue(released)
+        runner.setWatched([])
+        XCTAssertEqual(runner.activeVideoCount, 0)
+    }
+
     @MainActor func testApprovingHLSDoesNotDecodeUnselectedStreams() async throws {
         HubStubProtocol.state.reset { _ in .init(body: Data()) }
         var camera = try source("/camera.m3u8")
@@ -244,6 +268,83 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertTrue(reloaded.contains(id)); XCTAssertFalse(reloaded.isBlocked(id))
         XCTAssertFalse(FeedFavorites(defaults: defaults).isBlocked(id))
     }
+
+    @MainActor func testUnwatchDuringPolicyCheckCannotStartSiblingOrCancelledCamera() async throws {
+        HubStubProtocol.state.reset { request in
+            .init(body: Data(), delay: request.url?.path == "/robots.txt" ? .milliseconds(200) : .zero)
+        }
+        let camera = try source("/cancelled.jpg"), sibling = try source("/sibling.jpg")
+        let runner = FeedRunner(session: session(), throttleInterval: 0, retryInterval: .milliseconds(50))
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: [camera, sibling]), watchedIDs: [camera.id]) { _, _ in XCTFail("Unwatched frame delivered") }
+        runner.setWatched([])
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(HubStubProtocol.state.count(path: camera.url.path), 0)
+        XCTAssertEqual(HubStubProtocol.state.count(path: sibling.url.path), 0)
+        XCTAssertEqual(runner.state(of: camera).kind, .confirmed)
+        // Previews stay available without enrolling either camera in background analysis.
+        HubStubProtocol.state.reset { request in
+            .init(body: request.url?.path == "/robots.txt" ? Data() : Data([0xFF, 0xD8, 0xFF]))
+        }
+        _ = try await runner.fetchPreview(of: sibling, retryFailedPolicy: true)
+        XCTAssertEqual(runner.state(of: sibling).kind, .confirmed)
+        XCTAssertEqual(runner.runningCount, 0)
+    }
+
+    @MainActor func testOnlyWatchedSourcesArePolled() async throws {
+        HubStubProtocol.state.reset { request in
+            .init(body: request.url?.path == "/robots.txt" ? Data() : Data([0xFF, 0xD8, 0xFF]))
+        }
+        let watched = try source("/watched.jpg"), idle = try source("/idle.jpg")
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: [watched, idle]), watchedIDs: [watched.id]) { _, _ in }
+        let fetched = await eventually { HubStubProtocol.state.count(path: watched.url.path) >= 1 }
+        XCTAssertTrue(fetched)
+        XCTAssertEqual(HubStubProtocol.state.count(path: idle.url.path), 0)
+        XCTAssertEqual(runner.state(of: idle).kind, .confirmed)
+        XCTAssertTrue(runner.status.contains("1 confirmed · not watched"))
+        // Watching the idle camera starts it; unwatching it returns it to idle.
+        runner.setWatched([watched.id, idle.id])
+        let alsoFetched = await eventually { HubStubProtocol.state.count(path: idle.url.path) >= 1 }
+        XCTAssertTrue(alsoFetched)
+        runner.setWatched([watched.id])
+        let backToIdle = await eventually { runner.state(of: idle).kind == .confirmed }
+        XCTAssertTrue(backToIdle)
+    }
+
+    @MainActor func testLiveOpenFeedIsWatchedWithoutToggle() async throws {
+        HubStubProtocol.state.reset { request in
+            .init(body: request.url?.path == "/robots.txt" ? Data() : Data([0xFF, 0xD8, 0xFF]))
+        }
+        let camera = try source("/live-only.jpg")
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: [camera]), watchedIDs: []) { _, _ in }
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(HubStubProtocol.state.count(path: camera.url.path), 0)
+        runner.setWatched([camera.id])
+        let fetched = await eventually { HubStubProtocol.state.count(path: camera.url.path) >= 1 }
+        XCTAssertTrue(fetched)
+    }
+
+
+    @MainActor func testWatchedPreferencePersistsIndependently() throws {
+        let name = "PlateWatchHubTests-\(UUID())", id = UUID()
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let preferences = FeedFavorites(defaults: defaults)
+        XCTAssertFalse(preferences.isWatched(id))
+        preferences.setWatched(id, watched: true)
+        XCTAssertTrue(FeedFavorites(defaults: defaults).isWatched(id))
+        XCTAssertTrue(preferences.isWatched(id))
+        preferences.toggleWatched(id)
+        XCTAssertFalse(FeedFavorites(defaults: defaults).isWatched(id))
+        // Watch state is independent of star and block.
+        XCTAssertTrue(preferences.contains(id) == false)
+        XCTAssertFalse(preferences.isBlocked(id))
+    }
+
 
     func testThrottleCancellationDoesNotGrantPermission() async throws {
         let throttle = HostThrottle(interval: 0.05)
