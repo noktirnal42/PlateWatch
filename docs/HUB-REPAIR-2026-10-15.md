@@ -105,8 +105,9 @@ The HLS relay cancellation path was hardened after native QA captured an
 `EXC_CRASH` in `URLSession.bytes(for:)` during session invalidation. Relay
 shutdown now cancels active tasks individually, preserving bounded streaming
 and the slow-segment first-chunk contract. A signed build remained alive for
-the post-fix pilot window; longer CPU/memory and multi-camera soak testing is
-still open.
+the post-fix 45-second pilot on a watched-feed process (RSS sampled at
+144–284 MB; CPU varied from idle to 96% during frame work); longer
+multi-camera soak testing is still open.
 
 1. Enforce policy across HLS child playlists, redirects, keys and segments, with cross-origin fixtures;
    add a small sustained camera-quality/freshness/CPU pilot. Existing real HLS proof does not close this gate.
