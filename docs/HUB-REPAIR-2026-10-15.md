@@ -101,6 +101,13 @@ session in place of the owner's normal app. No source credential, model weight o
 
 ## Planned work still open
 
+The HLS relay cancellation path was hardened after native QA captured an
+`EXC_CRASH` in `URLSession.bytes(for:)` during session invalidation. Relay
+shutdown now cancels active tasks individually, preserving bounded streaming
+and the slow-segment first-chunk contract. A signed build remained alive for
+the post-fix pilot window; longer CPU/memory and multi-camera soak testing is
+still open.
+
 1. Enforce policy across HLS child playlists, redirects, keys and segments, with cross-origin fixtures;
    add a small sustained camera-quality/freshness/CPU pilot. Existing real HLS proof does not close this gate.
 2. Physical Continuity/UVC, permissions, disconnect recovery and handheld/watch QA require actual hardware.
