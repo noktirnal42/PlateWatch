@@ -80,7 +80,7 @@ struct ModeratorController: RouteCollection {
             try await row.save(on: req.db)
             req.logger.info("moderation: \(decision.rawValue) sighting \(id)")
             await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString,
-                                    detail: "state=\(previous)→\(row.moderationState); source=api", on: req.db)
+                                    detail: "state=\(previous)→\(row.moderationState); source=api; reviewer=\(Self.reviewerFingerprint(req))", on: req.db)
         }
         return .noContent
     }
@@ -204,7 +204,7 @@ struct ModeratorController: RouteCollection {
             try await row.save(on: req.db)
             req.logger.info("moderation: \(decision.rawValue) sighting \(id)")
             await AuditEntry.record("moderation.\(decision.rawValue)", target: id.uuidString,
-                                    detail: "state=\(previous)→\(row.moderationState); source=html", on: req.db)
+                                    detail: "state=\(previous)→\(row.moderationState); source=html; reviewer=\(Self.reviewerFingerprint(req))", on: req.db)
         }
         return req.redirect(to: "/moderator", redirectType: .normal)
     }
@@ -218,6 +218,17 @@ struct ModeratorController: RouteCollection {
             throw Abort(.unauthorized, headers: ["WWW-Authenticate": #"Basic realm="PlateWatch moderator""#])
         }
         return token
+    }
+
+    /// Audit identity without persisting a username or credential. API clients
+    /// may provide a stable reviewer label; HTML review uses the Basic-auth
+    /// username. The digest is only for distinguishing reviewers later.
+    static func reviewerFingerprint(_ req: Request) -> String {
+        let raw = req.headers.first(name: "X-PlateWatch-Reviewer")
+            ?? req.headers.basicAuthorization?.username
+            ?? "unknown"
+        let digest = SHA256.hash(data: Data(raw.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined().prefix(16).description
     }
 
     static func csrf(token: String, id: UUID, decision: String) -> String {

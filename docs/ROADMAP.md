@@ -104,7 +104,8 @@ first.
   verbatim, cited, pending-until-accepted; live CourtListener/PACER endpoints not yet exercised
 - 🟡 Cross-reference chain: unit → confirmed link → official → records, location-free, shown in Hub Review — built;
   operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; second-person
-  moderation and any publication path are not
+  moderation and any publication path are not. Moderator audit entries now carry a non-reversible reviewer fingerprint,
+  which is the prerequisite for enforcing distinct reviewers without storing usernames.
 - ✅ FOIA request tracker (Hub: Requests tab — due dates, appeal text, cited releases)
 - ⬜ Aggregation of existing public-interest publishers (cite-first, no
   re-hosting without attribution)
