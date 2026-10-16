@@ -100,6 +100,27 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertEqual(HubStubProtocol.state.count(path: "/robots.txt"), 1)
     }
 
+    @MainActor func testIdenticalSnapshotUpdatesDeliveryWithoutInventingContentChange() async throws {
+        let camera = try source("/snapshot.jpg")
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: [camera]), watchedIDs: []) { _, _ in }
+        HubStubProtocol.state.reset { _ in .init(body: Data([0xFF,0xD8,0xFF,1])) }
+        _ = try await runner.fetchPreview(of: camera)
+        let changed = try XCTUnwrap(runner.contentChangedAt[camera.id])
+        let received = try XCTUnwrap(runner.lastReceivedAt[camera.id])
+        try await Task.sleep(for: .milliseconds(10))
+        _ = try await runner.fetchPreview(of: camera)
+        XCTAssertEqual(runner.contentChangedAt[camera.id], changed)
+        XCTAssertGreaterThan(try XCTUnwrap(runner.lastReceivedAt[camera.id]), received)
+        HubStubProtocol.state.reset { _ in .init(body: Data([0xFF,0xD8,0xFF,2])) }
+        _ = try await runner.fetchPreview(of: camera)
+        XCTAssertGreaterThan(try XCTUnwrap(runner.contentChangedAt[camera.id]), changed)
+        XCTAssertEqual(runner.state(of: camera).kind, .confirmed)
+        runner.stop()
+        XCTAssertTrue(runner.contentChangedAt.isEmpty)
+    }
+
     @MainActor func testSuccessfulManualPreviewClearsCameraFailureDiagnostic() async throws {
         HubStubProtocol.state.reset { request in
             request.url?.path == "/robots.txt" ? .init(body: Data()) : .init(status: 503)
@@ -367,6 +388,20 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertFalse(preferences.isBlocked(id))
     }
 
+
+    func testPreviewBudgetCancelsQueuedDecoderWithoutLeakingItsSlot() async {
+        let budget = HLSPreviewBudget(capacity: 1)
+        let first = await budget.acquire()
+        XCTAssertTrue(first)
+        let waiting = Task { await budget.acquire() }
+        await Task.yield(); waiting.cancel()
+        let cancelled = await waiting.value
+        XCTAssertFalse(cancelled)
+        await budget.release()
+        let next = await budget.acquire()
+        XCTAssertTrue(next)
+        await budget.release()
+    }
 
     func testThrottleCancellationDoesNotGrantPermission() async throws {
         let throttle = HostThrottle(interval: 0.05)

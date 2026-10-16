@@ -68,6 +68,10 @@ final class RobotsCacheTests: XCTestCase {
         RobotsStubProtocol.responder = { _ in (200, "text/html", Data("<html><head><title>Wowza Streaming Engine 4</title></head></html>".utf8)) }
         let allowed = await cache().decision(for: url)
         XCTAssertTrue(allowed.isAllowed)
+        for ext in ["ts", "m4s", "mp4", "aac", "key"] {
+            let child = await cache().decision(for: url.deletingLastPathComponent().appendingPathComponent("segment.\(ext)"))
+            XCTAssertTrue(child.isAllowed)
+        }
         for raw in ["https://other.example/vegasxcd01/a.stream/playlist.m3u8", "https://d1wse1.its.nv.gov/private/playlist.m3u8", "https://d1wse1.its.nv.gov/vegasxcd01/a.jpg"] {
             let refused = await cache().decision(for: URL(string: raw)!)
             XCTAssertFalse(refused.isAllowed)

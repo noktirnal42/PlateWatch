@@ -289,3 +289,18 @@ An approved, unwatched source stays idle; its preview still works. Stars, watch
 choices and blocks persist independently. HLS uses at most four concurrent decoders,
 prioritizing Live; additional watched streams show a capacity wait. Closing Live
 releases its temporary selection, while explicit watches continue in the background.
+
+### HLS request mediation and receipt diagnostics (2026-10-15)
+
+HLS now uses a loopback-only policy relay for playlists, media, keys and redirects.
+Only URLs introduced by fetched playlists acquire capability routes, and every
+upstream request must pass reviewed-origin and robots checks. Normal references,
+byte ranges and bounded streaming are tested; variable substitution and content
+steering are refused until supported. Favorites share two preview decoder slots,
+separate from the four watched streams. See CONTINUATION-ROADMAP-2026-10-15.md for
+limits, proof and the remaining sustained-pilot gate.
+
+Live snapshot receipt time is separate from analysis time. Identical image bytes
+retain their content-change time and eventually show an “image unchanged” notice.
+This does not prove an upstream outage; a static scene can also stay identical.
+Hashes/timestamps are transient local state and no additional image data is stored.

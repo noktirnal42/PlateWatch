@@ -49,6 +49,7 @@ targets:
       - Tests
       - Sources/EvidenceCrop.swift
       - Sources/FeedRunner.swift
+      - Sources/HLSPreviewBudget.swift
       - Sources/Console/FeedPreferences.swift
       - Sources/Console/ModeratorAccess.swift
       - Sources/Console/ModerationStore.swift

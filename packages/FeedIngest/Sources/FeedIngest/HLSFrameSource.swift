@@ -8,7 +8,7 @@ public protocol LiveFrameSink: Sendable {
 }
 
 /// A serial, bounded HLS decoder. Terms are checked before an AVPlayerItem is created.
-/// Manifest policy is checked by the caller; AVPlayer's segment fetches remain outside that policy cache.
+/// A private loopback relay checks every declared playlist, segment, key and redirect before fetching.
 @MainActor
 public final class HLSFrameSource {
     public enum State: Sendable, Equatable {
@@ -24,14 +24,18 @@ public final class HLSFrameSource {
     public var tapInterval: TimeInterval = 1.0 / 15.0
     private let stallTimeout: TimeInterval
     private let retryDelay: TimeInterval
+    private let requestPolicy: HLSPolicyRelay.Policy?
+    private var relay: HLSPolicyRelay?
     private let player = AVPlayer()
     private var output: AVPlayerItemVideoOutput?
     private var task: Task<Void, Never>?
     private var generation = UUID()
 
     public init(source: PublicFeedSource, enforceTerms: Bool = true,
-                stallTimeout: TimeInterval = 30, retryDelay: TimeInterval = 5) {
+                stallTimeout: TimeInterval = 30, retryDelay: TimeInterval = 5,
+                requestPolicy: HLSPolicyRelay.Policy? = nil) {
         precondition(source.kind == .hls, "HLSFrameSource is for .hls feeds")
+        self.requestPolicy = requestPolicy
         self.source = source
         self.enforceTerms = enforceTerms
         self.stallTimeout = max(1, stallTimeout)
@@ -45,12 +49,36 @@ public final class HLSFrameSource {
         isRunning = true
         let run = UUID()
         generation = run
+        let policy: HLSPolicyRelay.Policy
+        if let requestPolicy { policy = requestPolicy }
+        else {
+            let config = URLSessionConfiguration.ephemeral
+            let robots = RobotsCache(session: URLSession(configuration: config),
+                userAgent: "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)",
+                publicAPIPermissions: PublicAPIPermission.nevada511Video)
+            let root = source.url
+            policy = { url in
+                guard url.scheme == root.scheme, url.host == root.host, (url.port ?? (url.scheme == "https" ? 443 : 80)) == (root.port ?? (root.scheme == "https" ? 443 : 80)) else { return false }
+                return await robots.isAllowed(url)
+            }
+        }
+        let relay = HLSPolicyRelay(url: source.url, policy: policy)
+        self.relay = relay
         task = Task { @MainActor [weak self] in
+            let playbackURL: URL
+            do { playbackURL = try await relay.start() }
+            catch {
+                guard let self, self.isRunning, self.generation == run else { return }
+                self.isRunning = false
+                self.setState(.retrying("The local stream policy relay could not start."))
+                relay.stop()
+                return
+            }
             // Only one sink delivery can be in flight. Awaiting it provides backpressure.
             // Reacquire self each iteration so an idle decoder is not retained by its own task.
             while !Task.isCancelled {
                 guard let self, self.isRunning, self.generation == run else { return }
-                self.openItem()
+                self.openItem(url: playbackURL)
                 var lastFrame = ContinuousClock.now
                 while !Task.isCancelled, self.isRunning, self.generation == run {
                     if self.player.currentItem?.status == .failed { break }
@@ -71,7 +99,7 @@ public final class HLSFrameSource {
                     catch { return }
                 }
                 guard !Task.isCancelled, self.isRunning, self.generation == run else { return }
-                let reason = self.player.currentItem?.error?.localizedDescription ?? "No decoded frames; reconnecting"
+                let reason = relay.lastFailure ?? self.player.currentItem?.error?.localizedDescription ?? "No decoded frames; reconnecting"
                 self.player.pause()
                 self.player.replaceCurrentItem(with: nil)
                 self.output = nil
@@ -89,11 +117,12 @@ public final class HLSFrameSource {
         player.pause()
         player.replaceCurrentItem(with: nil)
         output = nil
+        relay?.stop(); relay = nil
         setState(.stopped)
     }
 
-    private func openItem() {
-        let item = AVPlayerItem(url: source.url)
+    private func openItem(url: URL) {
+        let item = AVPlayerItem(url: url)
         let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         item.add(output)
         self.output = output

@@ -154,13 +154,14 @@ final class LatestFrame: @unchecked Sendable {
 
 struct LivePane: View {
     @ObservedObject private var hub: HubController
+    @ObservedObject private var runner: FeedRunner
     @StateObject private var live: LiveController
     let isActive: Bool
     @State private var devices: [AVCaptureDevice] = []
     @AppStorage("liveSelectedCamera") private var selected: String = ""
     @AppStorage("hubShowDetectionOverlays") private var showOverlays = true
 
-    init(hub: HubController, isActive: Bool = true) { self.hub = hub; self.isActive = isActive; _live = StateObject(wrappedValue: LiveController(hub: hub)) }
+    init(hub: HubController, isActive: Bool = true) { self.hub = hub; self.runner = hub.feedRunner; self.isActive = isActive; _live = StateObject(wrappedValue: LiveController(hub: hub)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -169,6 +170,10 @@ struct LivePane: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
                         Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
+                        if source.kind == .snapshotJPEG, let received = runner.lastReceivedAt[source.id] {
+                            SnapshotFreshnessLabel(received: received, changed: runner.contentChangedAt[source.id] ?? received,
+                                                   interval: source.refreshInterval)
+                        }
                         if let frame = hub.liveFeedFrame {
                             Text("Analysed \(frame.updatedAt, format: .dateTime.hour().minute().second()) · \(frame.result.boxes.count) vehicle(s)")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -250,5 +255,25 @@ struct LivePane: View {
     private func fitted(_ image: CGSize, in box: CGSize) -> CGSize {
         let scale = min(box.width / image.width, box.height / image.height)
         return CGSize(width: image.width * scale, height: image.height * scale)
+    }
+}
+
+private struct SnapshotFreshnessLabel: View {
+    let received: Date
+    let changed: Date
+    let interval: TimeInterval
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { tick in
+            let warning = tick.date.timeIntervalSince(changed) > max(600, interval * 2)
+            Group {
+                if warning {
+                    Text("Received \(received, format: .dateTime.hour().minute().second()) · image unchanged since \(changed, format: .dateTime.hour().minute())")
+                } else {
+                    Text("Received \(received, format: .dateTime.hour().minute().second())")
+                }
+            }
+            .font(.caption).foregroundStyle(warning ? Color.orange : Color.secondary)
+            .help("Receiving an image proves delivery, not camera freshness. Identical image bytes may indicate a static scene or an upstream freeze.")
+        }
     }
 }

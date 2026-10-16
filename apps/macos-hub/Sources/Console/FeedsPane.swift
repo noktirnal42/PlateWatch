@@ -72,7 +72,19 @@ struct FeedsPane: View {
     @State private var rows: [PublicFeedSource] = []
     private func refreshRows() { rows = computeRows() }
 
-    var body: some View {
+    var body: some View { observedContent }
+
+    private var contentWithFilters: some View {
+        feedContent
+            .onChange(of: query) { _, _ in refreshRows() }
+            .onChange(of: hostFilter) { _, _ in refreshRows() }
+            .onChange(of: statusFilter) { _, _ in refreshRows() }
+            .onChange(of: sortKey) { _, _ in refreshRows() }
+            .onChange(of: ascending) { _, _ in refreshRows() }
+            .onChange(of: favoritesFirst) { _, _ in refreshRows() }
+    }
+
+    private var feedContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !needReview.isEmpty { termsBanner }
             HStack {
@@ -105,14 +117,12 @@ struct FeedsPane: View {
             }
         }
         .padding()
+    }
+
+    private var observedContent: some View {
+        contentWithFilters
         .onAppear(perform: reload)
         .onChange(of: catalogue?.sources.count) { _, _ in refreshRows() }
-        .onChange(of: query) { _, _ in refreshRows() }
-        .onChange(of: hostFilter) { _, _ in refreshRows() }
-        .onChange(of: statusFilter) { _, _ in refreshRows() }
-        .onChange(of: sortKey) { _, _ in refreshRows() }
-        .onChange(of: ascending) { _, _ in refreshRows() }
-        .onChange(of: favoritesFirst) { _, _ in refreshRows() }
         .onChange(of: favorites.ids) { _, _ in refreshRows() }
         .onChange(of: favorites.blockedIDs) { _, _ in refreshRows() }
         .onChange(of: favorites.watchedIDs) { _, _ in refreshRows() }

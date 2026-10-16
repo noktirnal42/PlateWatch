@@ -33,7 +33,7 @@ public struct PublicAPIPermission: Sendable {
         permitsWowzaPlaceholder && citation.url?.scheme == "https" && url.scheme?.lowercased() == "https"
             && url.host?.lowercased() == host && (url.port == nil || url.port == 443)
             && !url.path.split(separator: "/").contains("..") && !url.path.contains("\\")
-            && url.path.contains(".stream/") && url.path.hasSuffix(".m3u8")
+            && url.path.contains(".stream/") && ["m3u8", "ts", "m4s", "mp4", "aac", "key"].contains(url.pathExtension.lowercased())
             && pathPrefixes.contains { url.path.hasPrefix($0) }
     }
 
