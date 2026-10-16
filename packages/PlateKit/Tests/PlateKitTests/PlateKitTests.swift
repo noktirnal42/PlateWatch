@@ -18,6 +18,14 @@ final class PlateNormalizationTests: XCTestCase {
         XCTAssertFalse(Plate(text: "ABC1234", plateDesign: "US-CA-standard").exemptDesignHint)
         XCTAssertFalse(Plate(text: "ABC1234").exemptDesignHint)
     }
+
+    func testPlateDesignFamilyIsConservativeAndStable() {
+        XCTAssertEqual(Plate(text: "D756", plateDesign: "government-official").designFamily, .official)
+        XCTAssertEqual(Plate(text: "123456", plateDesign: "US-CA-exempt").designFamily, .exempt)
+        XCTAssertEqual(Plate(text: "123456", plateDesign: "US-GOV").designFamily, .government)
+        XCTAssertEqual(Plate(text: "ABC1234", plateDesign: "US-CA-standard").designFamily, .standard)
+        XCTAssertEqual(Plate(text: "ABC1234").designFamily, .unknown)
+    }
 }
 
 final class PlatePatternTests: XCTestCase {

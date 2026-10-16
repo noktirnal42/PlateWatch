@@ -53,7 +53,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
 - ⬜ Make/model/color classifier — colour model not yet found with a recordable licence (`docs/DECISIONS.md`)
 - ◐ Fleet markings parser: Vision text → FoundationModels `@Generable` extraction (agency name, unit #, "POLICE"/"FIRE" class text) — wired into the iOS capture path
-- ◐ Plate-design classifier (state/exempt/federal plate families) — decision: pivot from per-state (60 % accuracy, noisy keyword-search data) to the design families the redaction gate actually consumes (standard/exempt/government/official); train on plate crops (`docs/DECISIONS.md`)
+- ◐ Plate-design classifier — conservative standard/exempt/government/official family mapping now lands in PlateKit and is gate-safe; trained plate-crop model and licensed family corpus remain open (`docs/DECISIONS.md`)
 - ⬜ Vehicle Re-ID upgrade: OSNet CoreML model replacing feature prints
 - ⬜ Fleet gate classifier: binary fleet/civilian on detector crops (whole-scene 6-class training plateaued at 66–81 % due to background shortcut learning)
 
