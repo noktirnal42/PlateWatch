@@ -19,7 +19,7 @@ flowchart LR
 
 MCP exposes 14 tools: status/launch, feed list/detail, explicit star/block settings, approved-feed Open in Live, console navigation, queued-review metadata and stored evidence crop, cited records search, pending-only CSV import, fleet FOIA draft/tracker, and record/roster source catalogues. One resource describes capabilities. Pagination caps results at 200 rows. Provider or imported strings are data, not instructions.
 
-No arbitrary shell, selector, external fetch, credential export, paid PACER search, terms approval, record acceptance, publication, moderation, biometric matching or person-location tool exists. Evidence returns only an existing redacted vehicle crop up to 40 KB, not a raw frame. Status is scheduling/model state, not proof of camera freshness or recognition accuracy.
+No arbitrary shell, selector, external fetch, credential export, paid PACER search, terms approval, record acceptance, publication, moderation, biometric matching or person-location tool exists. Evidence returns only an existing intact local vehicle crop up to 40 KB (possibly including incidental background content), not a raw frame. Status is scheduling/model state, not proof of camera freshness or recognition accuracy.
 
 ### Local connection and lifecycle
 

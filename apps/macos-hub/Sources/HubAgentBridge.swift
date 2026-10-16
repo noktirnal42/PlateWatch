@@ -154,7 +154,7 @@ final class HubAgentBridge {
                       let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON),
                       let raw = dto.cropJPEGBase64, let bytes = Data(base64Encoded: raw), bytes.count <= 40_000 else { throw BridgeFailure("No bounded evidence image for this queued record") }
                 return ["mime_type": "image/jpeg", "jpeg_base64": raw, "bytes": bytes.count, "hash": dto.cropHashSHA256 ?? "",
-                        "note": "Stored redacted vehicle crop; not an original camera frame"]
+                        "note": "Stored local vehicle crop; not an original camera frame; may include incidental background content"]
             }
             return ["total": rows.count, "items": rows.dropFirst(offset).prefix(limit).map { row -> [String: Any] in
                 let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON)

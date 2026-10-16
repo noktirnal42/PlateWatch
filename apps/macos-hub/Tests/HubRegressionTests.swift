@@ -501,10 +501,23 @@ final class EvidenceCropRegressionTests: XCTestCase {
         XCTAssertEqual(output.sha256Hex, SHA256.hash(data: output.jpegData).map { String(format: "%02x", $0) }.joined())
         XCTAssertEqual(Data(base64Encoded: output.base64), output.jpegData)
     }
-    func testIntrudingVehicleOmitsImageRatherThanExposingItsPlate() throws {
+    func testIntrudingVehicleDoesNotSuppressOrAlterLocalReviewImage() throws {
         let target = VehicleObservation(boundingBox: .init(x: 0.1, y: 0.2, width: 0.7, height: 0.6))
         let other = VehicleObservation(boundingBox: .init(x: 0.5, y: 0.4, width: 0.3, height: 0.3))
-        XCTAssertNil(EvidenceCrop.make(source: try source(), vehicle: target, others: [target, other]))
+        let frame = try source()
+        let intact = try XCTUnwrap(EvidenceCrop.make(source: frame, vehicle: target, others: [target]))
+        let overlap = try XCTUnwrap(EvidenceCrop.make(source: frame, vehicle: target, others: [target, other]))
+        XCTAssertEqual(overlap.jpegData, intact.jpegData)
+        XCTAssertEqual(overlap.sha256Hex, intact.sha256Hex)
+    }
+    func testForeignTextDoesNotBlackOutLocalReviewImage() throws {
+        let target = VehicleObservation(boundingBox: .init(x: 0.1, y: 0.2, width: 0.7, height: 0.6))
+        let other = VehicleObservation(boundingBox: .init(x: 0.9, y: 0.9, width: 0.08, height: 0.08),
+            sceneText: [.init(text: "SYNTHETIC NEIGHBOR", boundingBox: .init(x: 0.3, y: 0.4, width: 0.1, height: 0.08), confidence: 0.9)])
+        let frame = try source()
+        let intact = try XCTUnwrap(EvidenceCrop.make(source: frame, vehicle: target, others: [target]))
+        let withText = try XCTUnwrap(EvidenceCrop.make(source: frame, vehicle: target, others: [target, other]))
+        XCTAssertEqual(withText.jpegData, intact.jpegData)
     }
     func testInvalidOrOffFrameBoxesCannotProduceEvidence() throws {
         for box in [NormalizedBox(x: .nan, y: 0, width: 1, height: 1), .init(x: 2, y: 2, width: 0.1, height: 0.1), .init(x: 0, y: 0, width: 0, height: 1)] {

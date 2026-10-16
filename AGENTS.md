@@ -11,7 +11,11 @@ Vapor reference server for cross-platform expansion.
 
 1. **Fleet-focused data only.** New ingestion or enrichment code must respect
    the redaction/moderation rules in `docs/LEGAL-ETHICS.md`. Do not add code
-   paths that persist un-redacted private-citizen plates or DMV-derived PII.
+   paths that index private-citizen plates or persist DMV-derived PII. The owner-approved
+   local Hub Review exception in Rule 1 preserves intact fleet-target evidence crops,
+   including incidental background content. Do not reintroduce overlap-based image
+   suppression or plate/text blackouts there. This exception does not authorize uploading
+   Review image bytes or relaxing shared structured-data rules.
 2. **Provenance everywhere.** Any model or code that enriches a record
    (officer, agency, cost) must write a `SourceCitation`. No unsourced
    enrichment.

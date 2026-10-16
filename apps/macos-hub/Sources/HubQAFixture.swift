@@ -24,7 +24,14 @@ enum HubQAFixture {
         for index in 1...3 {
             guard let image = drawing(index), let buffer = LiveController.pixelBuffer(from: image) else { continue }
             let vehicle = VehicleObservation(boundingBox: .init(x: 0.1, y: 0.15, width: 0.8, height: 0.7), vehicleClass: .patrol, classConfidence: 0.99)
-            let crop = EvidenceCrop.make(source: .init(pixelBuffer: buffer), vehicle: vehicle, others: [vehicle])
+            // Exercise the owner-reported failure modes in the actual Review UI:
+            // overlap previously removed QA-1; neighboring text blacked out QA-2.
+            let neighbor = VehicleObservation(
+                boundingBox: index == 1 ? .init(x: 0.6, y: 0.3, width: 0.25, height: 0.3)
+                    : .init(x: 0.96, y: 0.94, width: 0.03, height: 0.03),
+                sceneText: [.init(text: "SYNTHETIC NEIGHBOR", boundingBox: .init(x: 0.36, y: 0.5, width: 0.2, height: 0.1), confidence: 0.99)])
+            let crop = EvidenceCrop.make(source: .init(pixelBuffer: buffer), vehicle: vehicle,
+                others: index == 3 ? [vehicle] : [vehicle, neighbor])
             let dto = SightingSubmissionDTO(capturedAt: Date().addingTimeInterval(Double(-index * 60)),
                 geohash6: "9q8yyk", cropHashSHA256: crop?.sha256Hex, cropJPEGBase64: crop?.base64,
                 deviceIDHash: "synthetic-visual-qa", fleetConfidence: 0.99,

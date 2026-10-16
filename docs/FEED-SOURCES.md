@@ -3,7 +3,7 @@
 > **Current Hub status (2026-10-15):** [repair evidence](HUB-REPAIR-2026-10-15.md) supersedes older
 > implementation/reachability notes. Snapshot feeds analyze in the background; HLS decodes on demand for
 > the selected Live source. NV511 snapshots/HLS and real installed-app video analysis are verified.
-> Human-reviewed terms, manifest policy, source-specific gates and evidence redaction remain in force.
+> Human-reviewed terms, manifest policy, source-specific gates and shared structured-data redaction remain in force. Local Review crops are preserved intact under LEGAL-ETHICS Rule 1.
 > Full child-playlist/CDN/segment policy enforcement and raw RTSP transport remain open.
 
 

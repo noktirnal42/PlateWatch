@@ -18,8 +18,10 @@ repairs live on `codex/hub-repair-20261015` in a separate worktree.
   A selected public feed remains selected across navigation. Inactive retained controls are disabled
   and hidden from accessibility. The console is a single Window; Navigate no longer creates copies.
 - Evidence conversion uses Core Image's actual pixel-format conversion; it never copies YUV bytes
-  into a BGRA buffer. Crops reject invalid/out-of-frame boxes and omit the image if redaction cannot
-  complete. JPEG encoding, size cap, digest and overlapping-vehicle refusal have regression tests.
+  into a BGRA buffer. Crops reject invalid/out-of-frame boxes. Owner clarification on 2026-10-15
+  removes local overlap refusal and plate/text blackouts: intact fleet-target crops are required
+  for Review. JPEG encoding, size cap, digest, overlap preservation and text preservation have
+  regression tests. REST/CloudKit do not upload these local image bytes.
   The eight existing user queue rows contained **no image bytes or crop hashes** before repair;
   those old images cannot be reconstructed from the stored DTOs. They were not deleted or fabricated.
 - The outbox counter loads the real persistent count at startup and updates after rejection.
@@ -143,3 +145,20 @@ fallback. This is targeted regression evidence, not an all-day soak or a claim t
 no other crash exists. The latest observed real queue count is seven; no real queue
 entries were rejected during this continuation. Existing user favorites/blocks and
 watch choices were preserved. Recognition follow-up is documented in EVALUATION.md.
+
+## Local evidence policy correction — owner clarification
+
+The older OpenALPR checkout held an uncommitted removal of crop redaction/suppression,
+but that change was absent from the repair branch and LEGAL-ETHICS still described the
+strict rule. The prior repair therefore retained the unwanted behavior. The current
+implementation removes both overlap-based crop omission and neighboring plate/text
+blackouts for local Review. AGENTS, LEGAL-ETHICS, data-model, feed/agent docs, MCP/skill
+descriptions and product copy now explicitly describe intact local evidence.
+
+37 Hub tests pass (four opt-in skips), including byte-identical JPEG checks with overlapping
+vehicles and neighboring text. A separate in-memory native QA session exercised the same
+EvidenceCrop path with overlap/text fixtures: all three thumbnails displayed and the
+overlap crop opened at 636 by 314 pixels without blackouts. The normal signed app was
+reinstalled and its real queue preserved. This affects new captures; previously omitted
+image bytes or destructively redacted pixels cannot be reconstructed from a crop hash.
+REST continues to omit image bytes and CloudKit maps no image field.

@@ -702,7 +702,7 @@ final class HubController: ObservableObject {
     /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
     /// endpoint so both apply identical rules. Returns the number of fleet hits.
     /// `source` is the analysed frame as a bitmap: when present, every recorded hit
-    /// carries an evidence crop of the vehicle (redacted per `EvidenceCrop` policy).
+    /// carries an intact local evidence crop of the vehicle (see `EvidenceCrop`).
     @discardableResult
     private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier,
                                  geohash6: String? = nil, mayResolveIdentity: Bool = true,

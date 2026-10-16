@@ -53,7 +53,8 @@ tests must stay green before its status advances.
   preserved (their payloads lacked image bytes before this repair). Snapshot failures, policy failures
   and manual recovery are distinct. OpenCode watch controls reconciled: persisted selective polling,
   four-stream HLS budget and Live priority; watch scan hang fixed and native toggling verified.
-  All 34 Hub tests pass (four opt-in skips).
+  Local Review preserves intact evidence crops: overlapping vehicles and foreign text no longer
+  remove or black out photos (owner clarification, 2026-10-15; 37 Hub tests, four opt-in skips).
   Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
   163 FeedIngest and 36 Hub tests pass. Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
