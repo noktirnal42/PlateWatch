@@ -37,8 +37,15 @@ struct BackendConnectionSection: View {
     private func checkCloudKit() async -> String {
         guard SyncBackends.cloudKitAvailable() else { return "Unavailable — this build has no CloudKit entitlement" }
         do {
-            switch try await CKContainer(identifier: SyncBackends.containerID).accountStatus() {
-            case .available: return "iCloud account available · schema/record access not checked"
+            let container = CKContainer(identifier: SyncBackends.containerID)
+            switch try await container.accountStatus() {
+            case .available:
+                do {
+                    _ = try await container.userRecordID()
+                    return "Connected · account and container record access available"
+                } catch {
+                    return "Account available · container record access failed (\((error as NSError).code))"
+                }
             case .noAccount: return "Sign in to iCloud in System Settings"
             case .restricted: return "iCloud access is restricted"
             case .temporarilyUnavailable: return "iCloud temporarily unavailable"
