@@ -19,7 +19,7 @@ struct BackendConnectionSection: View {
                 Button(checking ? "Checking…" : "Check connections", systemImage: "arrow.clockwise") { Task { await check() } }
                     .disabled(checking)
                 if let lastChecked {
-                    Text("Checked (lastChecked, format: .dateTime.hour().minute().second())")
+                    Text("Checked \(lastChecked, format: .dateTime.hour().minute().second())")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
