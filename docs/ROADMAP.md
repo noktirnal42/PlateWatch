@@ -66,8 +66,8 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Moderator console (server-rendered `GET /moderator` on the reference server; disabled unless `MODERATOR_TOKEN` is set)
 
 ## M4 — Network & UX
-- ◐ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save implemented; push payload handling pending)
-- ◐ Heatmap + timeline: k-anonymous aggregate API shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); map/timeline UI pending; agency scoping needs vehicle linking
+- ✅ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save, silent-push wake, delta matching and haptic/local alert handling implemented; entitlement and physical-device push QA remain)
+- ◐ Heatmap + timeline: k-anonymous aggregate API and iOS map/timeline explorer shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); agency scoping still needs vehicle linking
 - ◐ "Agency report card": server-rendered report page implemented (fleet size, 30-day sightings, budget link); no iOS surface yet
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
 - ✅ Public feed is fleet-confirmed only (plates not persisted for unconfirmed sightings)

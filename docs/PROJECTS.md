@@ -31,7 +31,9 @@ tests must stay green before its status advances.
   adds observation detail/export, retry recovery, validated fleet watchlists,
   local cleanup and simulator CloudKit startup-crash fix. See
   [IOS-UI-HANDOFF.md](IOS-UI-HANDOFF.md) for validation and screenshot boundaries.
-  Handheld live-camera field testing remains pending.
+  Handheld live-camera field testing remains pending. CloudKit watchlist subscription registration,
+  watchOS silent-push delta matching, haptics and local alert presentation are implemented; signed
+  entitlement and physical-device push delivery remain external QA gates.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
