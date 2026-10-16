@@ -88,6 +88,14 @@ final class ModeratorCSRFTests: XCTestCase {
         XCTAssertTrue(ModeratorController.constantTimeEquals("", ""))
     }
 
+    func testReviewerFingerprintIsStableDistinctAndNonReversibleLength() {
+        let first = ModeratorController.reviewerFingerprint("reviewer-a")
+        XCTAssertEqual(first, ModeratorController.reviewerFingerprint("reviewer-a"))
+        XCTAssertNotEqual(first, ModeratorController.reviewerFingerprint("reviewer-b"))
+        XCTAssertEqual(first.count, 16)
+        XCTAssertFalse(first.contains("reviewer"))
+    }
+
     func testEscapeNeutralisesMarkup() {
         let escaped = ModeratorController.escape(#"<script>alert("x") & 'y'</script>"#)
         XCTAssertFalse(escaped.contains("<script>"))

@@ -253,6 +253,10 @@ struct ModeratorController: RouteCollection {
         let raw = req.headers.first(name: "X-PlateWatch-Reviewer")
             ?? req.headers.basicAuthorization?.username
             ?? "unknown"
+        return reviewerFingerprint(raw)
+    }
+
+    static func reviewerFingerprint(_ raw: String) -> String {
         let digest = SHA256.hash(data: Data(raw.utf8))
         return digest.map { String(format: "%02x", $0) }.joined().prefix(16).description
     }
