@@ -297,7 +297,9 @@ private struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
     func makeUIView(context: Context) -> PreviewView { PreviewView(session: session) }
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        uiView.updateVideoOrientation()
+    }
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -306,6 +308,31 @@ private struct CameraPreview: UIViewRepresentable {
             super.init(frame: .zero)
             videoLayer?.session = session
             videoLayer?.videoGravity = .resizeAspectFill
+        }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            updateVideoOrientation()
+        }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            updateVideoOrientation()
+        }
+        /// Keep the preview layer's sensor rotation in step with the rotated
+        /// sample buffers delivered by CaptureKit. Without this, the live
+        /// image rotates independently of the controls and detection overlay.
+        func updateVideoOrientation() {
+            guard let connection = videoLayer?.connection,
+                  let orientation = window?.windowScene?.interfaceOrientation else { return }
+            let angle: CGFloat
+            switch orientation {
+            case .portrait: angle = 90
+            case .portraitUpsideDown: angle = 270
+            case .landscapeLeft: angle = 180
+            case .landscapeRight: angle = 0
+            default: return
+            }
+            guard connection.isVideoRotationAngleSupported(angle) else { return }
+            connection.videoRotationAngle = angle
         }
         required init?(coder: NSCoder) { fatalError("storyboard-free") }
     }
