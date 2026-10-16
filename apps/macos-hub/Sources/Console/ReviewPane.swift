@@ -39,10 +39,16 @@ struct ReviewPane: View {
         }
     }
 
+    private var evidenceCount: Int { table.reduce(into: 0) { count, row in if row.thumbnail != nil { count += 1 } } }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(rows.count) queued").font(.headline)
+                Label("\(rows.count) queued", systemImage: "tray.full")
+                    .font(.headline)
+                Text("· \(evidenceCount) with evidence")
+                    .font(.caption)
+                    .foregroundStyle(evidenceCount == rows.count ? Color.secondary : Color.orange)
                 Spacer()
                 Text("\(selection.count) selected").font(.caption).foregroundStyle(.secondary)
                 Button("Select all") { selection = Set(rows.map(\.persistentModelID)) }.disabled(rows.isEmpty).accessibilityLabel("Select all queued sightings")
@@ -53,6 +59,11 @@ struct ReviewPane: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(selection.isEmpty)
+            }
+            if !rows.isEmpty && evidenceCount < rows.count {
+                Label("\(rows.count - evidenceCount) queued item(s) have no recoverable image. Hashes can verify an image when bytes exist, but cannot recreate missing bytes.", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
             if !discardError.isEmpty { Text(discardError).foregroundStyle(.red) }
             Text("Use Command-click or Shift-click to select multiple items. Rejection removes the selected local queue entries.")
