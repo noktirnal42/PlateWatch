@@ -2,6 +2,7 @@ import PlateKit
 import PlateSync
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// The outbox is paired with a privacy-safe receipt history. Payloads leave
 /// the device after acknowledgement; only delivery metadata remains locally.
@@ -104,7 +105,7 @@ private struct ReceiptDetailView: View {
         List {
             Section {
                 PWSectionIntro(eyebrow: "BACKEND RECEIPT", title: receipt.moderationState.displayName,
-                               message: "The backend accepted this submission. The original payload and evidence media are not kept in the local receipt ledger.",
+                message: "The backend accepted this submission. The local ledger keeps only the bounded review crop when one was available; raw frames and the original payload are not retained.",
                                systemImage: "checkmark.seal.fill")
                 .listRowBackground(Color.clear)
             }
@@ -115,6 +116,20 @@ private struct ReceiptDetailView: View {
                     LabeledContent("Receipt key") { Text(prefix + "…").font(.caption.monospaced()) }
                 }
                 LabeledContent("Operator confirmation", value: receipt.operatorConfirmed ? "Confirmed" : "Not recorded")
+            }
+            if let data = receipt.cropJPEGData, let image = UIImage(data: data) {
+                Section {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .clipShape(.rect(cornerRadius: 12))
+                        .accessibilityLabel("Saved bounded review crop")
+                } header: {
+                    Text("Review crop")
+                } footer: {
+                    Text("This is the local, bounded crop captured for review. It is not a raw camera frame and was not uploaded by PlateSync.")
+                }
             }
             Section {
                 Label("Publication still requires moderation and policy checks.", systemImage: "info.circle")

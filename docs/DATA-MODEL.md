@@ -153,11 +153,12 @@ publication or bypass the moderation state returned by the backend.
 ## Local receipt ledger (2026-10-16)
 
 After a backend receipt removes a `PendingSubmission`, iOS stores a
-`ReceivedSubmissionReceipt` row locally. It contains only the sighting UUID, server
-receipt time, returned moderation state, operator-confirmation flag, and an optional
-short idempotency-key prefix. It never stores the submission DTO, plate text, crop,
-raw frame, or exact location. The Sightings screen presents this as delivery history;
-receipt history is not proof of public publication.
+`ReceivedSubmissionReceipt` row locally. It contains the sighting UUID, server
+receipt time, returned moderation state, operator-confirmation flag, an optional
+short idempotency-key prefix, and the already-bounded review JPEG when one was
+available (capped at 40 KB). It never stores the submission DTO, raw frame, or exact
+location. The Sightings screen presents this as delivery history; receipt history is
+not proof of public publication.
 
 ## Local event clips (2026-10-16)
 

@@ -33,6 +33,9 @@ public final class ReceivedSubmissionReceipt {
     public var receivedAt: Date
     public var moderationStateRaw: String
     public var operatorConfirmed: Bool
+    /// The already-bounded local review crop, when the capture flow supplied
+    /// one. Raw frames and the rest of the submission are never retained.
+    public var cropJPEGData: Data?
     /// A short idempotency prefix is useful when comparing logs without
     /// retaining the full submission or any plate/media material.
     public var idempotencyPrefix: String?
@@ -40,12 +43,14 @@ public final class ReceivedSubmissionReceipt {
     public init(sightingID: UUID, receivedAt: Date,
                 moderationState: Sighting.ModerationState,
                 operatorConfirmed: Bool = false,
-                idempotencyKey: String? = nil) {
+                idempotencyKey: String? = nil,
+                cropJPEGData: Data? = nil) {
         self.sightingID = sightingID
         self.receivedAt = receivedAt
         self.moderationStateRaw = moderationState.rawValue
         self.operatorConfirmed = operatorConfirmed
         self.idempotencyPrefix = idempotencyKey.map { String($0.prefix(12)) }
+        self.cropJPEGData = cropJPEGData.flatMap { $0.count <= 40 * 1024 ? $0 : nil }
     }
 
     public var moderationState: Sighting.ModerationState {
@@ -106,7 +111,8 @@ public actor OutboxDrainer {
                         receivedAt: receipt.serverReceivedAt,
                         moderationState: receipt.moderationState,
                         operatorConfirmed: receipt.operatorConfirmed ?? false,
-                        idempotencyKey: receipt.idempotencyKey ?? row.idempotencyKey))
+                        idempotencyKey: receipt.idempotencyKey ?? row.idempotencyKey,
+                        cropJPEGData: dto.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }))
                 }
                 context.delete(row)
             } catch SyncError.quotaExceeded {

@@ -50,20 +50,27 @@ final class OutboxTests: XCTestCase {
         _ = backend
     }
 
-    func testReceiptLedgerKeepsOnlyBoundedAuditMetadata() {
+    func testReceiptLedgerKeepsBoundedCropWithoutSubmissionPayload() {
         let sightingID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
         let receipt = ReceivedSubmissionReceipt(
             sightingID: sightingID,
             receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
             moderationState: .fleetConfirmed,
             operatorConfirmed: true,
-            idempotencyKey: "0123456789abcdef")
+            idempotencyKey: "0123456789abcdef",
+            cropJPEGData: Data(repeating: 0xFF, count: 24))
 
         XCTAssertEqual(receipt.sightingID, sightingID)
         XCTAssertEqual(receipt.moderationState, .fleetConfirmed)
         XCTAssertEqual(receipt.idempotencyPrefix, "0123456789ab")
         XCTAssertTrue(receipt.operatorConfirmed)
+        XCTAssertEqual(receipt.cropJPEGData?.count, 24)
         XCTAssertFalse(Mirror(reflecting: receipt).children.contains { $0.label == "payloadJSON" })
+
+        let oversized = ReceivedSubmissionReceipt(
+            sightingID: sightingID, receivedAt: Date(), moderationState: .pending,
+            cropJPEGData: Data(repeating: 0, count: 40 * 1024 + 1))
+        XCTAssertNil(oversized.cropJPEGData)
     }
 }
 
