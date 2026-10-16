@@ -30,7 +30,10 @@ enum RedactionGateService {
         let governmentDesign = dto.plate?.plateDesign?.lowercased()
             .contains("gov") == true
             || dto.plate?.plateDesign?.lowercased().contains("exempt") == true
-        let confirmed = dto.fleetConfidence >= 0.8
+        // Preserve compatibility with pre-confirmation clients that omit the
+        // field; new Hub payloads write false until an operator confirms.
+        let operatorConfirmed = dto.userConfirmed ?? true
+        let confirmed = operatorConfirmed && dto.fleetConfidence >= 0.8
             && (hasMarkings || governmentDesign)
         if confirmed {
             return .init(state: .fleetConfirmed, exactGeoAllowed: true, dropReason: nil)

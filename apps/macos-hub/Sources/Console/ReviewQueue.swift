@@ -5,6 +5,20 @@ import SwiftData
 
 @MainActor
 enum ReviewQueue {
+    @discardableResult
+    static func confirm(_ ids: Set<PersistentIdentifier>, context: ModelContext) throws -> Int {
+        let selected = try context.fetch(FetchDescriptor<PendingSubmission>()).filter { ids.contains($0.persistentModelID) }
+        for row in selected {
+            var dto = try JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON)
+            dto.userConfirmed = true
+            row.payloadJSON = try JSONEncoder.withISODates.encode(dto)
+            row.lastError = nil
+        }
+        do { try context.save() }
+        catch { context.rollback(); throw error }
+        return selected.count
+    }
+
     /// Fetch before mutating: live @Query updates must not change a deletion loop.
     @discardableResult
     static func reject(_ ids: Set<PersistentIdentifier>, context: ModelContext,

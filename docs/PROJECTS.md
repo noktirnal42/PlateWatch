@@ -126,12 +126,13 @@ tests must stay green before its status advances.
   field-compatibility, LEGAL-ETHICS encoding, moderation states.
 - **Docs:** LEGAL-ETHICS, DATA-MODEL, AGENTS.md guardrails.
 - **Test:** `swift test --package-path packages/PlateKit`.
-- **Status:** gate + official-plate evidence landed; **known drift risk** —
-  three call sites hand-roll the scoring call (iOS, EvalHarness, Hub) and the
-  Hub already broke once when the signature changed.
-- **Next:** add `PlateKit.FleetScoring.vehicleGateScore(gate:vehicle:)` as the
-  single scoring entry point and adopt it in iOS/EvalHarness/Hub so signature
-  evolution cannot desync callers; DTO `userConfirmed` field (NEXT-STEPS §8).
+- **Status:** gate + official-plate evidence landed; shared
+  `PlateKit.FleetScoring.vehicleGateScore(gate:vehicle:)` is now used by iOS,
+  EvalHarness and Hub. The wire DTO carries optional `userConfirmed`; Hub Review
+  can bulk-confirm selected evidence, and explicit unconfirmed payloads remain
+  pending at the reference server boundary.
+- **Next:** add publication receipts and moderator-facing confirmation audit fields;
+  run all package/server compatibility tests whenever this DTO evolves.
 
 ---
 

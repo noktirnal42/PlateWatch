@@ -15,7 +15,7 @@ import CoreImage
 /// v2: Bonjour-advertised HTTP snapshot endpoint for cameras/phones to POST
 /// directly. v3: RTSP ingest for cameras that only expose RTSP.
 @MainActor
-final class HubController: ObservableObject {
+final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var ingestFolder: URL
     @Published private(set) var framesAnalyzed = 0
     @Published private(set) var fleetHitsToday = 0

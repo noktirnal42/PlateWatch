@@ -138,6 +138,14 @@ omits it; CloudKit maps no image field. Only the crop hash crosses that boundary
 reapplies plate/identity-registration and exact-coordinate redaction for unconfirmed fleet
 submissions, including older queued payloads. DTO wire field compatibility is unchanged.
 
+## Review confirmation boundary (2026-10-16)
+
+`SightingSubmissionDTO.userConfirmed` is optional for wire compatibility. New Hub queues
+write `false` until an operator uses Review's **Confirm selected** action; the queue then
+re-encodes the payload with `true`. The reference server treats omitted values as legacy
+client confirmation, while explicit `false` remains pending and cannot become a
+fleet-confirmed publication row.
+
 ## Local hash-addressed evidence recovery (2026-10-15)
 
 After a Hub queue record saves, its intact JPEG is also stored locally at

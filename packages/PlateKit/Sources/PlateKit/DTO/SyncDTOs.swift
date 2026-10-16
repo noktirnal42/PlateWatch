@@ -18,6 +18,9 @@ public struct SightingSubmissionDTO: Sendable, Codable {
     public var plate: PlateDTO?
     public var vehicle: VehicleObservationDTO
     public var markings: FleetMarkingsDTO?
+    /// Operator confirmation recorded after local review. A missing/false value
+    /// remains pending at a remote moderation boundary.
+    public var userConfirmed: Bool?
     /// Structured, cross-referenceable identity (agency key, plate jurisdiction, unit, evidence).
     /// Optional: servers that predate it ignore the key. The plate inside it follows the same
     /// redaction rule as `plate` — stripped unless the sighting is allowed to carry one.
@@ -29,8 +32,9 @@ public struct SightingSubmissionDTO: Sendable, Codable {
                 cropJPEGBase64: String? = nil, deviceIDHash: String,
                 fleetConfidence: Double, plate: PlateDTO? = nil,
                 vehicle: VehicleObservationDTO, markings: FleetMarkingsDTO? = nil,
-                identity: VehicleIdentity? = nil) {
+                userConfirmed: Bool? = nil, identity: VehicleIdentity? = nil) {
         self.identity = identity
+        self.userConfirmed = userConfirmed
         self.capturedAt = capturedAt
         self.geohash6 = geohash6
         self.exactLatitude = exactLatitude

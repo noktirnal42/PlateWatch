@@ -6,6 +6,19 @@ import SwiftUI
 import XCTest
 
 final class ReviewQueueTests: XCTestCase {
+    @MainActor func testBulkConfirmationMarksOnlySelectedRows() throws {
+        let container = try ModelContainer(for: PendingSubmission.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let payload = try JSONEncoder.withISODates.encode(SightingSubmissionDTO(capturedAt: Date(), geohash6: "9q8yyk",
+            deviceIDHash: "fixture", fleetConfidence: 0.9, vehicle: .init(vehicleClass: "patrol", classConfidence: 0.9)))
+        let rows = (0..<2).map { PendingSubmission(idempotencyKey: "confirm-\($0)", payloadJSON: payload) }
+        for row in rows { context.insert(row) }
+        try context.save()
+        XCTAssertEqual(try ReviewQueue.confirm([rows[1].persistentModelID], context: context), 1)
+        let decoded = try context.fetch(FetchDescriptor<PendingSubmission>()).map { try JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: $0.payloadJSON) }
+        XCTAssertEqual(decoded.filter { $0.userConfirmed == true }.count, 1)
+    }
+
     @MainActor func testBulkRejectionOnlyDeletesSelectedRows() throws {
         let container = try ModelContainer(for: PendingSubmission.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let context = container.mainContext

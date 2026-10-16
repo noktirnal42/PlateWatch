@@ -6,8 +6,18 @@ import SwiftUI
 
 /// Local outbox review: what this Hub has recorded and queued for sync. Discarding removes only the local copy.
 /// Each identified vehicle carries its evidence crop when one could be captured (`SightingSubmissionDTO.cropJPEGBase64`).
+@MainActor
+protocol ReviewHubProviding {
+    var syncStatus: String { get }
+    func syncPending() async
+}
+
 struct ReviewPane: View {
-    let hub: HubController
+    let hub: (any ReviewHubProviding)?
+    init(hub: (any ReviewHubProviding)? = nil, onQueueChange: @escaping () -> Void = {}) {
+        self.hub = hub
+        self.onQueueChange = onQueueChange
+    }
     var onQueueChange: () -> Void = {}
     @Environment(\.modelContext) private var context
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var rows: [PendingSubmission]
@@ -25,6 +35,7 @@ struct ReviewPane: View {
         let confidence: Double
         let retries: Int
         let error: String
+        let confirmed: Bool
         let thumbnail: NSImage?
     }
 
@@ -36,6 +47,7 @@ struct ReviewPane: View {
                        agency: dto?.markings?.agencyText ?? dto?.identity?.agency?.agencyKey ?? "unresolved",
                        agencyKey: dto?.identity?.agency?.agencyKey,
                        confidence: dto?.fleetConfidence ?? 0, retries: r.retryCount, error: r.lastError ?? "",
+                       confirmed: dto?.userConfirmed == true,
                        thumbnail: dto.flatMap { EvidenceArchive.current.resolve(base64: $0.cropJPEGBase64, hash: $0.cropHashSHA256) }.flatMap(NSImage.init(data:)))
         }
     }
@@ -54,6 +66,12 @@ struct ReviewPane: View {
                 Text("\(selection.count) selected").font(.caption).foregroundStyle(.secondary)
                 Button("Select all") { selection = Set(rows.map(\.persistentModelID)) }.disabled(rows.isEmpty).accessibilityLabel("Select all queued sightings")
                 Button("Clear selection") { selection.removeAll() }.disabled(selection.isEmpty)
+                Button("Confirm selected", systemImage: "checkmark.seal") {
+                    do { try ReviewQueue.confirm(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
+                    catch { discardError = "Could not confirm selected items: \(error.localizedDescription)" }
+                }
+                .disabled(selection.isEmpty)
+                .help("Mark selected evidence as reviewed before backend moderation")
                 Button("Reject selected (local only)", role: .destructive) {
                     do { try ReviewQueue.reject(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
                     catch { discardError = "Could not reject selected items: \(error.localizedDescription)" }
@@ -61,12 +79,13 @@ struct ReviewPane: View {
                 .buttonStyle(.bordered)
                 .disabled(selection.isEmpty)
                 Button("Sync pending", systemImage: "arrow.up.circle") {
-                    Task { await hub.syncPending() }
+                    Task { await hub?.syncPending() }
                 }
-                .disabled(rows.isEmpty || hub.syncStatus == "Syncing pending…")
+                .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
                 .help("Deliver queued, redaction-gated submissions to the configured backend; moderation remains separate")
             }
-            Text(hub.syncStatus).font(.caption).foregroundStyle(.secondary)
+            Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
+                .font(.caption).foregroundStyle(.secondary)
             if !rows.isEmpty && evidenceCount < rows.count {
                 Label("\(rows.count - evidenceCount) queued item(s) have no recoverable image. Hashes can verify an image when bytes exist, but cannot recreate missing bytes.", systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -87,6 +106,11 @@ struct ReviewPane: View {
                 TableColumn("Unit") { Text($0.unit).help($0.unit) }.width(64)
                 TableColumn("Area") { Text($0.area).monospaced() }.width(65)
                 TableColumn("Fleet") { Text($0.confidence, format: .percent.precision(.fractionLength(0))) }.width(55)
+                TableColumn("Review") { row in
+                    Label(row.confirmed ? "Confirmed" : "Pending", systemImage: row.confirmed ? "checkmark.seal.fill" : "clock")
+                        .foregroundStyle(row.confirmed ? Color.green : Color.secondary)
+                        .help(row.confirmed ? "Operator confirmed" : "Awaiting operator confirmation")
+                }.width(92)
                 TableColumn("Retries") { Text("\($0.retries)") }.width(48)
                 TableColumn("Last error") { Text($0.error).foregroundStyle(.secondary).help($0.error) }.width(min: 80, ideal: 140)
             }
