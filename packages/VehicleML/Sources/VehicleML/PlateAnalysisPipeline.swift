@@ -32,6 +32,13 @@ public struct CoreMLDetectorStage: AnalysisStage {
         }
     }
 
+    /// Generic body class is useful for overlays but must not promote a car/bus/truck to fleet.
+    static func observation(label: String, confidence: Double, box: NormalizedBox) -> VehicleObservation {
+        let body = ["car", "truck", "bus", "motorcycle"].contains(label) ? label : nil
+        return VehicleObservation(boundingBox: box, vehicleClass: vehicleClass(for: label),
+            classConfidence: confidence, attributes: body.map { VehicleAttributes(bodyType: $0) })
+    }
+
     public struct DetectedObjects: Sendable {
         public var observations: [(label: String, confidence: Double, box: NormalizedBox)]
     }
@@ -98,10 +105,7 @@ public struct PlateAnalysisPipeline: Sendable {
             let stage = CameraDetailDetectorStage()
             if let detected = try? await stage.process(frame, context: context) {
                 vehicleObservations = detected.observations.map {
-                    let cls = CoreMLDetectorStage.vehicleClass(for: $0.label)
-                    return VehicleObservation(boundingBox: $0.box,
-                                              vehicleClass: cls,
-                                              classConfidence: $0.confidence)
+                    CoreMLDetectorStage.observation(label: $0.label, confidence: $0.confidence, box: $0.box)
                 }
             }
         }

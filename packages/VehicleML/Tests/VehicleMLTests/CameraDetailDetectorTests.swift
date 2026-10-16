@@ -7,6 +7,16 @@ import XCTest
 @testable import VehicleML
 
 final class CameraDetailDetectorTests: XCTestCase {
+    func testGenericDetectorClassSurvivesWithoutBecomingFleetEvidence() {
+        for label in ["car", "truck", "bus", "motorcycle"] {
+            let result = CoreMLDetectorStage.observation(label: label, confidence: 0.9,
+                box: .init(x: 0, y: 0, width: 1, height: 1))
+            XCTAssertEqual(result.attributes?.bodyType, label)
+            XCTAssertFalse(result.vehicleClass.isFleet)
+            XCTAssertEqual(result.classConfidence, 0.9)
+        }
+    }
+
     func testGenericObjectLabelsCannotBecomeVehicleBoxesOrFleetEvidence() {
         for label in ["person", "traffic light", "stop sign", "bench", "dog", "backpack"] {
             XCTAssertFalse(CoreMLDetectorStage.vehicleLabels.contains(label))

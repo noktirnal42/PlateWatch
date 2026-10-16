@@ -143,3 +143,13 @@ box test to hide. No image or private plate data was committed. See eval/README.
 All 36 VehicleML tests passed with the screenshot holdout enabled; the release
 harness built and ran against the installed detector. Broader annotated camera
 coverage and a validated fleet classifier remain open.
+
+## Generic body classes in Live
+
+CoreML's car/truck/bus/motorcycle labels are preserved in `VehicleAttributes.bodyType`,
+separate from `VehicleClass` (fleet identity). Text inference can still supply a fleet class
+without erasing the generic body label. The Hub displays ordinary body classes without a
+misleading zero fleet score. This is coarse detection output, not a new trained make/model
+classifier or fleet claim. 37 VehicleML tests pass, including the new label-preservation
+contract; the local-image holdout remains a separate opt-in. Native Austin Live showed
+Car and Truck labels. Model misclassification/missed vehicles remain evaluation work.
