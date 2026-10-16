@@ -5,8 +5,8 @@ final class VehicleOverlayLabelTests: XCTestCase {
     func testOrdinaryVehiclesShowBodyClassWithoutZeroFleetScore() {
         for (body, expected) in [("car", "Car"), ("truck", "Truck"), ("bus", "Bus"), ("motorcycle", "Motorcycle")] {
             let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1),
-                attributes: .init(bodyType: body))
-            XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), expected)
+                classConfidence: 0.82, attributes: .init(bodyType: body))
+            XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "\(expected) · class 82%")
             XCTAssertFalse(vehicle.vehicleClass.isFleet)
         }
     }

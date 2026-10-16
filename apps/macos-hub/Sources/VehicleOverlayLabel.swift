@@ -11,7 +11,12 @@ enum VehicleOverlayLabel {
             default: return nil
             }
         }
-        guard vehicle.vehicleClass.isFleet else { return body ?? "Vehicle" }
+        guard vehicle.vehicleClass.isFleet else {
+            guard let body else { return "Vehicle" }
+            guard vehicle.classConfidence.isFinite, vehicle.classConfidence > 0 else { return body }
+            let score = Int(min(1, max(0, vehicle.classConfidence)) * 100)
+            return "\(body) · class (score)%"
+        }
         let fleet: String
         switch vehicle.vehicleClass {
         case .patrol: fleet = "Patrol"
