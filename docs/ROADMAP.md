@@ -25,6 +25,8 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors and painted icon landed (2026-10-14); full field/accessibility audit and received-history/media remain
 - ✅ iOS simulator startup CloudKit trap fixed in app + delegate backend selection; regression test added
 
+- ✅ Hub intact local evidence recovery by SHA-256 archive; all-vehicle body labels and explicit feed-filter reset (2026-10-15)
+
 ## M0 — Foundation (this bootstrap)
 - ✅ Monorepo + package architecture (PlateKit, CaptureKit, VehicleML, PlateSync)
 - ✅ Domain model + DTOs + plate normalization/patterns

@@ -74,6 +74,15 @@ final class FeedBrowserState: ObservableObject {
         }
     }
 
+    var hasActiveFilters: Bool { !query.isEmpty || !hostFilter.isEmpty || statusFilter != nil }
+
+    func clearFilters() {
+        query = ""
+        hostFilter = ""
+        statusFilter = nil
+        save()
+    }
+
     func save() {
         defaults.set(tab.rawValue, forKey: "hubFeedBrowserTab")
         defaults.set(query, forKey: "hubFeedBrowserQuery")

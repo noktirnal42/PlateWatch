@@ -56,7 +56,10 @@ tests must stay green before its status advances.
   Local Review preserves intact evidence crops: overlapping vehicles and foreign text no longer
   remove or black out photos (owner clarification, 2026-10-15; 37 Hub tests, four opt-in skips).
   Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
-  163 FeedIngest and 36 Hub tests pass. Sustained pilot, unsupported playlist forms and physical QA remain.
+  163 FeedIngest and 45 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
+  with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
+  Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes.
+  Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
 - **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.
@@ -79,7 +82,9 @@ tests must stay green before its status advances.
   SUV in a local screenshot holdout; 31 VehicleML tests pass with that opt-in enabled.
   Semantic label filtering now excludes non-vehicle COCO objects; a labeled camera benchmark separately
   scores geometry and fleet coverage (36 tests pass). The local SUV box is recovered but its fleet
-  identity remains unconfirmed. See EVALUATION.md; OCR labels and broader fleet recall remain open.
+  identity remains unconfirmed. Generic car/truck/bus/motorcycle labels are now retained separately
+  as body-type attributes for all Live detections, without promoting fleet status (37 VehicleML
+  tests, one local-image opt-in skip). See EVALUATION.md; OCR and broader fleet recall remain open.
 - **Next:** ground-truth `plate` labels + exact-match/CER scoring in the
   harness; grow corpus (USA, licensed, challenging low-contrast examples);
   make/model/color classifier (Create ML GUI path); fleet-specific

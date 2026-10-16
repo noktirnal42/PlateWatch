@@ -173,7 +173,15 @@ struct FeedsPane: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) { searchControl; sourceControl; statusControl }
-            HStack(spacing: 10) { sortControl; Spacer() }
+            HStack(spacing: 10) {
+                sortControl
+                Spacer()
+                Text("\(rows.count.formatted()) shown · \(totalCount.formatted()) total")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Clear filters") { browser.clearFilters(); reload() }
+                    .help("Clear search, source and status filters and reload the camera list")
+                    .accessibilityLabel("Clear all camera filters and reload list")
+            }
         }
     }
 

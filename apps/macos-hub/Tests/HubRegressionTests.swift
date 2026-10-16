@@ -208,6 +208,28 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertEqual(runner.activeVideoCount, 0)
     }
 
+    @MainActor func testVideoWatchRotationCoversEveryCameraAndKeepsLivePinned() throws {
+        var cameras = try (0..<11).map { try source("/rotation\($0).m3u8") }
+        for index in cameras.indices { cameras[index].kind = .hls }
+        let runner = FeedRunner(session: session(), throttleInterval: 0)
+        defer { runner.stop() }
+        runner.start(catalogue: .init(sources: cameras), watchedIDs: Set(cameras.map(\.id)),
+            analyse: { _, _ in }, analyseVideoFrame: { _, _ in })
+        runner.setLiveVideoSource(cameras[10].id)
+        var visited: Set<UUID> = []
+        for _ in 0..<12 {
+            XCTAssertEqual(runner.scheduledVideoIDs.count, 4)
+            XCTAssertTrue(runner.scheduledVideoIDs.contains(cameras[10].id))
+            visited.formUnion(runner.scheduledVideoIDs)
+            runner.rotateVideoWatches()
+            XCTAssertLessThanOrEqual(runner.activeVideoCount, 4)
+        }
+        XCTAssertEqual(visited, Set(cameras.map(\.id)))
+        runner.setWatched([cameras[10].id])
+        runner.rotateVideoWatches()
+        XCTAssertEqual(runner.scheduledVideoIDs, [cameras[10].id])
+    }
+
     @MainActor func testWatchControlsStayResponsiveWithTenThousandCameraCatalogue() throws {
         var sources: [PublicFeedSource] = []
         for i in 0..<10000 {
@@ -455,6 +477,25 @@ final class HubRecoveryRegressionTests: XCTestCase {
         XCTAssertEqual(restored.tab, .favorites)
         XCTAssertEqual(restored.query, browser.query)
         XCTAssertEqual(restored.selected, browser.selected)
+    }
+
+    @MainActor func testClearingEveryFilterPersistsWithoutLosingCameraSelection() throws {
+        let domain = "PlateWatchTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let browser = FeedBrowserState(defaults: defaults)
+        browser.query = "Pah"
+        browser.hostFilter = "camera.example"
+        browser.statusFilter = .suspended
+        browser.selected = [UUID()]
+        XCTAssertTrue(browser.hasActiveFilters)
+        browser.clearFilters()
+        let restored = FeedBrowserState(defaults: defaults)
+        XCTAssertFalse(restored.hasActiveFilters)
+        XCTAssertEqual(restored.selected, browser.selected)
+        XCTAssertEqual(restored.query, "")
+        XCTAssertEqual(restored.hostFilter, "")
+        XCTAssertNil(restored.statusFilter)
     }
 
     func testEvidenceConversionSupportsPackedAndPlanarFrames() throws {

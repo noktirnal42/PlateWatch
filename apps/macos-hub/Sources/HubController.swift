@@ -812,7 +812,7 @@ final class HubController: ObservableObject {
         let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             return .init(id: vehicle.id, rect: vehicle.boundingBox,
-                         label: "\(vehicle.vehicleClass.rawValue) \(Int(confidence * 100))%",
+                         label: VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence),
                          isFleet: gate.verdict(fleetConfidence: confidence) == .persistAndSync)
         }
         return LiveFrameResult(boxes: boxes, hits: hits)

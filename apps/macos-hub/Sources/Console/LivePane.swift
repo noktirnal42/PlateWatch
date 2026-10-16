@@ -199,7 +199,7 @@ struct LivePane: View {
                 Button("Stop") { live.stop(); hub.stopLiveFeed() }.disabled(!live.running && hub.liveFeed == nil)
                 Spacer()
                 Toggle("Overlays", isOn: $showOverlays).toggleStyle(.checkbox)
-                    .help("Show vehicle boxes and fleet scores. Small boxes show their label on hover.")
+                    .help("Show car, truck, bus and motorcycle boxes; fleet labels include a fleet score. Small boxes show their label on hover.")
                 if hub.liveFeed == nil {
                     Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
                 }
@@ -236,7 +236,7 @@ struct LivePane: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-            Text("In memory only. Overlays show vehicle class and fleet score, never plate text. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
+            Text("In memory only. Overlays show general vehicle classes; fleet labels include a fleet score. Plate text is never shown. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding()

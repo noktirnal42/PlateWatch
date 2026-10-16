@@ -101,7 +101,7 @@ final class FeedRunner: ObservableObject {
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
         case .imageUnavailable(let reason): return .init(text: reason, icon: "photo.badge.exclamationmark", color: .orange, kind: .frameUnavailable)
         case .videoConnecting: return .init(text: "Connecting HLS…", icon: "video", color: .secondary, kind: .checking)
-        case .videoIdle: return .init(text: watchedIDs.contains(source.id) && explicitWatchSelection ? "HLS waiting · four-stream limit" : "HLS ready · watch or open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
+        case .videoIdle: return .init(text: watchedIDs.contains(source.id) && explicitWatchSelection ? "HLS queued · rotating" : "HLS ready · watch or open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
         case .suspended: return source.kind == .rtsp
             ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
             : .init(text: "Suspended after repeated failures", icon: "exclamationmark.triangle.fill", color: .orange, kind: .suspended)
@@ -119,19 +119,36 @@ final class FeedRunner: ObservableObject {
     /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
     var activeVideoCount: Int { hlsSources.count }
     private var requestedHLSID: UUID?
+    private var hlsRotation: Task<Void, Never>?
+    private var hlsRotationOffset = 0
     private var hlsSources: [UUID: HLSFrameSource] = [:]
     private var watchedIDs: Set<UUID> = []
     private var explicitWatchSelection = false
     static let maxConcurrentHLS = 4
-    private var selectedHLSIDs: Set<UUID> {
-        let eligible = (catalogue?.runnable ?? []).filter { source in
-            source.kind == .hls && !blockedIDs.contains(source.id) && watchedIDs.contains(source.id) && (explicitWatchSelection || source.id == requestedHLSID)
-        }.sorted { a, b in
-            if a.id == requestedHLSID { return true }
-            if b.id == requestedHLSID { return false }
-            return a.id.uuidString < b.id.uuidString
-        }
-        return Set(eligible.prefix(Self.maxConcurrentHLS).map(\.id))
+    private var eligibleHLSIDs: [UUID] {
+        (catalogue?.runnable ?? []).filter { source in
+            source.kind == .hls && !blockedIDs.contains(source.id) && watchedIDs.contains(source.id)
+                && (explicitWatchSelection || source.id == requestedHLSID)
+        }.map(\.id).sorted { $0.uuidString < $1.uuidString }
+    }
+    var scheduledVideoIDs: Set<UUID> {
+        let eligible = eligibleHLSIDs
+        let pinned = requestedHLSID.flatMap { eligible.contains($0) ? $0 : nil }
+        let background = eligible.filter { $0 != pinned }
+        var selected = Set(pinned.map { [$0] } ?? [])
+        let slots = min(Self.maxConcurrentHLS - selected.count, background.count)
+        for index in 0..<slots { selected.insert(background[(hlsRotationOffset + index) % background.count]) }
+        return selected
+    }
+    private var selectedHLSIDs: Set<UUID> { scheduledVideoIDs }
+
+    /// All explicitly watched HLS feeds get a turn; Live stays pinned.
+    func rotateVideoWatches() {
+        let eligible = eligibleHLSIDs
+        guard eligible.count > Self.maxConcurrentHLS else { return }
+        let pinned = requestedHLSID.map { eligible.contains($0) } == true ? 1 : 0
+        hlsRotationOffset = (hlsRotationOffset + Self.maxConcurrentHLS - pinned) % (eligible.count - pinned)
+        setLiveVideoSource(requestedHLSID)
     }
     private var blockedIDs: Set<UUID> = []
     private let session: URLSession
@@ -173,6 +190,15 @@ final class FeedRunner: ObservableObject {
             }
         }
         self.blockedIDs = blockedIDs
+        if videoSink != nil {
+            hlsRotation = Task { [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(60)) } catch { return }
+                    guard let self, self.generation == run else { return }
+                    self.rotateVideoWatches()
+                }
+            }
+        }
         awaitingTermsCount = catalogue.awaitingTerms.filter { !blockedIDs.contains($0.id) }.count
         sourceStates = Dictionary(uniqueKeysWithValues: catalogue.sources.compactMap { source in
             if blockedIDs.contains(source.id) { return (source.id, .blockedByUser) }
@@ -325,7 +351,7 @@ final class FeedRunner: ObservableObject {
     /// Watched HLS cameras decode through the same reviewed-origin/robots
     /// policy relay as bounded previews. The relay mediates child resources and
     /// redirects; the decoder supplies sampled frames to the ordinary fleet gate.
-    /// Explicit watches decode at most four streams, prioritizing Live.
+    /// Explicit watches rotate through at most four streams, pinning Live.
     /// Catalogue approval alone never starts hundreds of AVPlayers.
     func setLiveVideoSource(_ id: UUID?) {
         requestedHLSID = id
@@ -507,6 +533,7 @@ final class FeedRunner: ObservableObject {
 
     func stop() {
         generation = UUID()
+        hlsRotation?.cancel(); hlsRotation = nil; hlsRotationOffset = 0
         tasks.values.forEach { $0.cancel() }; tasks.removeAll()
         hostTasks.values.forEach { $0.cancel() }; hostTasks.removeAll()
         previewTasks.values.forEach { $0.values.forEach { $0.cancel() } }; previewTasks.removeAll()

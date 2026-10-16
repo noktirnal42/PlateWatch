@@ -173,3 +173,28 @@ rejection cleans up an archive only after the last queued reference disappears.
 40 Hub tests pass (four opt-in skips), including missing/corrupt inline recovery, damaged
 archive refusal/repair, invalid hash/path rejection, file permissions and shared-reference
 deletion. This is protection against one payload loss, not a backup of the whole disk.
+
+## Feed list recovery and general vehicle overlays
+
+The owner reported only two cameras visible after clearing filters. Added one explicit
+Clear filters action that resets the saved search/source/status together and reloads the
+catalogue. Native QA reproduced the two-row view and restored 10,570 visible cameras from
+the current 10,590-camera catalogue; 20 intentionally blocked entries remain in Blocked.
+69 favorites and 68 watches were preserved. Counts are a current local snapshot, not a
+claim that every endpoint was probed or returns fresh media.
+
+The HLS budget previously selected the same first four watched IDs indefinitely. It now
+rotates bounded background windows every minute and pins the camera open in Live. Queued
+cameras are sampled in turns, not all decoded simultaneously. A regression test covers all
+11 watched streams across rotations with Live pinned and no more than four scheduled slots.
+Native runtime timestamps confirmed eight distinct watched HLS cameras receiving after
+rotation; the previously failing Tonopah preview displayed and its opt-in native decode
+test passed in 9.7 seconds. Transient/provider failures still require per-feed diagnostics.
+
+Generic CoreML car/truck/bus/motorcycle labels now survive fusion as body-type attributes,
+independently of fleet identity. Ordinary boxes show the body class rather than unknown 0%;
+fleet labels retain a separately named fleet score. No generic body class promotes a fleet
+hit or expands recording. Native Live displayed Car and Truck on the Austin 12th/IH35 feed.
+These are coarse model predictions, not proof of make/model or fleet affiliation.
+45 Hub tests pass (four opt-in skips); the separate Tonopah opt-in run passed. All 37
+VehicleML tests pass with the local-image holdout opt-in skipped.
