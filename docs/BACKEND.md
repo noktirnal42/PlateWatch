@@ -114,6 +114,11 @@ moderators list open requests and resolve them (`hide` = never published again, 
 Moderator decisions, takedown requests/resolutions and retention purges are written to an append-only `audit_log`
 (action + target ID, never content).
 
+Set `REQUIRE_SECOND_REVIEW=1` to require two distinct reviewer fingerprints for
+approval. The first approval keeps the sighting pending; a different reviewer
+must approve it. Rejections remain single-review actions. The default remains
+the existing one-review workflow for compatibility.
+
 **Public aggregates.** `GET /v1/aggregates/heatmap?since=&until=&agencyID=`
 returns counts per geohash-6 cell and per UTC day for fleet-confirmed sightings.
 Any bucket with fewer than 5 sightings is withheld, and only the number of

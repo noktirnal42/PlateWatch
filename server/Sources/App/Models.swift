@@ -73,6 +73,8 @@ final class Sighting: Model, @unchecked Sendable {
     @Field(key: "device_id_hash") var deviceIDHash: String
     @Field(key: "fleet_confidence") var fleetConfidence: Double
     @Field(key: "moderation_state") var moderationState: String
+    /// Set by the first reviewer when second-person approval is enabled.
+    @OptionalField(key: "first_reviewer_fingerprint") var firstReviewerFingerprint: String?
     /// Set when a takedown request was upheld: never published again.
     @Field(key: "taken_down") var takenDown: Bool
     /// Cross-reference identity (docs/DATA-MODEL.md): which agency the vehicle belongs to, where its

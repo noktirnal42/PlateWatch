@@ -123,6 +123,19 @@ struct AddSightingTakedown: AsyncMigration {
     }
 }
 
+struct AddSightingFirstReviewer: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .field("first_reviewer_fingerprint", .string)
+            .update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema(Sighting.schema)
+            .deleteField("first_reviewer_fingerprint")
+            .update()
+    }
+}
+
 /// Public intake for takedown requests, plus the daily retention purge.
 struct TakedownController: RouteCollection {
     static let maxReason = 1000, maxContact = 200

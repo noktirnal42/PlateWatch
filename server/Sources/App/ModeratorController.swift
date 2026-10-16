@@ -23,8 +23,10 @@ struct ModeratorController: RouteCollection {
     static let minimumTokenLength = 24
 
     private let token: String?
+    private let requireSecondReview: Bool
 
-    init(token: String? = nil) {
+    init(token: String? = nil, requireSecondReview: Bool = false) {
+        self.requireSecondReview = requireSecondReview
         // Reject short tokens outright rather than running a weak console.
         if let token, token.count >= Self.minimumTokenLength {
             self.token = token
@@ -75,6 +77,18 @@ struct ModeratorController: RouteCollection {
         }
         guard let row = try await Sighting.find(id, on: req.db) else { throw Abort(.notFound) }
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
+            let reviewer = Self.reviewerFingerprint(req)
+            if decision == .approve, requireSecondReview {
+                if let first = row.firstReviewerFingerprint {
+                    guard first != reviewer else { throw Abort(.conflict, reason: "a second reviewer is required") }
+                } else {
+                    row.firstReviewerFingerprint = reviewer
+                    try await row.save(on: req.db)
+                    await AuditEntry.record("moderation.first_review", target: id.uuidString,
+                                            detail: "state=pending; source=api; reviewer=\(reviewer)", on: req.db)
+                    return .noContent
+                }
+            }
             let previous = row.moderationState
             row.moderationState = decision.resultingState.rawValue
             try await row.save(on: req.db)
@@ -199,6 +213,18 @@ struct ModeratorController: RouteCollection {
         }
         // Only pending rows are actionable; a double-submit is a no-op.
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
+            let reviewer = Self.reviewerFingerprint(req)
+            if decision == .approve, requireSecondReview {
+                if let first = row.firstReviewerFingerprint {
+                    guard first != reviewer else { throw Abort(.conflict, reason: "a second reviewer is required") }
+                } else {
+                    row.firstReviewerFingerprint = reviewer
+                    try await row.save(on: req.db)
+                    await AuditEntry.record("moderation.first_review", target: id.uuidString,
+                                            detail: "state=pending; source=html; reviewer=\(reviewer)", on: req.db)
+                    return req.redirect(to: "/moderator", redirectType: .normal)
+                }
+            }
             let previous = row.moderationState
             row.moderationState = decision.resultingState.rawValue
             try await row.save(on: req.db)

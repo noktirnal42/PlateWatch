@@ -33,6 +33,7 @@ func configure(_ app: Application) async throws {
     app.migrations.add(AddAgencyBudgetURL())
     app.migrations.add(AddSightingIdentity())
     app.migrations.add(AddSightingTakedown())
+    app.migrations.add(AddSightingFirstReviewer())
     app.migrations.add(CreateAuditLog())
     app.migrations.add(CreateTakedownRequests())
     if app.environment != .testing {
@@ -47,7 +48,8 @@ func configure(_ app: Application) async throws {
     try app.register(collection: ExportController())
     try app.register(collection: AggregatesController())
     try app.register(collection: TakedownController())
-    try app.register(collection: ModeratorController(token: Environment.get("MODERATOR_TOKEN")))
+    try app.register(collection: ModeratorController(token: Environment.get("MODERATOR_TOKEN"),
+                                                     requireSecondReview: Environment.get("REQUIRE_SECOND_REVIEW") == "1"))
 
     app.get("health") { _ in ["status": "ok"] }
 
