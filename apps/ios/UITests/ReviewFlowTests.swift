@@ -2,6 +2,10 @@ import XCTest
 
 final class ReviewFlowTests: XCTestCase {
     @MainActor private func preview(tab: Int, extraArguments: [String] = []) -> XCUIApplication {
+        // XCTest may run methods in a different order, and the landscape test
+        // leaves the simulator rotated. Reset before every preview so large
+        // text/accessibility checks exercise the intended portrait layout.
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["-PWPreviewData", "-PWTab", String(tab)] + extraArguments
         app.launch()
