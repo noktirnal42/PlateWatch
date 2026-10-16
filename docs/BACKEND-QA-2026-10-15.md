@@ -58,10 +58,11 @@ were inserted. Database counts before connection QA: zero sightings, two audit e
 
 ## Remaining delivery milestones
 
-1. The Hub Review pane now exposes an operator-triggered **Sync pending** action. It
-   drains only redaction-gated local submissions through the active CloudKit/REST
-   backend, preserves retry state, and reports whether rows were delivered or remain
-   pending. This is delivery only; moderation and publication remain separate.
+1. The Hub Review pane now exposes operator-triggered **Confirm selected** and
+   **Sync pending** actions. Confirmation is encoded in `userConfirmed`; explicit
+   unconfirmed rows remain pending at the reference server and never carry a plate
+   into CloudKit. Sync preserves retry state and reports delivery. This is delivery
+   only; moderator publication remains separate.
 2. CloudKit read/write proof using approved test records, plus two-account creator isolation.
 3. CloudKit moderator publication tool with audit/provenance and withdrawal behavior.
 4. Optional REST/CloudKit mirroring, hosted service and device-to-device proof.

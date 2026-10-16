@@ -96,6 +96,13 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertFalse(CloudKitBackend.mayUploadPlate(dto(confidence: 0.95, markings: nil)))
     }
 
+    func testExplicitlyUnconfirmedReviewNeverUploadsPlate() {
+        let marked = FleetMarkingsDTO(agencyText: "CITY OF AUSTIN", unitNumber: "4421")
+        var pending = dto(confidence: 0.95, markings: marked)
+        pending.userConfirmed = false
+        XCTAssertFalse(CloudKitBackend.mayUploadPlate(pending))
+    }
+
     func testRecordTypesAreTheDocumentedOnes() {
         XCTAssertEqual(CloudKitBackend.RecordType.submission, "SightingSubmission")
         XCTAssertEqual(CloudKitBackend.RecordType.sighting, "Sighting")

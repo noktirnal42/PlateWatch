@@ -58,7 +58,10 @@ public struct CloudKitBackend: SyncBackend {
     /// markings). Below that, the plate stays on the device.
     static func mayUploadPlate(_ sighting: SightingSubmissionDTO) -> Bool {
         let hasMarkings = sighting.markings?.agencyText != nil || sighting.markings?.unitNumber != nil
-        return sighting.fleetConfidence >= 0.8 && hasMarkings
+        // New Hub queues explicitly write false until local Review confirms the
+        // evidence. Omitted remains compatible with legacy clients.
+        let operatorConfirmed = sighting.userConfirmed ?? true
+        return operatorConfirmed && sighting.fleetConfidence >= 0.8 && hasMarkings
     }
 
     // MARK: - SyncBackend
@@ -75,6 +78,7 @@ public struct CloudKitBackend: SyncBackend {
         record["geohash6"] = sighting.geohash6
         record["deviceIDHash"] = sighting.deviceIDHash
         record["fleetConfidence"] = sighting.fleetConfidence
+        record["userConfirmed"] = sighting.userConfirmed as NSNumber?
         if Self.mayUploadPlate(sighting) {
             record["plateText"] = sighting.plate?.text
             record["plateRegion"] = sighting.plate?.issuingRegion
