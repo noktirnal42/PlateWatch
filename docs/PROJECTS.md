@@ -58,6 +58,8 @@ tests must stay green before its status advances.
   Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
   163 FeedIngest and 45 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
   with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
+  The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
+  to the complete catalogue, preventing cameras from appearing lost after relaunch.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
   readable SUV/van/pickup aliases and classifier confidence when a body label is unavailable).
   Sustained pilot, unsupported playlist forms and physical QA remain.

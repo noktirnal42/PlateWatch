@@ -182,9 +182,9 @@ struct FeedsPane: View {
                 Spacer()
                 Text("\(rows.count.formatted()) shown · \(totalCount.formatted()) total")
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Clear filters") { browser.clearFilters(); reload() }
-                    .help("Clear search, source and status filters and reload the camera list")
-                    .accessibilityLabel("Clear all camera filters and reload list")
+                Button("Reset view") { browser.resetView(); reload() }
+                    .help("Show every catalogue camera, clear search and filters, and reload the list")
+                    .accessibilityLabel("Reset camera catalogue view and reload every feed")
             }
         }
     }

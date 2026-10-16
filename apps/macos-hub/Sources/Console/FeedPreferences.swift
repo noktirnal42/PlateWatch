@@ -83,6 +83,18 @@ final class FeedBrowserState: ObservableObject {
         save()
     }
 
+    /// Return the browser to the complete catalogue view in one deliberate action.
+    /// The tab is a scope, so clearing text/status filters alone can otherwise leave
+    /// an operator in a persisted Favorites or Blocked view and make cameras appear lost.
+    func resetView() {
+        tab = .all
+        query = ""
+        hostFilter = ""
+        statusFilter = nil
+        selected.removeAll()
+        save()
+    }
+
     func save() {
         defaults.set(tab.rawValue, forKey: "hubFeedBrowserTab")
         defaults.set(query, forKey: "hubFeedBrowserQuery")

@@ -498,6 +498,23 @@ final class HubRecoveryRegressionTests: XCTestCase {
         XCTAssertNil(restored.statusFilter)
     }
 
+    @MainActor func testResetViewRestoresCompleteCatalogueScope() throws {
+        let domain = "PlateWatchTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let browser = FeedBrowserState(defaults: defaults)
+        browser.tab = .favorites
+        browser.query = "police"
+        browser.hostFilter = "camera.example"
+        browser.statusFilter = .polling
+        browser.selected = [UUID()]
+        browser.resetView()
+        let restored = FeedBrowserState(defaults: defaults)
+        XCTAssertEqual(restored.tab, .all)
+        XCTAssertFalse(restored.hasActiveFilters)
+        XCTAssertTrue(restored.selected.isEmpty)
+    }
+
     func testEvidenceConversionSupportsPackedAndPlanarFrames() throws {
         for format in [kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange] {
             var buffer: CVPixelBuffer?
