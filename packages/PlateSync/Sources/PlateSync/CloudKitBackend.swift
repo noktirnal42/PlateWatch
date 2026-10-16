@@ -199,6 +199,27 @@ public struct CloudKitBackend: SyncBackend {
         }
     }
 
+    public func agencies() async throws -> [PublicAgencyDTO] {
+        let query = CKQuery(recordType: RecordType.agency, predicate: NSPredicate(value: true))
+        let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
+                                                      desiredKeys: ["name", "shortName", "level", "parentAgencyID", "publicContactURL", "budgetURL"],
+                                                      resultsLimit: 200)
+        return results.compactMap { _, result in
+            guard case .success(let record) = result else { return nil }
+            return PublicAgencyDTO(id: Self.uuid(fromRecordName: record.recordID.recordName),
+                                   name: record["name"] as? String ?? "Unknown agency",
+                                   shortName: record["shortName"] as? String,
+                                   level: record["level"] as? String ?? "unknown",
+                                   parentAgencyID: (record["parentAgencyID"] as? String).flatMap(UUID.init),
+                                   publicContactURL: record["publicContactURL"] as? String,
+                                   budgetURL: record["budgetURL"] as? String)
+        }
+    }
+
+    public func agencyReport(id: UUID) async throws -> AgencyReportDTO {
+        throw SyncError.unsupported
+    }
+
     public func ensureWatchlistSubscription() async throws {
         let subscriptionID = "watchlist-fleet-hits"
         // Idempotent: existing subscription with our token is fine.

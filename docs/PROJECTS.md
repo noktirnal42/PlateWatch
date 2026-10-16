@@ -64,6 +64,9 @@ tests must stay green before its status advances.
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
   readable SUV/van/pickup aliases and classifier confidence when a body label is unavailable).
+  iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared
+  sync boundary; CloudKit directory records are supported, while aggregate report delivery remains a
+  deployment/mirror gate until the required public records are present.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
@@ -123,7 +126,9 @@ tests must stay green before its status advances.
   Hub automatic queue delivery and CloudKit publication remain
   unfinished; schema deployment alone does not prove either. Receipts now carry optional idempotency and
   operator-confirmation metadata for audit surfaces. Intake and moderator state transitions now append
-  content-free audit details. See [connection QA](BACKEND-QA-2026-10-15.md).
+  content-free audit details. Public agency directory/report DTOs and REST routes now cross the shared
+  sync boundary, with an iOS directory/detail surface; CloudKit aggregate report delivery remains a
+  deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 

@@ -117,6 +117,11 @@ struct SettingsView: View {
                              ? "Apple Vision (on-device)" : PassiveCaptureStatus.shared.modelStatus)
                             .multilineTextAlignment(.trailing)
                     }
+                    NavigationLink {
+                        AgencyDirectoryView()
+                    } label: {
+                        Label("Agency report cards", systemImage: "building.columns")
+                    }
                 }
                 Section {
                     LabeledContent("Queued observations", value: String(queued.count))

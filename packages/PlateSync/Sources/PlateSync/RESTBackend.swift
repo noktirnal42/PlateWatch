@@ -52,6 +52,16 @@ public struct RESTBackend: SyncBackend {
         return try await request.sendEmpty(using: session)
     }
 
+    public func agencies() async throws -> [PublicAgencyDTO] {
+        let request = try JSONRequest.get(baseURL.appending(path: "v1/agencies"))
+        return try await request.sendEmpty(using: session)
+    }
+
+    public func agencyReport(id: UUID) async throws -> AgencyReportDTO {
+        let request = try JSONRequest.get(baseURL.appending(path: "v1/agencies/\(id.uuidString)/report"))
+        return try await request.sendEmpty(using: session)
+    }
+
     /// k-anonymous heatmap/timeline from the reference server.
     public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
         var comps = URLComponents(url: baseURL.appending(path: "v1/aggregates/heatmap"),

@@ -108,3 +108,20 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertEqual(CloudKitBackend.RecordType.sighting, "Sighting")
     }
 }
+
+final class AgencyReportDTOTests: XCTestCase {
+    func testAgencyReportRoundTripsPublicAggregateFields() throws {
+        let agency = PublicAgencyDTO(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            name: "Example Police Department", shortName: "EPD", level: "city",
+            publicContactURL: "https://example.gov/contact",
+            budgetURL: "https://example.gov/budget")
+        let report = AgencyReportDTO(
+            agency: agency, fleetSize: 42, sightings30d: 17, activeUnits: 31,
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        let decoded = try JSONDecoder().decode(
+            AgencyReportDTO.self, from: JSONEncoder().encode(report))
+        XCTAssertEqual(decoded, report)
+    }
+}
