@@ -76,7 +76,9 @@ tests must stay green before its status advances.
   10→15/62 images; vehicle-detector fusion fixed to not erase text-inferred
   fleet class. 2026-10-15: bounded detail detection recovers the owner-reported Arlington
   SUV in a local screenshot holdout; 31 VehicleML tests pass with that opt-in enabled.
-  See EVALUATION.md for limited coverage evidence. Plate OCR labels and broader fleet recall remain open.
+  Semantic label filtering now excludes non-vehicle COCO objects; a labeled camera benchmark separately
+  scores geometry and fleet coverage (36 tests pass). The local SUV box is recovered but its fleet
+  identity remains unconfirmed. See EVALUATION.md; OCR labels and broader fleet recall remain open.
 - **Next:** ground-truth `plate` labels + exact-match/CER scoring in the
   harness; grow corpus (USA, licensed, challenging low-contrast examples);
   make/model/color classifier (Create ML GUI path); fleet-specific

@@ -125,3 +125,21 @@ viewport and `PLATEWATCH_DETAIL_MODEL` points to the installed compiled detector
 Projection, duplicate-class suppression and neighboring-vehicle preservation have
 ordinary offline tests. Broader labeled public-camera evaluation remains required;
 the historical 62-photo precision/recall numbers above are not new measurements.
+
+### Fixed-camera benchmark and semantic label correction
+
+Native Nevada QA exposed non-vehicle COCO outputs (including traffic lights) being
+mapped to unknown vehicles. Vehicle-task detector output now accepts road-vehicle
+and explicit fleet labels only; plate-task detection is unaffected. Generic car,
+bus and truck labels still cannot establish public ownership. Explicit police/fire
+vehicle labels map to their fleet classes. This is covered by a semantic-label test.
+
+The new `--camera-benchmark` mode compares whole/detail boxes and optional fleet-gate
+coverage with one-to-one IoU matching. Partial labels deliberately omit precision
+and false positives. The owner-reported Arlington SUV annotation is partial: the
+local run measured whole-frame target misses=1, detail target misses=0, and fleet-gate
+target misses=1. That last result is a real remaining classification gap, not a failed
+box test to hide. No image or private plate data was committed. See eval/README.md.
+All 36 VehicleML tests passed with the screenshot holdout enabled; the release
+harness built and ran against the installed detector. Broader annotated camera
+coverage and a validated fleet classifier remain open.

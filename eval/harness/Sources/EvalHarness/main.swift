@@ -40,6 +40,19 @@ struct Outcome: Codable {
 }
 
 let args = CommandLine.arguments
+if let index = args.firstIndex(of: "--camera-benchmark"), index + 1 < args.count {
+    guard let modelIndex = args.firstIndex(of: "--vehicle-model"), modelIndex + 1 < args.count else {
+        FileHandle.standardError.write(Data("Camera benchmark requires --vehicle-model pointing to an installed model\n".utf8))
+        exit(2)
+    }
+    do {
+        try await runCameraBenchmark(manifestURL: URL(fileURLWithPath: args[index + 1]), modelURL: URL(fileURLWithPath: args[modelIndex + 1]))
+        exit(0)
+    } catch {
+        FileHandle.standardError.write(Data("Camera benchmark failed: \(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
+}
 let evalDir = URL(fileURLWithPath: args.count > 1 ? args[1] : "eval")
 let manifestURL = evalDir.appendingPathComponent("manifest.json")
 let entries = try JSONDecoder().decode([Entry].self, from: Data(contentsOf: manifestURL))

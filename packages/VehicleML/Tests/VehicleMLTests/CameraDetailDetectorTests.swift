@@ -7,6 +7,18 @@ import XCTest
 @testable import VehicleML
 
 final class CameraDetailDetectorTests: XCTestCase {
+    func testGenericObjectLabelsCannotBecomeVehicleBoxesOrFleetEvidence() {
+        for label in ["person", "traffic light", "stop sign", "bench", "dog", "backpack"] {
+            XCTAssertFalse(CoreMLDetectorStage.vehicleLabels.contains(label))
+        }
+        for label in ["car", "truck", "bus", "motorcycle"] {
+            XCTAssertTrue(CoreMLDetectorStage.vehicleLabels.contains(label))
+            XCTAssertFalse(CoreMLDetectorStage.vehicleClass(for: label).isFleet)
+        }
+        XCTAssertEqual(CoreMLDetectorStage.vehicleClass(for: "police_car"), .patrol)
+        XCTAssertEqual(CoreMLDetectorStage.vehicleClass(for: "fire_truck"), .fireEngine)
+    }
+
     func testProjectionPreservesTopLeftCoordinatesAcrossOverlappingTiles() {
         let region = CameraDetailDetectorStage.regions[3]
         let mapped = CameraDetailDetectorStage.project(.init(x: 0.5, y: 0.25, width: 0.2, height: 0.1), into: region)
