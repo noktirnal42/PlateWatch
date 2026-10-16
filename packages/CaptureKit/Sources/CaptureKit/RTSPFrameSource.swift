@@ -128,7 +128,7 @@ public final class RTSPFrameSource: @unchecked Sendable {
     }
 
     private func pumpFrames() {
-        guard let reader, let readerOutput, isRunning else { return }
+        guard reader != nil, let readerOutput, isRunning else { return }
 
         while isRunning, let sampleBuffer = readerOutput.copyNextSampleBuffer() {
             // Rate-limit to targetFPS
