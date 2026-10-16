@@ -64,7 +64,7 @@ server reconnect now pass. A per-user local service runs the reference server; a
 SwiftData cloud sync is explicitly disabled for the local review store. Settings separates
 these connection states from delivery/publication. REST image bytes and unconfirmed plate/geo
 fields are stripped at the network boundary (18 PlateSync and 53 server tests pass).
-Explicit reviewed delivery/receipts, CloudKit publication and two-account proof remain next;
+Explicit reviewed delivery and local receipt history are now wired; CloudKit publication and two-account proof remain next;
 see [connection QA](BACKEND-QA-2026-10-15.md).
 
 ## Priority 3 local checkpoint — October 16

@@ -150,6 +150,15 @@ Submission receipts may also carry optional `idempotencyKey` and `operatorConfir
 fields. They are audit metadata only: older clients may omit them, and they never grant
 publication or bypass the moderation state returned by the backend.
 
+## Local receipt ledger (2026-10-16)
+
+After a backend receipt removes a `PendingSubmission`, iOS stores a
+`ReceivedSubmissionReceipt` row locally. It contains only the sighting UUID, server
+receipt time, returned moderation state, operator-confirmation flag, and an optional
+short idempotency-key prefix. It never stores the submission DTO, plate text, crop,
+raw frame, or exact location. The Sightings screen presents this as delivery history;
+receipt history is not proof of public publication.
+
 ## Local hash-addressed evidence recovery (2026-10-15)
 
 After a Hub queue record saves, its intact JPEG is also stored locally at

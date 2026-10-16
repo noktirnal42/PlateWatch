@@ -14,7 +14,7 @@ struct PlateWatchApp: App {
     @State private var selectedTab = PreviewFixtures.initialTab
 
     init() {
-        let schema = Schema([PendingSubmission.self, WatchlistItem.self])
+        let schema = Schema([PendingSubmission.self, ReceivedSubmissionReceipt.self, WatchlistItem.self])
         let config = ModelConfiguration("PlateWatch", schema: schema, isStoredInMemoryOnly: PreviewFixtures.isEnabled, cloudKitDatabase: .none)
         do {
             modelContainer = try ModelContainer(for: schema, configurations: config)

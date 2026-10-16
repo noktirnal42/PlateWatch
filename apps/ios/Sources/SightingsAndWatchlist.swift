@@ -3,10 +3,12 @@ import PlateSync
 import SwiftData
 import SwiftUI
 
-/// The outbox, not a historical archive: a successful receipt removes the row.
+/// The outbox is paired with a privacy-safe receipt history. Payloads leave
+/// the device after acknowledgement; only delivery metadata remains locally.
 struct SightingsListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var outbox: [PendingSubmission]
+    @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var errorText: String?
 
     var body: some View {
@@ -35,6 +37,23 @@ struct SightingsListView: View {
                         Text("Swipe to discard a local queued copy. If a transfer has already started, discarding cannot retract it from the backend.")
                     }
                 }
+                Section {
+                    if receipts.isEmpty {
+                        Label("No received submissions yet", systemImage: "tray")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(receipts) { receipt in
+                            NavigationLink { ReceiptDetailView(receipt: receipt) } label: {
+                                ReceiptRow(receipt: receipt)
+                            }
+                            .accessibilityIdentifier("receipt-" + receipt.sightingID.uuidString)
+                        }
+                    }
+                } header: {
+                    Text("Received · \(receipts.count)")
+                } footer: {
+                    Text("Receipts confirm backend acceptance and moderation state. They do not mean the sighting is publicly published. Payloads and evidence media are not retained in this history.")
+                }
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Sightings")
@@ -47,6 +66,75 @@ struct SightingsListView: View {
     private func discard(_ offsets: IndexSet) {
         for index in offsets { modelContext.delete(outbox[index]) }
         do { try modelContext.save() } catch { modelContext.rollback(); errorText = error.localizedDescription }
+    }
+}
+
+private struct ReceiptRow: View {
+    let receipt: ReceivedSubmissionReceipt
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: receipt.moderationState == .fleetConfirmed ? "checkmark.seal.fill" : "arrow.down.doc.fill")
+                .font(.title3)
+                .foregroundStyle(receipt.moderationState == .fleetConfirmed ? PWStyle.fleetText : .secondary)
+                .frame(width: 40, height: 40)
+                .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 12))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(receipt.moderationState.displayName).font(.headline)
+                Text(receipt.receivedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if receipt.operatorConfirmed {
+                Image(systemName: "person.badge.checkmark")
+                    .foregroundStyle(PWStyle.fleetText)
+                    .accessibilityLabel("Operator confirmed")
+            }
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct ReceiptDetailView: View {
+    let receipt: ReceivedSubmissionReceipt
+
+    var body: some View {
+        List {
+            Section {
+                PWSectionIntro(eyebrow: "BACKEND RECEIPT", title: receipt.moderationState.displayName,
+                               message: "The backend accepted this submission. The original payload and evidence media are not kept in the local receipt ledger.",
+                               systemImage: "checkmark.seal.fill")
+                .listRowBackground(Color.clear)
+            }
+            Section("Delivery") {
+                LabeledContent("Received") { Text(receipt.receivedAt, format: .dateTime.month().day().year().hour().minute()) }
+                LabeledContent("Sighting ID") { Text(receipt.sightingID.uuidString.prefix(8) + "…").font(.caption.monospaced()) }
+                if let prefix = receipt.idempotencyPrefix {
+                    LabeledContent("Receipt key") { Text(prefix + "…").font(.caption.monospaced()) }
+                }
+                LabeledContent("Operator confirmation", value: receipt.operatorConfirmed ? "Confirmed" : "Not recorded")
+            }
+            Section {
+                Label("Publication still requires moderation and policy checks.", systemImage: "info.circle")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .safeAreaInset(edge: .top) { PreviewBanner() }
+        .navigationTitle("Receipt")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private extension Sighting.ModerationState {
+    var displayName: String {
+        switch self {
+        case .pending: "Pending review"
+        case .fleetConfirmed: "Fleet confirmed"
+        case .redacted: "Redacted by policy"
+        case .rejected: "Rejected"
+        }
     }
 }
 

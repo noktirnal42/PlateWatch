@@ -22,7 +22,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub client capability/diagnostics and operator-triggered reviewed delivery are wired, while two-account isolation and moderator publish tooling remain (P0-5)
 - ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
-- ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors and painted icon landed (2026-10-14); full field/accessibility audit and received-history/media remain
+- ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors, painted icon and privacy-safe backend receipt history landed (2026-10-16); full field/accessibility audit, received media and event-clip export remain
 - ✅ iOS simulator startup CloudKit trap fixed in app + delegate backend selection; regression test added
 
 - ✅ Hub intact local evidence recovery by SHA-256 archive; all-vehicle body labels and explicit feed-filter reset (2026-10-15)
