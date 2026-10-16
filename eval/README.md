@@ -49,6 +49,8 @@ coverage/misses and unmatched candidates, with **no precision/false-positive cla
 Use `exhaustive:true` only after labeling every vehicle of the scored population.
 Optional `fleetVehicles` scores the production fleet gate separately, with plate
 reading disabled. A recovered car box does not become a successful fleet detection.
-Output is JSON counts and timings; raw frames, plates and OCR text are not exported.
+When manifest entries contain `plates`, output also includes normalized exact-match
+counts and character error rate (CER). Output is JSON counts and timings; raw frames,
+plates and OCR text are not exported.
 Timings are sequential and affected by model/framework warm-up; they are not a fair
 cold-start comparison or a sustained performance pilot.

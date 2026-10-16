@@ -74,7 +74,7 @@ cannot reach 0.55 on a cue alone (max 0.45), and none reached the review band in
   when it is the frame's single candidate.
 - **Plates must look like plates** (5–8 chars, letters and digits). All-letter vanity plates and
   all-digit plates are missed until the plate detector ships.
-- **Plate accuracy is not scored yet** (no ground-truth plate labels in the corpus).
+- **Plate accuracy is scored when labelled registrations are present.** The harness reports normalized exact-match counts and best-read character error rate (CER); the current corpus still has too few labelled plates for a reliable model-quality claim.
 - 62 images is a smoke test, not a benchmark; numbers will move as the corpus grows.
 - This is a still-photo evaluation. The live camera path (orientation, exposure) is
   covered by unit tests and a physical-device run of the app, but not scored here.

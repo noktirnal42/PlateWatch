@@ -96,8 +96,8 @@ tests must stay green before its status advances.
   identity remains unconfirmed. Generic car/truck/bus/motorcycle labels are now retained separately
   as body-type attributes for all Live detections, without promoting fleet status (37 VehicleML
   tests, one local-image opt-in skip). See EVALUATION.md; OCR and broader fleet recall remain open.
-- **Next:** ground-truth `plate` labels + exact-match/CER scoring in the
-  harness; grow corpus (USA, licensed, challenging low-contrast examples);
+- **Next:** grow the ground-truth `plate` corpus (USA, licensed, challenging
+  low-contrast examples); improve the Vision baseline with a trained OCR model,
   make/model/color classifier (Create ML GUI path); fleet-specific
   classifier for recall.
 
