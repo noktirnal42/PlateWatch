@@ -149,6 +149,23 @@ final class FrameRollingBufferTests: XCTestCase {
     }
 }
 
+final class EventClipMetadataTests: XCTestCase {
+    func testMetadataDescribesPartialBufferWithoutTouchingPixels() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let frames = (0..<3).map { index in
+            FramePacket(pixelBuffer: makeTestPixelBuffer(),
+                        timestamp: start.addingTimeInterval(Double(index) * 0.25),
+                        sequenceNumber: UInt64(index + 10))
+        }
+        let clip = EventClip(frames: frames, triggerFrameIndex: 1,
+                             triggerTimestamp: frames[1].timestamp)
+        XCTAssertEqual(clip.frameCount, 3)
+        XCTAssertEqual(clip.duration, 0.5, accuracy: 0.001)
+        XCTAssertEqual(clip.startTimestamp, start)
+        XCTAssertEqual(clip.endTimestamp, start.addingTimeInterval(0.5))
+    }
+}
+
 final class AdaptiveExposureControllerTests: XCTestCase {
     func testShutterBelowMinimumIncreasesISO() {
         let controller = AdaptiveExposureController(minShutter: 1.0/1000.0, maxISO: 800)

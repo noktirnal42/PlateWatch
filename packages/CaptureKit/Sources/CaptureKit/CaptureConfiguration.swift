@@ -125,4 +125,12 @@ public struct EventClip: Sendable {
         self.triggerFrameIndex = triggerFrameIndex
         self.triggerTimestamp = triggerTimestamp
     }
+
+    public var frameCount: Int { frames.count }
+    public var startTimestamp: Date? { frames.first?.timestamp }
+    public var endTimestamp: Date? { frames.last?.timestamp }
+    public var duration: TimeInterval {
+        guard let startTimestamp, let endTimestamp else { return 0 }
+        return max(0, endTimestamp.timeIntervalSince(startTimestamp))
+    }
 }

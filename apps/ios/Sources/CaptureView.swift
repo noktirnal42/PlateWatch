@@ -44,14 +44,14 @@ struct CaptureView: View {
                 }
                 Spacer()
                 if let clip = viewModel.latestEventClip {
-                    Label("Event buffer ready · \(clip.frames.count) frames", systemImage: "film.stack")
+                    Label("Event buffer ready · \(clip.frameCount) frames · \(clip.duration, format: .number.precision(.fractionLength(1)))s", systemImage: "film.stack")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(.black.opacity(0.62), in: Capsule())
                         .accessibilityLabel("Fleet event buffer ready")
-                        .accessibilityValue("\(clip.frames.count) frames")
+                        .accessibilityValue("\(clip.frameCount) frames, \(clip.duration, format: .number.precision(.fractionLength(1))) seconds")
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 CaptureControls(viewModel: viewModel, photoItem: $photoItem)
