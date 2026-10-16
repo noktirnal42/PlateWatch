@@ -155,6 +155,7 @@ struct DashboardPane: View {
                 GroupBox("Sources") {
                     VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Analysis", value: hub.modelStatus)
+                        LabeledContent("Delivery", value: hub.syncStatus)
                         LabeledContent("Snapshot server", value: hub.snapshotServerStatus)
                         LabeledContent("RTSP streams", value: hub.rtspServerStatus)
                         LabeledContent("Ingest folder") {
