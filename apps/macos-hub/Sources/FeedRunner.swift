@@ -225,9 +225,18 @@ final class FeedRunner: ObservableObject {
         let addedIDs = ids.subtracting(old)
         let added = (catalogue?.runnable ?? []).filter { addedIDs.contains($0.id) && !blockedIDs.contains($0.id) }
         for source in added { sourceStates[source.id] = .checking }
-        for group in Dictionary(grouping: added, by: { Self.origin($0.url) }).values {
-            guard let first = group.first else { continue }
-            checkPolicy(for: catalogue?.runnable.filter { Self.origin($0.url) == Self.origin(first.url) } ?? [])
+        // Policy setup can span hundreds of hosts after a bulk watch action.
+        // Yield between host groups so the main-actor UI remains responsive;
+        // cancellation and generation checks still make stale groups harmless.
+        let groups = Dictionary(grouping: added, by: { Self.origin($0.url) })
+        Task { @MainActor [weak self] in
+            for group in groups.values {
+                guard let self, self.watchedIDs == ids else { return }
+                guard let first = group.first else { continue }
+                let origin = Self.origin(first.url)
+                self.checkPolicy(for: self.catalogue?.runnable.filter { Self.origin($0.url) == origin } ?? group)
+                await Task.yield()
+            }
         }
         setLiveVideoSource(requestedHLSID)
         updateStatus()
