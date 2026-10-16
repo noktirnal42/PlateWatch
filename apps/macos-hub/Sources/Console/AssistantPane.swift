@@ -86,7 +86,10 @@ struct AssistantPane: View {
         }
         .onChange(of: provider) { _, value in
             savedProvider = value.rawValue
-            modelID = assistant.defaultModel(for: value)
+            let stored = storedModel(for: value)
+            modelID = assistant.modelChoices(for: value).contains(where: { $0.id == stored })
+                ? stored
+                : assistant.defaultModel(for: value)
         }
         .onChange(of: modelID) { _, value in
             switch provider {
@@ -94,6 +97,14 @@ struct AssistantPane: View {
             case .apple: savedAppleModel = value
             case .nvidia: savedNVIDIAModel = value
             }
+        }
+    }
+
+    private func storedModel(for provider: HubAssistant.Provider) -> String {
+        switch provider {
+        case .mlx: savedMLXModel
+        case .apple: savedAppleModel
+        case .nvidia: savedNVIDIAModel
         }
     }
 }
