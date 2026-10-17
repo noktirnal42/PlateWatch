@@ -22,6 +22,7 @@ struct PlateWatchApp: App {
             fatalError("SwiftData unavailable: \(error)")
         }
         backend = AppSyncConfiguration.makeBackend()
+        WatchlistConnectivity.shared.start()
         PreviewFixtures.populate(modelContainer)
         #if DEBUG
         SelfTest.runIfRequested()

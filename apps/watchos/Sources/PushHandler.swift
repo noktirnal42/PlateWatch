@@ -4,12 +4,13 @@ import PlateKit
 import PlateSync
 import UserNotifications
 import WatchKit
+import WatchConnectivity
 
 /// CloudKit silent-push wake handling (M4). The iOS app registers a
 /// `CKQuerySubscription` on fleet-confirmed sightings; the system wakes this
 /// extension with a background push, we pull the newest delta, match it
 /// against the mirrored watchlist plates, and fire a haptic for hits.
-final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDelegate {
+final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDelegate, WCSessionDelegate {
 
     /// Recent watchlist hits, surfaced by the root view.
     @Published private(set) var hits: [WatchHit] = []
@@ -21,6 +22,25 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
     }
 
     private let backend = SyncBackends.makeDefault()
+
+    func applicationDidFinishLaunching() {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        session.delegate = self
+        session.activate()
+        if let plates = session.applicationContext["watchlistPlates"] as? [String] {
+            UserDefaults.standard.set(plates, forKey: "watchlistPlates")
+        }
+    }
+
+    nonisolated func session(_ session: WCSession,
+                             activationDidCompleteWith activationState: WCSessionActivationState,
+                             error: Error?) {}
+
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        guard let plates = applicationContext["watchlistPlates"] as? [String] else { return }
+        UserDefaults.standard.set(plates, forKey: "watchlistPlates")
+    }
 
     /// watchOS silent-push entry point.
     func didReceiveRemoteNotification(_ remoteNotification: [AnyHashable: Any],
@@ -59,9 +79,9 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
         UNUserNotificationCenter.current().add(request)
     }
 
-    /// Watchlist items live in the paired-phone SwiftData store; the watch
-    /// keeps a lightweight mirror in standard defaults, written by the
-    /// phone app's watch connectivity sync (M4 follow-up).
+    /// Watchlist items live in the paired-phone SwiftData store; the phone
+    /// sends a lightweight normalized mirror through WatchConnectivity and the
+    /// watch keeps it in standard defaults for local matching.
     private func loadWatchlistPlates() -> Set<String> {
         Set(UserDefaults.standard.stringArray(forKey: "watchlistPlates") ?? [])
     }

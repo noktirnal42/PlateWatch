@@ -36,6 +36,10 @@ use this note for the iOS review surfaces and `EVALUATION.md` for recognition ev
   the reference server), signed device builds retain PlateSync's CloudKit selection.
 - Info.plist version values now follow `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`
   instead of a stale hardcoded version from the generated plist.
+- The mobile watchlist now mirrors normalized plate strings over WatchConnectivity
+  to the companion watch. The watch consumes only that local list for silent-push
+  matching; no frames, locations, credentials or evidence crops cross the link.
+  Physical phone/watch pairing and push delivery remain a device QA gate.
 
 ## Reproduce and test
 

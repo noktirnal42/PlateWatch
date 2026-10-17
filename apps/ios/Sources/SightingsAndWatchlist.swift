@@ -415,7 +415,9 @@ struct WatchlistView: View {
             // including deletion and mute. Never append to an outdated defaults array.
             let saved = try modelContext.fetch(FetchDescriptor<WatchlistItem>())
             if !PreviewFixtures.isEnabled {
-                UserDefaults.standard.set(WatchlistNotificationMirror.plates(from: saved), forKey: "watchlistPlates")
+                let plates = WatchlistNotificationMirror.plates(from: saved)
+                UserDefaults.standard.set(plates, forKey: "watchlistPlates")
+                WatchlistConnectivity.shared.send(plates: plates)
             }
             return true
         } catch { modelContext.rollback(); errorText = error.localizedDescription; return false }

@@ -39,6 +39,8 @@ tests must stay green before its status advances.
   signed CloudKit account/database verification remains external. CloudKit watchlist subscription registration,
   watchOS silent-push delta matching, haptics and local alert presentation are implemented; signed
   entitlement and physical-device push delivery remain external QA gates.
+  The phone now mirrors its normalized local watchlist to the companion watch
+  through WatchConnectivity; pairing and push delivery remain physical-device gates.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
