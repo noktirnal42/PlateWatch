@@ -508,7 +508,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
         syncStatus = "Syncing pending…"
         lastReceiptSummary = ""
         let backend = SyncBackends.makeDefault()
+        let cloudKitDelivery = SyncBackends.cloudKitAvailable()
         let rows = (try? modelContext.fetch(FetchDescriptor<PendingSubmission>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        var delivered = 0
+        var rejected = 0
         var lastReceipt: SubmissionReceipt?
         for row in rows where row.retryCount < 8 {
             guard let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON) else {
@@ -516,7 +519,21 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 continue
             }
             do {
-                lastReceipt = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                let receipt = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                lastReceipt = receipt
+                if receipt.moderationState == .rejected { rejected += 1 } else { delivered += 1 }
+                let alreadyRecorded = (try? modelContext.fetch(FetchDescriptor<ReceivedSubmissionReceipt>(
+                    predicate: #Predicate { $0.sightingID == receipt.sightingID }
+                )))?.isEmpty == false
+                if !alreadyRecorded {
+                    modelContext.insert(ReceivedSubmissionReceipt(
+                        sightingID: receipt.sightingID,
+                        receivedAt: receipt.serverReceivedAt,
+                        moderationState: receipt.moderationState,
+                        operatorConfirmed: receipt.operatorConfirmed ?? false,
+                        idempotencyKey: receipt.idempotencyKey ?? row.idempotencyKey,
+                        cropJPEGData: dto.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }))
+                }
                 modelContext.delete(row)
             } catch SyncError.quotaExceeded {
                 break
@@ -527,10 +544,12 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
         try? modelContext.save()
         refreshPendingCount()
-        syncStatus = pendingCount == 0 ? "Queue delivered" : "\(pendingCount) still pending"
-        if let lastReceipt {
-            let confirmation = lastReceipt.operatorConfirmed == true ? "confirmed" : "legacy/unspecified confirmation"
-            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · \(confirmation)"
+        let destination = cloudKitDelivery ? "CloudKit submission store" : "reference server"
+        syncStatus = pendingCount == 0 ? "Delivered to \(destination)" : "\(pendingCount) still pending"
+        if delivered > 0 || rejected > 0 {
+            lastReceiptSummary = "Recorded \(delivered) accepted · \(rejected) rejected · backend: \(destination)"
+        } else if let lastReceipt {
+            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · backend: \(destination)"
         }
     }
 

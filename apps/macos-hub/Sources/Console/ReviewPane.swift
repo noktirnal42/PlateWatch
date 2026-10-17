@@ -22,6 +22,7 @@ struct ReviewPane: View {
     var onQueueChange: () -> Void = {}
     @Environment(\.modelContext) private var context
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var rows: [PendingSubmission]
+    @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var selection: Set<PersistentIdentifier> = []
     @State private var discardError = ""
 
@@ -64,6 +65,11 @@ struct ReviewPane: View {
                     .font(.caption)
                     .foregroundStyle(evidenceCount == rows.count ? Color.secondary : Color.orange)
                 Spacer()
+                if !receipts.isEmpty {
+                    Text("\(receipts.count) delivered receipts")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .help("Local acknowledgement history retained after delivery")
+                }
                 Text("\(selection.count) selected").font(.caption).foregroundStyle(.secondary)
                 Button("Select all") { selection = Set(rows.map(\.persistentModelID)) }.disabled(rows.isEmpty).accessibilityLabel("Select all queued sightings")
                 Button("Clear selection") { selection.removeAll() }.disabled(selection.isEmpty)

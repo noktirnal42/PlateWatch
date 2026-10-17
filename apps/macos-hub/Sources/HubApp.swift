@@ -10,7 +10,7 @@ struct PlateWatchHubApp: App {
     @StateObject private var hub: HubController
 
     init() {
-        let schema = Schema([PendingSubmission.self])
+        let schema = Schema([PendingSubmission.self, ReceivedSubmissionReceipt.self])
         // This is a local review queue, never an implicit SwiftData/CloudKit store.
         let config = ModelConfiguration("PlateWatchHub", schema: schema, isStoredInMemoryOnly: HubQAFixture.enabled, cloudKitDatabase: .none)
         modelContainer = (try? ModelContainer(for: schema, configurations: config))
