@@ -145,18 +145,25 @@ public struct CloudKitBackend: SyncBackend {
     public func recoverOwnedSubmissionReceipts() async throws -> [SubmissionReceipt] {
         let query = CKQuery(recordType: RecordType.submission, predicate: NSPredicate(value: true))
         let desiredKeys = ["moderationState", "userConfirmed"]
-        let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
-                                                      desiredKeys: desiredKeys, resultsLimit: 200)
-        return results.compactMap { _, result in
-            guard case .success(let record) = result else { return nil }
-            let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
-            return SubmissionReceipt(
-                sightingID: Self.uuid(fromRecordName: key),
-                moderationState: Sighting.ModerationState(rawValue: record["moderationState"] as? String ?? "pending") ?? .pending,
-                serverReceivedAt: record.modificationDate ?? record.creationDate ?? Date(),
-                idempotencyKey: key,
-                operatorConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+        var receipts: [SubmissionReceipt] = []
+        var page = try await publicDB.records(matching: query, inZoneWith: nil,
+                                               desiredKeys: desiredKeys, resultsLimit: 200)
+        while true {
+            receipts.append(contentsOf: page.0.compactMap { _, result in
+                guard case .success(let record) = result else { return nil }
+                let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
+                return SubmissionReceipt(
+                    sightingID: Self.uuid(fromRecordName: key),
+                    moderationState: Sighting.ModerationState(rawValue: record["moderationState"] as? String ?? "pending") ?? .pending,
+                    serverReceivedAt: record.modificationDate ?? record.creationDate ?? Date(),
+                    idempotencyKey: key,
+                    operatorConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+            })
+            guard let cursor = page.1 else { break }
+            page = try await publicDB.records(continuingMatchFrom: cursor,
+                                              desiredKeys: desiredKeys, resultsLimit: 200)
         }
+        return receipts
     }
 
     /// Reconstructs only the wire fields needed to hand creator-owned rows to
@@ -167,12 +174,19 @@ public struct CloudKitBackend: SyncBackend {
         let desiredKeys = ["capturedAt", "geohash6", "deviceIDHash", "fleetConfidence",
                            "plateText", "plateRegion", "unitNumber", "vehicleClass",
                            "agencyName", "moderationState", "userConfirmed"]
-        let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
-                                                      desiredKeys: desiredKeys, resultsLimit: 200)
-        return results.compactMap { _, result in
-            guard case .success(let record) = result else { return nil }
-            return Self.ownedSubmission(from: record)
+        var submissions: [OwnedSubmission] = []
+        var page = try await publicDB.records(matching: query, inZoneWith: nil,
+                                               desiredKeys: desiredKeys, resultsLimit: 200)
+        while true {
+            submissions.append(contentsOf: page.0.compactMap { _, result in
+                guard case .success(let record) = result else { return nil }
+                return Self.ownedSubmission(from: record)
+            })
+            guard let cursor = page.1 else { break }
+            page = try await publicDB.records(continuingMatchFrom: cursor,
+                                              desiredKeys: desiredKeys, resultsLimit: 200)
         }
+        return submissions
     }
 
     /// Pure record-to-wire conversion kept separate so the privacy boundary is

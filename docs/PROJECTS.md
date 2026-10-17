@@ -222,6 +222,9 @@ tests must stay green before its status advances.
   with the same receipt ID. Review now exposes bounded delivery history and a
   **Recover CloudKit history** action for creator-readable submissions delivered
   by older Hub builds; it never restores private plate/frame/location payloads.
+- CloudKit history recovery now follows every query cursor instead of stopping
+  at the first 200 creator-owned submissions, so older receipts and pending
+  handoffs remain recoverable after a large sync backlog.
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
