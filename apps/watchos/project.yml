@@ -31,6 +31,8 @@ targets:
       path: Support/Info.plist
       properties:
         CFBundleDisplayName: PlateWatch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKWatchOnly: true
         WKApplication: true
         ITSAppUsesNonExemptEncryption: false
