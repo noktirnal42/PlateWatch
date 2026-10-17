@@ -92,7 +92,7 @@ tests must stay green before its status advances.
   Local Review preserves intact evidence crops: overlapping vehicles and foreign text no longer
   remove or black out photos (owner clarification, 2026-10-15; 37 Hub tests, four opt-in skips).
   Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
-  163 FeedIngest and 45 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
+  164 FeedIngest and 50 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
   with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
   The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
@@ -135,7 +135,7 @@ tests must stay green before its status advances.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
-- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Local MLX and on-device Foundation Models now complete bounded tasks in the signed Hub; seven agent-core tests and 45 Hub tests pass (four Hub opt-in skips). Stop/journal verified. Owner-selected NVIDIA hosted agent/retrieval/extraction/vehicle-benchmark integration is implemented; live endpoint corrections and limits are recorded in the NIM research report. PCC remains pending.
+- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Local MLX and on-device Foundation Models now complete bounded tasks in the signed Hub; seven agent-core tests and 50 Hub tests pass (four Hub opt-in skips). Stop/journal verified. Owner-selected NVIDIA hosted agent/retrieval/extraction/vehicle-benchmark integration is implemented; live endpoint corrections and limits are recorded in the NIM research report. PCC remains pending.
 - **Next:** extend the mediated real-camera proof into
   a sustained quality/freshness/CPU pilot and broader internal-agent task/attribution evaluation
   in AGENT-INTEGRATION.md. Credentialed source expansion and physical hardware/permission QA remain.
