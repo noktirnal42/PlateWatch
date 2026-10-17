@@ -112,7 +112,7 @@ any collection code lands**; the `AccountabilityKit` type skeleton may land
 first.
 - ✅ `AccountabilityKit` package: `OfficialProfile`, `IncidentRecord`,
   citation enforcement (no record without `SourceCitation`)
-- ⬜ Roster/assignment importers extended to person-level records
+- ✅ Roster/assignment importers extended to person-level records (CSV plus eight-source catalogue; pending review, citation-only fields, and hidden unit links)
 - 🟡 Brady/decertification register (CSV) + lawsuit docket (CourtListener, PACER with a dollar budget) importers — built,
   verbatim, cited, pending-until-accepted; the opt-in CourtListener live smoke test passed on 2026-10-16, while
   PACER still requires the owner's account and remains unexercised

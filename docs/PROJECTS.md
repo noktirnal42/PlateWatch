@@ -215,7 +215,7 @@ tests must stay green before its status advances.
   `swift test --package-path packages/AccountabilityKit`.
 - **Status:** GSA/city-fleet/auction importers + FOIA generator shipped; 2026-10-15 FOIA tracker, CSV list and
   CourtListener/PACER (budget-guarded) importers, record candidates and the location-free unit-records index landed
-  (local only, `docs/ACCOUNTABILITY-DATA.md`). People tab (operator-side cited links) built. Roster CSV importer and an eight-source one-click police roster catalogue built. Not built: second-person moderation, any publication.
+  (local only, `docs/ACCOUNTABILITY-DATA.md`). People tab (operator-side cited links) built. Roster CSV importer and an eight-source one-click police roster catalogue built; person-level import, citation-only storage, pending review, and hidden unit links are covered by 39 AccountabilityKit tests. Not built: second-person moderation, any publication.
 - **Validation:** the opt-in CourtListener smoke test reached the live v4 endpoint on 2026-10-16 with the public
   query `police` and returned 20 parseable dockets; PACER remains unexercised because it requires the owner's account.
 - **Next:** exercise PACER live (owner testing, free allowance); read statute text for the FOIA
