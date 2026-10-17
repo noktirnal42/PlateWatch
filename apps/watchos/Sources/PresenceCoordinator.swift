@@ -50,6 +50,8 @@ final class WatchPresenceCoordinator {
                 skippedWhileBusy: aggregate.stats?.skippedWhileBusy,
                 outboxPending: aggregate.stats?.outboxPending,
                 updatedAt: aggregate.generatedAt)
+        } else {
+            WatchComplicationStore.clearLiveStats()
         }
     }
 }

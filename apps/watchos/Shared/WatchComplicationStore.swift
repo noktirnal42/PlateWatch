@@ -74,6 +74,17 @@ enum WatchComplicationStore {
                               updatedAt: defaults.object(forKey: updatedAtKey) as? Date)
     }
 
+    /// Remove ephemeral server counts when the presence service cannot be
+    /// reached. Keeping the last value would make a disconnected watch look
+    /// like it still has a current operator count.
+    static func clearLiveStats() {
+        [activeSessionsKey, activeProcessorsKey, framesAnalyzedKey,
+         publicFeedFramesKey, fleetHitsTodayKey, skippedWhileBusyKey,
+         outboxPendingKey, updatedAtKey].forEach { defaults.removeObject(forKey: $0) }
+        defaults.removeObject(forKey: activeUsersKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: kind)
+    }
+
     private static func setOptional(_ value: Int?, forKey key: String) {
         if let value { defaults.set(max(0, value), forKey: key) }
         else { defaults.removeObject(forKey: key) }
