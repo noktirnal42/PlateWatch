@@ -1,9 +1,31 @@
+import AppKit
 import PlateSync
 import SwiftData
 import SwiftUI
 
+/// The Hub owns a single feed scheduler and one local snapshot bridge per Mac.
+/// Launching the app twice otherwise creates two runners against the same
+/// catalogue/store, which can starve NV511 hosts and make the Live controls
+/// appear hung. Keep the oldest process and close a newer duplicate.
+final class HubApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let peers = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != currentPID }
+        guard let existing = peers.min(by: { $0.launchDate ?? .distantPast < $1.launchDate ?? .distantPast }) else { return }
+
+        // Keep the oldest instance so an ordinary relaunch does not interrupt
+        // its scheduler. The new duplicate exits before it creates a store or
+        // starts the snapshot/HLS services.
+        existing.activate(options: [.activateIgnoringOtherApps])
+        DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+    }
+}
+
 @main
 struct PlateWatchHubApp: App {
+    @NSApplicationDelegateAdaptor(HubApplicationDelegate.self) private var applicationDelegate
     let modelContainer: ModelContainer
     /// Owned here so ingest (folder watch + snapshot server) starts at launch, not when the
     /// menu-bar popover is first opened.

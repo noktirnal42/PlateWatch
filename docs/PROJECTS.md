@@ -89,6 +89,10 @@ tests must stay green before its status advances.
   host-throttled and HLS stays within the rotating four-stream budget.
   The Hub status popover repeats that recovery action and shows the confirmed NV511 count, so a relaunch that
   leaves the catalogue idle can be repaired without navigating away from the dashboard.
+  A duplicate Hub-process regression was reproduced during NV511 QA: two schedulers shared the same local store and
+  made Live controls appear hung. The installed Hub now keeps one oldest instance, closes a newer duplicate before
+  it starts feed services, and was reinstalled with 10,590 catalogue entries visible after clearing the persisted
+  Favorites scope. The live bridge then reported 666 watched feeds and fresh NV511 HLS/snapshot frames.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
   readable SUV/van/pickup/sedan/motorbike aliases and classifier confidence when a body label is unavailable).
   iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared
