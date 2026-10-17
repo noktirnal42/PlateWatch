@@ -816,6 +816,44 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
     }
 
+    /// Publishes only confirmed, fleet-gated CloudKit submissions through the
+    /// moderator ACL. This is intentionally explicit and never part of the
+    /// ordinary device sync path.
+    func publishCloudKitHistory() async {
+        guard SyncBackends.cloudKitAvailable() else {
+            lastReceiptSummary = "CloudKit publication unavailable in this build"
+            return
+        }
+        syncStatus = "Publishing confirmed CloudKit sightings…"
+        do {
+            let submissions = try await CloudKitBackend().recoverOwnedSubmissions()
+            let backend = CloudKitBackend()
+            var published = 0
+            var skipped = 0
+            var failed = 0
+            var firstFailure = ""
+            for submission in submissions {
+                guard CloudKitBackend.publishedRecord(from: submission) != nil else {
+                    skipped += 1
+                    continue
+                }
+                do {
+                    _ = try await backend.publish(submission)
+                    published += 1
+                } catch {
+                    failed += 1
+                    if firstFailure.isEmpty { firstFailure = error.localizedDescription }
+                }
+            }
+            syncStatus = "CloudKit publication complete"
+            lastReceiptSummary = "Published \(published) · skipped \(skipped) not confirmed · failed \(failed)" +
+                (firstFailure.isEmpty ? "" : " · \(firstFailure)")
+        } catch {
+            syncStatus = "CloudKit publication failed"
+            lastReceiptSummary = "Could not publish CloudKit submissions: \(error.localizedDescription)"
+        }
+    }
+
     func chooseIngestFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true

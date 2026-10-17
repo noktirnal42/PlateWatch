@@ -92,7 +92,7 @@ public struct CloudKitBackend: SyncBackend {
     /// identity or review fields across the publication boundary. The caller
     /// must still save this record with a moderator credential; app clients
     /// never have a CloudKit create grant for `Sighting`.
-    static func publishedRecord(from submission: OwnedSubmission) -> CKRecord? {
+    public static func publishedRecord(from submission: OwnedSubmission) -> CKRecord? {
         let dto = submission.dto
         guard dto.userConfirmed != false,
               dto.fleetConfidence >= 0.8,

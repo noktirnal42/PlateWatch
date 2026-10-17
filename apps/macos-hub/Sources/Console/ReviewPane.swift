@@ -13,6 +13,7 @@ protocol ReviewHubProviding {
     func syncPending() async
     func recoverDeliveredReceipts() async
     func sendCloudKitHistoryToModeration() async
+    func publishCloudKitHistory() async
 }
 
 struct ReviewPane: View {
@@ -30,6 +31,7 @@ struct ReviewPane: View {
     @State private var showDeliveryHistory = true
     @State private var recoveringReceipts = false
     @State private var sendingCloudKit = false
+    @State private var publishingCloudKit = false
 
     private struct Row: Identifiable {
         let id: PersistentIdentifier
@@ -113,6 +115,15 @@ struct ReviewPane: View {
                 }
                 .disabled(sendingCloudKit)
                 .help("Copy creator-owned CloudKit submissions through the redaction gate into the reference moderation queue")
+                Button(publishingCloudKit ? "Publishing…" : "Publish confirmed CloudKit", systemImage: "checkmark.seal") {
+                    publishingCloudKit = true
+                    Task {
+                        await hub?.publishCloudKitHistory()
+                        publishingCloudKit = false
+                    }
+                }
+                .disabled(publishingCloudKit || !SyncBackends.cloudKitAvailable())
+                .help("Moderator-only: publish confirmed fleet submissions as public Sighting records. This never uploads evidence images.")
             }
             Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
                 .font(.caption).foregroundStyle(.secondary)
