@@ -545,12 +545,12 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
         try? modelContext.save()
         refreshPendingCount()
-        let destination = cloudKitDelivery ? "CloudKit submission store" : "reference server"
-        syncStatus = pendingCount == 0 ? "Delivered to \(destination)" : "\(pendingCount) still pending"
+        let destinationLabel = cloudKitDelivery ? "CloudKit submission store" : "reference server"
+        syncStatus = pendingCount == 0 ? "Delivered to \(destinationLabel)" : "\(pendingCount) still pending"
         if delivered > 0 || rejected > 0 {
-            lastReceiptSummary = "Recorded \(delivered) accepted · \(rejected) rejected · backend: \(destination)"
+            lastReceiptSummary = "Recorded \(delivered) accepted · \(rejected) rejected · backend: \(destinationLabel)"
         } else if let lastReceipt {
-            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · backend: \(destination)"
+            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · backend: \(destinationLabel)"
         }
     }
 

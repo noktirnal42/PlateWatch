@@ -25,6 +25,7 @@ struct ReviewPane: View {
     @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var selection: Set<PersistentIdentifier> = []
     @State private var discardError = ""
+    @State private var showDeliveryHistory = true
 
     private struct Row: Identifiable {
         let id: PersistentIdentifier
@@ -134,6 +135,29 @@ struct ReviewPane: View {
             if selection.count == 1, let row = table.first(where: { selection.contains($0.id) }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
+            if !receipts.isEmpty {
+                DisclosureGroup(isExpanded: $showDeliveryHistory) {
+                    Table(receiptRows) {
+                        TableColumn("Received") { row in Text(row.receivedAt, format: .dateTime) }
+                            .width(min: 130, ideal: 160)
+                        TableColumn("Sighting") { row in Text(row.sightingID.uuidString.prefix(8)).monospaced() }
+                            .width(78)
+                        TableColumn("State") { row in Text(row.state) }
+                            .width(88)
+                        TableColumn("Review") { row in Text(row.confirmed ? "Confirmed" : "Unconfirmed") }
+                            .width(100)
+                        TableColumn("Evidence") { row in Text(row.hasEvidence ? "Saved" : "Hash only") }
+                            .width(82)
+                    }
+                    .frame(minHeight: 76, idealHeight: min(CGFloat(receiptRows.count * 30 + 34), 190))
+                    Text("These are local delivery receipts. CloudKit submissions remain private until a moderator publishes them; an empty Moderation pane is expected when delivery used CloudKit.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                } label: {
+                    Label("Delivery history · \(receipts.count)", systemImage: "checkmark.seal")
+                        .font(.headline)
+                }
+            }
         }.padding()
         .task(id: rows.map(\.idempotencyKey)) {
             for row in rows {
@@ -145,6 +169,23 @@ struct ReviewPane: View {
                 }
                 await Task.yield()
             }
+        }
+    }
+
+    private struct ReceiptRow: Identifiable {
+        let id: UUID
+        let sightingID: UUID
+        let receivedAt: Date
+        let state: String
+        let confirmed: Bool
+        let hasEvidence: Bool
+    }
+
+    private var receiptRows: [ReceiptRow] {
+        receipts.map {
+            ReceiptRow(id: $0.sightingID, sightingID: $0.sightingID, receivedAt: $0.receivedAt,
+                       state: $0.moderationState.rawValue, confirmed: $0.operatorConfirmed,
+                       hasEvidence: $0.cropJPEGData != nil)
         }
     }
 }
