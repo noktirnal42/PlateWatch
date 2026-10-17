@@ -94,6 +94,11 @@ tests must stay green before its status advances.
   a sustained quality/freshness/CPU pilot and broader internal-agent task/attribution evaluation
   in AGENT-INTEGRATION.md. Credentialed source expansion and physical hardware/permission QA remain.
   Current continuation evidence and remaining gates: [repair report](HUB-REPAIR-2026-10-15.md).
+  2026-10-16 physical QA: signed iOS build installed and launched on iPhone 16 Pro Max;
+  portrait and landscape screenshots show the capture UI and all-vehicle class overlays.
+  Signed watch companion installed and launched on Apple Watch Series 9; the recent-hits
+  and Quick log surface rendered successfully. Camera permission/real-scene capture and
+  CloudKit push delivery still require an operator field exercise.
 
 ## WS3 — Recognition & evaluation
 

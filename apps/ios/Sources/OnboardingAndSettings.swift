@@ -139,6 +139,10 @@ struct SettingsView: View {
                 }
                 Section("Live presence") {
                     Toggle("Share active processing count", isOn: $presenceEnabled)
+                        .onChange(of: presenceEnabled) { _, enabled in
+                            if enabled { PresenceCoordinator.shared.start() }
+                            else { PresenceCoordinator.shared.stop() }
+                        }
                     Text("Optional and off by default. Shares only an anonymous expiring count while this device is actively scanning; no plates, frames, names, or history are sent.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
