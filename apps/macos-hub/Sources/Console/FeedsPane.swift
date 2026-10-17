@@ -110,6 +110,23 @@ struct FeedsPane: View {
             }
             FeedStatusRow(runner: hub.feedRunner)
                 .font(.caption).foregroundStyle(.secondary)
+            if tab == .favorites {
+                HStack(spacing: 10) {
+                    Label("Favorites scope: showing \(favorites.ids.count) starred feeds; the full catalogue has \(totalCount.formatted()) sources.", systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Show all feeds") { browser.resetView(); reload() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .accessibilityHint("Clears the persisted Favorites scope and all feed filters")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Favorites scope. Showing \(favorites.ids.count) starred feeds out of \(totalCount) total. Show all feeds button available.")
+            }
             if tab == .all && totalCount > favorites.watchedIDs.count {
                 Label {
                     Text("The catalogue is fully loaded. Background analysis runs only for watched cameras (\(favorites.watchedIDs.count) selected); idle cameras remain available for preview or Live.")
