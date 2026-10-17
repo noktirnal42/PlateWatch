@@ -393,6 +393,28 @@ final class HubController: ObservableObject, ReviewHubProviding {
         syncRunnerWatch()
     }
 
+    /// Select the confirmed Nevada 511 snapshot/HLS sources for background
+    /// processing. HLS remains bounded by FeedRunner's rotating four-stream
+    /// budget and snapshots still share the per-host throttle.
+    var confirmedNV511Count: Int {
+        activeFeedSources.values.filter { Self.isNV511($0) && $0.mayBeAnalysed }.count
+    }
+
+    func watchAllNV511() {
+        let ids = activeFeedSources.values
+            .filter { Self.isNV511($0) && $0.mayBeAnalysed }
+            .map(\.id)
+        favorites.watch(Set(ids))
+        syncRunnerWatch()
+    }
+
+    private static func isNV511(_ source: PublicFeedSource) -> Bool {
+        if source.state?.uppercased() == "NV" { return true }
+        let host = source.url.host?.lowercased() ?? ""
+        return host == "nvroads.com" || host.hasSuffix(".nvroads.com")
+            || host == "its.nv.gov" || host.hasSuffix(".its.nv.gov")
+    }
+
     @Published private(set) var liveFeed: PublicFeedSource?
     @Published private(set) var liveFeedFrame: WebFeedFrame?
     @Published private(set) var liveFeedStatus = ""

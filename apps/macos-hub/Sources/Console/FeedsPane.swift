@@ -115,6 +115,13 @@ struct FeedsPane: View {
                     .help("Fetch the current keyed NV511 catalogue and merge it with this Mac's saved feeds")
                     .accessibilityLabel(importing ? "Refreshing Nevada 511 catalogue" : "Refresh Nevada 511 catalogue")
                 }
+                if hub.confirmedNV511Count > 0 {
+                    Button("Watch NV511 (\(hub.confirmedNV511Count.formatted()))", systemImage: "eye.fill") {
+                        hub.watchAllNV511()
+                    }
+                    .help("Select all confirmed Nevada 511 sources for background processing; HLS streams rotate within the four-stream budget")
+                    .accessibilityLabel("Watch all confirmed Nevada 511 feeds")
+                }
                 Button("Watch \(favorites.ids.count) favorites") { hub.watchAllFavorites() }
                     .disabled(favorites.ids.isEmpty)
                     .help("Analyse all starred cameras in the background")
