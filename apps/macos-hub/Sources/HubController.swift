@@ -391,6 +391,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var liveFeed: PublicFeedSource?
     @Published private(set) var liveFeedFrame: WebFeedFrame?
     @Published private(set) var liveFeedStatus = ""
+    /// Changes whenever the user explicitly retries Live. Including this in the
+    /// Live view task identity cancels the old decoder before starting a fresh
+    /// bounded attempt, rather than stacking HLS players on a stalled source.
+    @Published private(set) var liveFeedReloadToken = UUID()
 
     func openFeedInLive(_ source: PublicFeedSource) {
         guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
@@ -407,6 +411,18 @@ final class HubController: ObservableObject, ReviewHubProviding {
         syncRunnerWatch()
     }
 
+    /// Restart the currently selected Live source after a transport failure.
+    /// HLS providers can leave a playlist reachable while media segments are
+    /// unavailable; a retry must therefore reset both the frame and decoder.
+    func retryLiveFeed() {
+        guard let source = liveFeed else { return }
+        liveFeedFrame = nil
+        liveFeedStatus = source.kind == .hls ? "Retrying HLS…" : "Refreshing feed…"
+        liveFeedReloadToken = UUID()
+        if source.kind == .hls { feedRunner.retryLiveVideoSource(source) }
+        syncRunnerWatch()
+    }
+
     /// An immediate, rate-limited first frame; subsequent frames come from the existing background poller.
     func loadLiveFeed() async {
         guard let source = liveFeed else { return }
@@ -416,16 +432,21 @@ final class HubController: ObservableObject, ReviewHubProviding {
             // first frame. Opening a feed is an interactive action, so obtain
             // one bounded preview immediately and put it through the same
             // on-device analysis path as the continuing HLS sink.
+            var previewFailure: String?
             do {
                 let data = try await feedRunner.fetchPreview(of: source)
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
                 await analyseFeedFrame(data, from: source)
             } catch {
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
-                liveFeedStatus = error.localizedDescription
+                previewFailure = error.localizedDescription
+                liveFeedStatus = previewFailure ?? "Video unavailable"
             }
             while !Task.isCancelled, liveFeed?.id == source.id {
-                if liveFeedFrame == nil { liveFeedStatus = feedRunner.state(of: source).text }
+                // Preserve a bounded preview failure in the UI. Previously the
+                // background decoder immediately overwrote useful diagnostics
+                // with a perpetual "Connecting" label.
+                if liveFeedFrame == nil, previewFailure == nil { liveFeedStatus = feedRunner.state(of: source).text }
                 do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
             }
             return

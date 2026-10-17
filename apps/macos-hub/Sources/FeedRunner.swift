@@ -100,7 +100,7 @@ final class FeedRunner: ObservableObject {
         case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
         case .imageUnavailable(let reason): return .init(text: reason, icon: "photo.badge.exclamationmark", color: .orange, kind: .frameUnavailable)
-        case .videoConnecting: return .init(text: "Connecting HLS…", icon: "video", color: .secondary, kind: .checking)
+        case .videoConnecting: return .init(text: "Connecting HLS (up to 15s)…", icon: "video", color: .secondary, kind: .checking)
         case .videoIdle: return .init(text: watchedIDs.contains(source.id) && explicitWatchSelection ? "HLS queued · rotating" : "HLS ready · watch or open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
         case .suspended: return source.kind == .rtsp
             ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
@@ -376,6 +376,17 @@ final class FeedRunner: ObservableObject {
         updateStatus()
     }
 
+    /// Drop and recreate one selected HLS decoder without restarting all
+    /// snapshot polling. This is used by the Live retry action after a
+    /// provider has left a stale player connected.
+    func retryLiveVideoSource(_ source: PublicFeedSource) {
+        guard source.kind == .hls, source.id == requestedHLSID else { return }
+        stopHLS(source.id)
+        sourceStates[source.id] = .videoConnecting
+        beginHLSPolling(source, run: generation)
+        updateStatus()
+    }
+
     /// A redirect or playlist reference may only use an origin whose media terms
     /// are already approved in this catalogue. The robots decision is per path.
     private func resourcePolicy(for source: PublicFeedSource) -> HLSPolicyRelay.Policy {
@@ -395,7 +406,10 @@ final class FeedRunner: ObservableObject {
         guard selectedHLSIDs.contains(source.id) else { sourceStates[source.id] = .videoIdle; return }
         let id = source.id
         sourceStates[id] = .videoConnecting
-        let decoder = HLSFrameSource(source: source, requestPolicy: resourcePolicy(for: source))
+        // Surface dead provider segments promptly. The Live pane has an
+        // explicit retry action, so a short bounded attempt is preferable to
+        // leaving a video tile in "Connecting" for half a minute.
+        let decoder = HLSFrameSource(source: source, stallTimeout: 15, requestPolicy: resourcePolicy(for: source))
         decoder.tapInterval = 1
         decoder.onStateChange = { [weak self, weak decoder] state in
             guard let self, self.generation == run, !self.blockedIDs.contains(id), self.hlsSources[id] != nil else { return }

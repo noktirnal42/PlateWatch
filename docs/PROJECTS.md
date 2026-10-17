@@ -69,6 +69,8 @@ tests must stay green before its status advances.
   with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
   The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
+  HLS Live now bounds a selected decoder attempt to 15 seconds and exposes a Retry action that tears down
+  the stale player before restarting it; this makes provider segment failures visible and recoverable.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
   readable SUV/van/pickup/sedan/motorbike aliases and classifier confidence when a body label is unavailable).
   iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared

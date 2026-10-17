@@ -181,6 +181,14 @@ struct LivePane: View {
                     }
                     Spacer()
                     FeedBlockButton(hub: hub, preferences: hub.favorites, source: source)
+                    if source.kind == .hls {
+                        Button {
+                            hub.retryLiveFeed()
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                        .help("Restart this HLS decoder and request a fresh frame")
+                    }
                     Button("Close web feed") { hub.stopLiveFeed() }
                 }
             }
@@ -243,7 +251,16 @@ struct LivePane: View {
                         .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     }
                 } else {
-                    Text(hub.liveFeed == nil ? "Start a camera, open a video, or choose Open in Live in Public feeds" : hub.liveFeedStatus).foregroundStyle(.secondary)
+                    VStack(spacing: 8) {
+                        Text(hub.liveFeed == nil ? "Start a camera, open a video, or choose Open in Live in Public feeds" : hub.liveFeedStatus)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if let source = hub.liveFeed, source.kind == .hls {
+                            Button("Retry HLS") { hub.retryLiveFeed() }
+                                .buttonStyle(.bordered)
+                                .accessibilityHint("Restarts the bounded HLS connection attempt")
+                        }
+                    }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -256,7 +273,7 @@ struct LivePane: View {
                                                        mediaType: .video, position: .unspecified).devices
             if selected.isEmpty { selected = devices.first?.uniqueID ?? "" }
         }
-        .task(id: "\(isActive)-\(hub.liveFeed?.id.uuidString ?? "local")") {
+        .task(id: "\(isActive)-\(hub.liveFeed?.id.uuidString ?? "local")-\(hub.liveFeedReloadToken.uuidString)") {
             if isActive, hub.liveFeed != nil { live.stop(); await hub.loadLiveFeed() }
         }
         .onChange(of: isActive) { _, active in if !active { live.pause() } }
