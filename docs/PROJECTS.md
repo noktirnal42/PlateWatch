@@ -291,7 +291,10 @@ tests must stay green before its status advances.
   uses the same content-addressed idempotency digest as `OutboxDrainer`, and is covered by four standard-library fixture tests.
 - The first Android target now builds a read-only public-sightings client against `/v1/sightings`, with an explicit mirror
   endpoint, DTO parsing, and an empty-state/error surface. It requests no plates, crops, raw frames, or exact coordinates;
-  ONNX capture inference is deliberately still open pending a licensed model and measured device benchmark.
+  ONNX capture inference is deliberately still open pending a licensed model and measured device benchmark. The Android
+  client now remembers the mirror URL, distinguishes connecting/connected/unavailable states, and re-enables the same
+  Refresh action after a failed request so a transient backend outage is recoverable in place. Offline `assembleDebug`
+  passed on 2026-10-17; no Android emulator or physical-device run was available.
 - **Next:** credentialed CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
