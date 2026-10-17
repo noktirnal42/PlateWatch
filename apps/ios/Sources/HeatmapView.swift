@@ -14,6 +14,7 @@ struct HeatmapView: View {
     @State private var agencies: [PlateSync.PublicAgencyDTO] = []
     @State private var selectedAgencyID: UUID?
     @State private var errorText: String?
+    @State private var backendStatus = "Not checked"
     @State private var loading = false
 
     var body: some View {
@@ -123,6 +124,14 @@ struct HeatmapView: View {
             .navigationTitle("Explore")
             .refreshable { await load() }
             .task { await load() }
+            .safeAreaInset(edge: .bottom) {
+                Label(backendStatus, systemImage: backendStatus.localizedCaseInsensitiveContains("Connected") ? "checkmark.circle" : "network.slash")
+                    .font(.caption)
+                    .foregroundStyle(backendStatus.localizedCaseInsensitiveContains("Connected") ? .green : .secondary)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity)
+                    .background(.bar)
+            }
         }
     }
 
@@ -166,12 +175,14 @@ struct HeatmapView: View {
         errorText = nil
         do {
             aggregate = try await backend.heatmap(since: nil, until: nil, agencyID: selectedAgencyID)
+            backendStatus = "Connected · public aggregate readable"
         } catch {
             if case SyncError.unsupported = error {
                 errorText = "This backend does not publish agency-scoped aggregates yet. Choose All agencies or use the REST mirror."
             } else {
                 errorText = "Public activity couldn’t be loaded right now. Pull to refresh, or check your connection."
             }
+            backendStatus = await BackendDiagnostics.status(for: backend)
         }
     }
 }

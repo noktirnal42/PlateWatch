@@ -15,6 +15,7 @@ struct SightingsListView: View {
     @State private var errorText: String?
     @State private var publicSightings: [PublicSightingDTO] = []
     @State private var publicError: String?
+    @State private var backendStatus = "Not checked"
     @State private var loadingPublic = false
 
     var body: some View {
@@ -60,7 +61,11 @@ struct SightingsListView: View {
                 } header: {
                     Text("Public feed · \(publicSightings.count)")
                 } footer: {
-                    Text("Only moderator-published fleet sightings appear here. Plates and exact locations are withheld from this mobile list.")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Only moderator-published fleet sightings appear here. Plates and exact locations are withheld from this mobile list.")
+                        Label(backendStatus, systemImage: backendStatus.localizedCaseInsensitiveContains("Connected") ? "checkmark.circle" : "network.slash")
+                            .foregroundStyle(backendStatus.localizedCaseInsensitiveContains("Connected") ? .green : .secondary)
+                    }
                 }
                 Section {
                     if receipts.isEmpty {
@@ -103,9 +108,11 @@ struct SightingsListView: View {
         do {
             let delta = try await backend.pullSightings(since: nil)
             publicSightings = Array(delta.sightings.prefix(100))
+            backendStatus = "Connected · public feed readable"
         } catch {
             publicSightings = []
             publicError = "Public sightings could not be loaded. Check the connection in About."
+            backendStatus = await BackendDiagnostics.status(for: backend)
         }
     }
 }
