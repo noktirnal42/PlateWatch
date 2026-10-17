@@ -50,8 +50,9 @@ public struct CourtDocket: Sendable, Hashable, Codable {
 }
 
 /// Free Law Project's CourtListener / RECAP archive (free; an API token is optional and raises limits).
-/// Endpoint shape from the public v4 API docs — **UNVERIFIED against the live service in this repo's tests**; the
-/// parser is tolerant of missing fields and the fetch path is exercised only by a fake in unit tests.
+/// Endpoint shape from the public v4 API. The normal test suite uses a fake
+/// transport; `PLATEWATCH_LIVE_COURTLISTENER=1` enables a bounded live smoke
+/// test when an operator wants to verify the current service contract.
 public struct CourtListenerClient: Sendable {
     public static let searchURL = URL(string: "https://www.courtlistener.com/api/rest/v4/search/")!
     private let fetcher: HTTPFetching

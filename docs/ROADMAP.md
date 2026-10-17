@@ -108,7 +108,8 @@ first.
   citation enforcement (no record without `SourceCitation`)
 - ⬜ Roster/assignment importers extended to person-level records
 - 🟡 Brady/decertification register (CSV) + lawsuit docket (CourtListener, PACER with a dollar budget) importers — built,
-  verbatim, cited, pending-until-accepted; live CourtListener/PACER endpoints not yet exercised
+  verbatim, cited, pending-until-accepted; the opt-in CourtListener live smoke test passed on 2026-10-16, while
+  PACER still requires the owner's account and remains unexercised
 - 🟡 Cross-reference chain: unit → confirmed link → official → records, location-free, shown in Hub Review — built;
   operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; second-person
   moderation and any publication path are not. Moderator audit entries carry a non-reversible reviewer fingerprint,

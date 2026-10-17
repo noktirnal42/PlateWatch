@@ -174,6 +174,15 @@ final class CourtTests: XCTestCase {
         XCTAssertThrowsError(try CourtListenerClient.parse(Data("[]".utf8)))
     }
 
+    func testLiveCourtListenerSmokeWhenOptedIn() async throws {
+        guard ProcessInfo.processInfo.environment["PLATEWATCH_LIVE_COURTLISTENER"] == "1" else {
+            throw XCTSkip("Opt-in live CourtListener smoke test")
+        }
+        let dockets = try await CourtListenerClient().search(query: "police", page: 1)
+        XCTAssertFalse(dockets.isEmpty, "The public endpoint should return at least one docket for a broad query")
+        XCTAssertTrue(dockets.allSatisfy { !$0.docketNumber.isEmpty })
+    }
+
     private let day = Date(timeIntervalSince1970: 1_791_000_000)   // 2026-Q4
 
     func testPacerStaysFreeThenRefusesUnlessTheLimitIsRaised() {
