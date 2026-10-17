@@ -36,6 +36,13 @@ final class WatchPresenceCoordinator {
         Task { try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).release(sessionID: id) }
     }
 
+    /// Request an immediate aggregate refresh for the visible watch surface.
+    /// This is intentionally the same heartbeat used by the background loop;
+    /// it does not send frames, plates, locations, or evidence.
+    func refreshNow() async {
+        await heartbeat()
+    }
+
     private func heartbeat() async {
         let payload = PresenceHeartbeat(sessionID: sessionID, platform: "watchOS",
                                         feedIDs: [], activeProcessing: false)

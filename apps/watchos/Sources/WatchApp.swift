@@ -73,6 +73,7 @@ struct WatchRootView: View {
 
 private struct WatchStatsView: View {
     @State private var stats = WatchComplicationStore.liveStats()
+    @State private var isRefreshing = false
     @Environment(\.scenePhase) private var scenePhase
     private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -85,6 +86,22 @@ private struct WatchStatsView: View {
             statRow("Public feed frames", value: stats.publicFeedFrames.map(String.init) ?? "—", icon: "antenna.radiowaves.left.and.right")
             statRow("Skipped while busy", value: stats.skippedWhileBusy.map(String.init) ?? "—", icon: "pause.circle")
             statRow("Outbox pending", value: stats.outboxPending.map(String.init) ?? "—", icon: "tray.and.arrow.up")
+            Button {
+                guard !isRefreshing else { return }
+                isRefreshing = true
+                Task {
+                    await WatchPresenceCoordinator.shared.refreshNow()
+                    refresh()
+                    isRefreshing = false
+                }
+            } label: {
+                Label(isRefreshing ? "Refreshing…" : "Refresh live stats",
+                      systemImage: isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isRefreshing)
+            .accessibilityHint("Requests the latest aggregate counters from the Hub")
             HStack(spacing: 5) {
                 Circle()
                     .fill(freshnessColor)
