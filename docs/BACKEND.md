@@ -90,12 +90,14 @@ single host. "Librarians, not gatekeepers."
 The repository includes a reproducible multi-stage image for the REST mirror:
 
 ```bash
-docker build -t platewatch-server ./server
-docker run --rm --env DATABASE_URL='postgres://…?sslmode=require' \
-  -p 8083:8083 platewatch-server
+docker compose -f server/docker-compose.yml up --build
 ```
 
-The image binds `0.0.0.0:8083` and starts with Vapor's `serve` command. Put it
+The Compose stack starts Postgres first, waits for its health check, then builds
+and starts the reference server on `0.0.0.0:8083`. For a single-container
+deployment, `docker build -t platewatch-server ./server` and `docker run --rm
+--env DATABASE_URL='postgres://…?sslmode=require' -p 8083:8083 platewatch-server`
+remain supported. Put the image
 behind a TLS reverse proxy and provide a managed Postgres URL before exposing
 it publicly; building the image does not deploy it or enable CloudKit mirroring.
 

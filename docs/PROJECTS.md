@@ -237,12 +237,12 @@ tests must stay green before its status advances.
 - **Owns:** `packages/PlateSync`, `server/`, `cloudkit/`, REST protocol.
 - **Docs:** BACKEND, NEXT-STEPS §1, DECISIONS.
 - **Test:** `swift test --package-path packages/PlateSync` &&
-  `swift test --package-path server` (33 PlateSync + 57 server tests, no database needed).
+  `swift test --package-path server` (33 PlateSync + 58 server tests, no database needed).
 - **Status:** 2026-10-15 production schema export confirms deployment and creator-only
   submission roles. Hub capability and read-only connection diagnostics added; REST fallback
   port now matches server 8083. Signed installed Hub account access and native REST moderation
   refresh/reconnect verified; local per-user reference service restored. REST submissions now strip
-  thumbnail bytes and reapply plate/location privacy (33 PlateSync tests, 57 server tests pass).
+  thumbnail bytes and reapply plate/location privacy (33 PlateSync tests, 58 server tests pass).
   Hub automatic queue delivery and CloudKit publication remain
   unfinished; schema deployment alone does not prove either. Receipts now carry optional idempotency and
   operator-confirmation metadata for audit surfaces. Intake and moderator state transitions now append
@@ -258,6 +258,9 @@ tests must stay green before its status advances.
   was built successfully as `platewatch-server:qa` on 2026-10-16, and the server suite
   passed 56 tests with zero failures. Running the image against a production database
   and deploying it remain external gates.
+  `server/docker-compose.yml` now starts the server after Postgres health checks;
+  `docker compose config --quiet` validates the stack locally. A Docker daemon was not
+  available in this session, so no new image build claim is made.
 - CloudKit record-name identity is now deterministic across launches (SHA-256
   UUID derivation); receipt and delta reconciliation no longer depends on Swift's
   randomized `Hasher` seed. Hyphenated idempotency keys now preserve their full
