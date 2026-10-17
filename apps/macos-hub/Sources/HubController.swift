@@ -441,6 +441,20 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
                 previewFailure = error.localizedDescription
                 liveFeedStatus = previewFailure ?? "Video unavailable"
+                // NV511 occasionally keeps an HLS route in its catalogue after
+                // the media host retires it. The same camera normally still
+                // publishes a snapshot view; use that view as an explicit,
+                // policy-checked fallback rather than leaving Live blank.
+                if let snapshot = pairedSnapshot(for: source) {
+                    do {
+                        let data = try await feedRunner.fetchPreview(of: snapshot)
+                        guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                        await analyseFeedFrame(data, from: snapshot)
+                        liveFeedStatus = "HLS unavailable · showing paired snapshot · refreshed at the camera's interval"
+                    } catch {
+                        liveFeedStatus = "Video unavailable: \(previewFailure ?? error.localizedDescription)"
+                    }
+                }
             }
             while !Task.isCancelled, liveFeed?.id == source.id {
                 // Preserve a bounded preview failure in the UI. Previously the
@@ -463,6 +477,17 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 guard let delay = (error as? FeedRunner.PreviewError)?.policyRetryDelay else { return }
                 do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             }
+        }
+    }
+
+    /// NV511 publishes one snapshot and one HLS view for many cameras. Match
+    /// them by their stable human-readable name while preserving the HLS
+    /// source as the selected Live identity.
+    private func pairedSnapshot(for source: PublicFeedSource) -> PublicFeedSource? {
+        guard source.kind == .hls else { return nil }
+        let base = source.name.replacingOccurrences(of: " · HLS", with: "")
+        return activeFeedSources.values.first {
+            $0.kind == .snapshotJPEG && $0.name == "\(base) · Snapshot" && $0.mayBeAnalysed
         }
     }
 
@@ -533,7 +558,9 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
                                        mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
-        if liveFeed?.id == source.id,
+        let displaysInLive = liveFeed?.id == source.id
+            || (liveFeed.flatMap { pairedSnapshot(for: $0)?.id } == source.id)
+        if displaysInLive,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
             liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
             liveFeedStatus = "Background analysis · refreshed at the camera's interval"

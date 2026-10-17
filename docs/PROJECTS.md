@@ -71,6 +71,8 @@ tests must stay green before its status advances.
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
   HLS Live now bounds a selected decoder attempt to 15 seconds and exposes a Retry action that tears down
   the stale player before restarting it; this makes provider segment failures visible and recoverable.
+  NV511 refreshes now merge the current keyed catalogue, and a retired HLS route can fall back to its paired
+  approved snapshot view in Live with an explicit status, preserving a usable camera while the provider repairs video.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
   readable SUV/van/pickup/sedan/motorbike aliases and classifier confidence when a body label is unavailable).
   iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared
