@@ -6,7 +6,7 @@ struct ModerationPane: View {
     @StateObject private var store = ModerationStore()
     @State private var selection: ModerationClient.Item.ID?
     @State private var takedownSelection: ModerationClient.Takedown.ID?
-    @State private var tab = 0
+    @AppStorage("hubModeration_tab") private var tab = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

@@ -28,7 +28,7 @@ struct ReviewPane: View {
     @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var selection: Set<PersistentIdentifier> = []
     @State private var discardError = ""
-    @State private var showDeliveryHistory = true
+    @AppStorage("hubReview_showDeliveryHistory") private var showDeliveryHistory = true
     @State private var recoveringReceipts = false
     @State private var sendingCloudKit = false
     @State private var publishingCloudKit = false
