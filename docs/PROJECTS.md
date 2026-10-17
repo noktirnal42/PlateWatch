@@ -142,6 +142,8 @@ tests must stay green before its status advances.
   A deterministic coarse RGB crop cue now fills a low-risk vehicle colour attribute for generic detections;
   it is deliberately excluded from fleet scoring and does not claim make/model recognition (39 VehicleML
   tests, one local-image opt-in skip).
+  Hub Live now includes that colour alongside the readable body class in each overlay, while retaining the
+  fleet label and score as separate fields (50 Hub tests, four opt-in skips).
 - **Next:** grow the ground-truth `plate` corpus (USA, licensed, challenging
   low-contrast examples); improve the Vision baseline with a trained OCR model,
   make/model/color classifier (Create ML GUI path); fleet-specific

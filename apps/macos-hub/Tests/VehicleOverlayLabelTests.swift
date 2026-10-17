@@ -10,6 +10,12 @@ final class VehicleOverlayLabelTests: XCTestCase {
             XCTAssertFalse(vehicle.vehicleClass.isFleet)
         }
     }
+
+    func testColorIsReadableWithoutChangingFleetStatus() {
+        let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1),
+                                          attributes: .init(color: "blue", bodyType: "suv"))
+        XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "Blue SUV")
+    }
     func testFleetLabelSeparatesBodyTypeAndFleetScore() {
         let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1),
             vehicleClass: .patrol, attributes: .init(bodyType: "car"))
