@@ -24,6 +24,11 @@ struct ModerationPane: View {
                 Text("Moderation server: \(server.absoluteString) · REST, separate from CloudKit")
                     .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
+            Label("Server health: \(store.serverStatus)",
+                  systemImage: store.serverStatus == "Reachable" ? "checkmark.circle.fill" : "network.slash")
+                .font(.caption)
+                .foregroundStyle(store.serverStatus == "Reachable" ? Color.green : Color.orange)
+                .accessibilityElement(children: .combine)
             if let error = activeError { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
             if let actionError = store.actionError { Text(actionError).foregroundStyle(.red) }
             if tab == 2 { auditView } else if tab == 1 { takedownView } else { sightingsView }

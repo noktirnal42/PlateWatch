@@ -11,6 +11,7 @@ final class ModerationStore: ObservableObject {
     @Published private(set) var takedownError: String?
     @Published private(set) var auditError: String?
     @Published private(set) var actionError: String?
+    @Published private(set) var serverStatus = "Not checked"
     @Published private(set) var busy = false
     @Published private(set) var lastLoadedAt: Date?
     private var client: ModerationClient?
@@ -28,15 +29,27 @@ final class ModerationStore: ObservableObject {
         guard let client else {
             let message = ModerationClient.ClientError.notEnrolled.localizedDescription
             queueError = message; auditError = message; takedownError = message
+            serverStatus = "Not enrolled"
             return
         }
         busy = true
         defer { busy = false }
+        async let h: Void = loadHealth(client)
         async let q: Void = loadQueue(client)
         async let t: Void = loadTakedowns(client)
         async let a: Void = loadAudit(client)
-        _ = await (q, t, a)
+        _ = await (h, q, t, a)
         if !Task.isCancelled { lastLoadedAt = Date() }
+    }
+
+    private func loadHealth(_ client: ModerationClient) async {
+        do {
+            try await client.health()
+            guard !Task.isCancelled else { return }
+            serverStatus = "Reachable"
+        } catch {
+            if !Task.isCancelled { serverStatus = "Offline · (error.localizedDescription)" }
+        }
     }
 
     private func loadQueue(_ client: ModerationClient) async {

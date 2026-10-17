@@ -92,6 +92,16 @@ struct ModerationClient: Sendable {
         return try Self.decoder().decode([Item].self, from: data)
     }
 
+    func health() async throws {
+        var request = URLRequest(url: baseURL.appending(path: "health"))
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (_, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw ClientError.http((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
     struct Takedown: Decodable, Identifiable, Sendable {
         let id: UUID
         let createdAt: Date?

@@ -63,6 +63,8 @@ tests must stay green before its status advances.
   HLS decodes on demand for the selected Live camera; ordinary previews use the bounded live decoder.
   The dashboard now distinguishes live presence from an unavailable presence service and reports that
   local feed processing continues instead of showing stale active-session counts.
+  Moderation now probes the reference server's unauthenticated health endpoint separately from the
+  moderator queue, so server outages and expired moderator credentials are shown as different states.
   Review multi-rejection/enlargement and pane persistence repaired; original eight queued records
   preserved (their payloads lacked image bytes before this repair). Snapshot failures, policy failures
   and manual recovery are distinct. OpenCode watch controls reconciled: persisted selective polling,
