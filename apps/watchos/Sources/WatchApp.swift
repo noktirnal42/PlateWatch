@@ -6,14 +6,14 @@ import WatchKit
 
 @main
 struct PlateWatchWatchApp: App {
-    @WKExtensionDelegateAdaptor(WatchExtensionDelegate.self) private var delegate
+    @WKApplicationDelegateAdaptor(WatchExtensionDelegate.self) private var delegate
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             WatchRootView(delegate: delegate)
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { _, phase in
             if phase == .active { WatchPresenceCoordinator.shared.start() }
             else { WatchPresenceCoordinator.shared.stop() }
         }

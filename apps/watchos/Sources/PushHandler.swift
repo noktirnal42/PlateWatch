@@ -10,7 +10,7 @@ import WatchConnectivity
 /// `CKQuerySubscription` on fleet-confirmed sightings; the system wakes this
 /// extension with a background push, we pull the newest delta, match it
 /// against the mirrored watchlist plates, and fire a haptic for hits.
-final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDelegate, WCSessionDelegate {
+final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDelegate, WCSessionDelegate {
 
     /// Recent watchlist hits, surfaced by the root view.
     @Published private(set) var hits: [WatchHit] = []
@@ -46,7 +46,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
 
     /// watchOS silent-push entry point.
     func didReceiveRemoteNotification(_ remoteNotification: [AnyHashable: Any],
-                                      withCompletion completionHandler: @escaping (WKBackgroundFetchResult) -> Void) {
+                                      fetchCompletionHandler completionHandler: @escaping (WKBackgroundFetchResult) -> Void) {
         Task {
             await evaluateNewest()
             completionHandler(self.hits.isEmpty ? .noData : .newData)
