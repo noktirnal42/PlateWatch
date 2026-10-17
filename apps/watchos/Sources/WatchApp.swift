@@ -84,7 +84,12 @@ private struct WatchStatsView: View {
             statRow("Public feed frames", value: stats.publicFeedFrames.map(String.init) ?? "—", icon: "antenna.radiowaves.left.and.right")
             statRow("Skipped while busy", value: stats.skippedWhileBusy.map(String.init) ?? "—", icon: "pause.circle")
             statRow("Outbox pending", value: stats.outboxPending.map(String.init) ?? "—", icon: "tray.and.arrow.up")
-            Text(stats.updatedAt.map { "Updated \($0, format: .dateTime.hour().minute().second())" } ?? "Waiting for Hub stats")
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(freshnessColor)
+                    .frame(width: 6, height: 6)
+                Text(freshnessLabel)
+            }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -99,6 +104,19 @@ private struct WatchStatsView: View {
             Spacer(minLength: 4)
             Text(value).font(.headline.monospacedDigit())
         }
+    }
+
+    private var freshnessLabel: String {
+        guard let updatedAt = stats.updatedAt else { return "Waiting for Hub stats" }
+        let age = max(0, Date.now.timeIntervalSince(updatedAt))
+        let time = DateFormatter.localizedString(from: updatedAt, dateStyle: .none, timeStyle: .short)
+        if age > 90 { return "Hub stats stale · updated \(time)" }
+        return "Live · updated \(time)"
+    }
+
+    private var freshnessColor: Color {
+        guard let updatedAt = stats.updatedAt else { return .secondary }
+        return Date.now.timeIntervalSince(updatedAt) > 90 ? .orange : .green
     }
 }
 
