@@ -370,7 +370,9 @@ struct WatchlistView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     Toggle("This is a publicly funded fleet vehicle", isOn: $fleetAttested)
-                        .font(.subheadline).accessibilityIdentifier("fleet-attestation")
+                        .font(.subheadline)
+                        .accessibilityHint("Turn this on only when the vehicle is publicly funded")
+                        .accessibilityIdentifier("fleet-attestation")
                     Button(action: add) {
                         Label("Add to watchlist", systemImage: "plus.circle.fill").frame(maxWidth: .infinity)
                     }

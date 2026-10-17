@@ -98,7 +98,10 @@ final class ReviewFlowTests: XCTestCase {
         field.typeText("GOV123")
         dismissWatchlistKeyboard(app)
         let attestation = app.switches["fleet-attestation"]
-        if !attestation.isHittable { app.swipeUp() }
+        // Large Dynamic Type can leave the toggle below the first viewport
+        // after keyboard dismissal. Scroll only as far as needed, with a
+        // bounded loop so the test exercises the real accessibility path.
+        for _ in 0..<4 where !attestation.isHittable { app.swipeUp() }
         XCTAssertTrue(attestation.isHittable)
         capture("ios-watchlist-dark-large-text-controls", app)
     }
