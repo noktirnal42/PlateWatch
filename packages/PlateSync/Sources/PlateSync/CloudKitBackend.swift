@@ -63,7 +63,25 @@ public struct CloudKitBackend: SyncBackend {
     /// remove only the known prefix; splitting on every hyphen would silently
     /// change the public ID used to reconcile receipts and deltas.
     static func idempotencyKey(fromRecordName name: String) -> String {
-        name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+        if name.hasPrefix("submission-") {
+            // New creator-owned records are scoped by a one-way device hash so
+            // equal content from two accounts cannot collide in the public DB.
+            // The content key remains the suffix and therefore stays stable
+            // for local retries on the same device.
+            let parts = name.split(separator: "-", maxSplits: 2, omittingEmptySubsequences: true)
+            if parts.count == 3 { return String(parts[2]) }
+        }
+        return name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+    }
+
+    /// Creator-owned CloudKit records need an owner scope even in the public
+    /// database. CloudKit creator ACLs control reads, but record IDs are still
+    /// global; without this prefix two accounts submitting the same content
+    /// hash would race on one record.
+    static func submissionRecordName(deviceIDHash: String, idempotencyKey: String) -> String {
+        let scope = SHA256.hash(data: Data(deviceIDHash.utf8)).prefix(8)
+            .map { String(format: "%02x", $0) }.joined()
+        return "submission-\(scope)-\(idempotencyKey)"
     }
 
     // MARK: - Schema mapping (mirrors docs/DATA-MODEL.md)
@@ -157,7 +175,8 @@ public struct CloudKitBackend: SyncBackend {
     public func submit(_ sighting: SightingSubmissionDTO,
                        idempotencyKey: String) async throws -> SubmissionReceipt {
         // Default zone: the public database supports no custom zones.
-        let recordID = CKRecord.ID(recordName: "sighting-\(idempotencyKey)")
+        let recordID = CKRecord.ID(recordName: Self.submissionRecordName(
+            deviceIDHash: sighting.deviceIDHash, idempotencyKey: idempotencyKey))
         // Same stable derivation pullSightings uses, so the receipt ID
         // matches the record even on idempotent replays.
         let stableID = Self.uuid(fromRecordName: idempotencyKey)

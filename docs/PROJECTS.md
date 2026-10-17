@@ -250,6 +250,9 @@ tests must stay green before its status advances.
 - CloudKit history recovery now follows every query cursor instead of stopping
   at the first 200 creator-owned submissions, so older receipts and pending
   handoffs remain recoverable after a large sync backlog.
+- Creator-owned submission IDs are now scoped by a one-way device hash, so equal
+  content from separate accounts cannot collide before creator ACLs apply while
+  the content idempotency suffix remains stable for local retries.
 - The moderator publication boundary is now a tested `Sighting` record builder:
   it requires confirmation plus fleet evidence and strips creator-only device
   and review fields. `CloudKitBackend.publish(_:)` now performs the guarded

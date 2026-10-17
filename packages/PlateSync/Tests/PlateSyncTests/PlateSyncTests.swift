@@ -150,6 +150,15 @@ final class CloudKitPrivacyTests: XCTestCase {
                        CloudKitBackend.uuid(fromRecordName: key))
     }
 
+    func testCreatorSubmissionRecordNamesAreOwnerScoped() {
+        let key = "sha256-0123-abcdef"
+        let first = CloudKitBackend.submissionRecordName(deviceIDHash: "account-a", idempotencyKey: key)
+        let second = CloudKitBackend.submissionRecordName(deviceIDHash: "account-b", idempotencyKey: key)
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(CloudKitBackend.idempotencyKey(fromRecordName: first), key)
+        XCTAssertEqual(CloudKitBackend.idempotencyKey(fromRecordName: second), key)
+    }
+
     func testOwnedSubmissionReconstructionCarriesModerationFieldsOnly() {
         let record = CKRecord(recordType: "SightingSubmission",
                               recordID: CKRecord.ID(recordName: "sighting-recovery-key"))
