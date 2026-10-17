@@ -44,6 +44,8 @@ tests must stay green before its status advances.
   entitlement and physical-device push delivery remain external QA gates.
   The phone now mirrors its normalized local watchlist to the companion watch
   through WatchConnectivity; pairing and push delivery remain physical-device gates.
+  iOS capture now stages cached vehicle/plate detectors before the optional vehicle-type artifact,
+  matching Hub behavior when the registry or classifier is unavailable.
   The watch root observes its extension delegate directly, so push-delivered hits and unread counts
   update in the visible Recent fleet hits list as well as the complication.
   The watch now also presents the Hub dashboard's aggregate counters in a compact Live stats section.
