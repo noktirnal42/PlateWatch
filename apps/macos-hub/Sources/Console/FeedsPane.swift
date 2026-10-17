@@ -253,7 +253,15 @@ struct FeedsPane: View {
                     FeedBlockButton(hub: hub, preferences: favorites, source: s)
                 }.width(28)
                 TableColumn("Watch") { source in
-                    FeedWatchButton(hub: hub, favorites: favorites, source: source)
+                    VStack(spacing: 2) {
+                        FeedWatchButton(hub: hub, favorites: favorites, source: source)
+                        if let count = hub.processorCount(for: source.id), count > 0 {
+                            Label("\(count)", systemImage: "person.2")
+                                .font(.caption2.monospacedDigit()).foregroundStyle(.tint)
+                                .help("\(count) active processing console(s) selected this feed")
+                                .accessibilityLabel("\(count) active processing console(s) selected this feed")
+                        }
+                    }
                 }.width(42)
                 TableColumn("Camera / source") { source in
                     VStack(alignment: .leading, spacing: 3) {

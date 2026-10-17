@@ -184,3 +184,24 @@ final class AgencyReportDTOTests: XCTestCase {
         XCTAssertEqual(decoded, report)
     }
 }
+
+final class PresenceDTOTests: XCTestCase {
+    func testPresenceAggregateRoundTrips() throws {
+        let feed = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let value = PresenceAggregate(activeSessions: 2, activeProcessors: 1,
+                                      processorsByFeed: [feed: 1],
+                                      generatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let data = try JSONEncoder().encode(value)
+        let decoded = try JSONDecoder().decode(PresenceAggregate.self, from: data)
+        XCTAssertEqual(decoded, value)
+    }
+
+    func testHeartbeatPreservesOnlyFeedDemandFields() throws {
+        let value = PresenceHeartbeat(sessionID: "install-session-123456",
+                                      platform: "macOS-hub",
+                                      feedIDs: [UUID()], activeProcessing: true)
+        let decoded = try JSONDecoder().decode(PresenceHeartbeat.self,
+                                                from: JSONEncoder().encode(value))
+        XCTAssertEqual(decoded, value)
+    }
+}

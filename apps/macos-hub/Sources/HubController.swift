@@ -27,6 +27,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var snapshotPort: UInt16 = 0
     @Published private(set) var rtspServerStatus = "Stopped"
     @Published private(set) var rtspStreams: [String: RTSPStreamStatus] = [:]
+    @Published private(set) var presenceAggregate = PresenceAggregate()
 
     private let pipeline = PlateAnalysisPipeline()
     /// Detector models (plate / vehicle) hot-swap in here as they install; empty = baseline Vision.
@@ -49,6 +50,8 @@ final class HubController: ObservableObject, ReviewHubProviding {
     private let fileSource = FileFrameSource()
     private let gate = RedactionGate(config: .standard)
     private var watchDescriptor: DispatchSourceFileSystemObject?
+    private var presenceTask: Task<Void, Never>?
+    private let presenceSessionID: String
 
     var agentBridge: HubAgentBridge?
     private var modelContext: ModelContext?
@@ -79,6 +82,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
         self.modelContext = context
+        if let saved = UserDefaults.standard.string(forKey: "hubPresenceSessionID") {
+            self.presenceSessionID = saved
+        } else {
+            let created = UUID().uuidString.lowercased()
+            UserDefaults.standard.set(created, forKey: "hubPresenceSessionID")
+            self.presenceSessionID = created
+        }
         self.homeGeohash6 = UserDefaults.standard.string(forKey: "hubGeohash6") ?? ""   // not only once the menu opens
         self.platesAllowed = Self.platesAllowed(forGeohash6: homeGeohash6)
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -87,11 +97,12 @@ final class HubController: ObservableObject, ReviewHubProviding {
             registryURL: URL(string: "https://raw.githubusercontent.com/noktirnal42/PlateWatch/main/models/registry.json")!,
             cacheDirectory: support))
         refreshPendingCount()
-        if HubQAFixture.enabled { startFeeds(); return }
+        if HubQAFixture.enabled { startFeeds(); startPresence(); return }
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
         Task { await refreshModels() }
         startFeeds()
+        startPresence()
         #if DEBUG
         if CommandLine.arguments.contains("-PWImportAustin") { Task { await importAustinCameras() } }
         if let index = CommandLine.arguments.firstIndex(of: "-PWImportCatalogues"),
@@ -105,6 +116,59 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
         #endif
         processNewFiles()   // pick up anything dropped while the Hub was not running
+    }
+
+    /// Presence is opt-in and ephemeral. It counts only explicitly watched
+    /// feeds, never passive catalogue browsing or local folder ingestion.
+    var presenceEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "hubPresenceEnabled") }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "hubPresenceEnabled")
+            if newValue { startPresence() } else { stopPresence() }
+        }
+    }
+
+    func processorCount(for feedID: UUID) -> Int? {
+        guard presenceEnabled else { return nil }
+        return presenceAggregate.processorsByFeed[feedID]
+    }
+
+    func refreshPresence() {
+        guard presenceEnabled else { return }
+        Task { [weak self] in await self?.publishPresence() }
+    }
+
+    private func startPresence() {
+        guard presenceEnabled, presenceTask == nil else { return }
+        presenceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.publishPresence()
+                try? await Task.sleep(for: .seconds(45))
+            }
+        }
+    }
+
+    private func stopPresence() {
+        presenceTask?.cancel()
+        presenceTask = nil
+        presenceAggregate = PresenceAggregate()
+        Task { [weak self] in
+            guard let self else { return }
+            try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).release(sessionID: presenceSessionID)
+        }
+    }
+
+    private func publishPresence() async {
+        guard presenceEnabled else { return }
+        let payload = PresenceHeartbeat(sessionID: presenceSessionID,
+                                        platform: "macOS-hub",
+                                        feedIDs: Array(favorites.watchedIDs),
+                                        activeProcessing: !favorites.watchedIDs.isEmpty)
+        do {
+            presenceAggregate = try await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload)
+        } catch {
+            // Feed processing remains local when the optional presence service is offline.
+        }
     }
 
     /// Imports the City of Austin traffic-camera catalogue (Socrata `b4k4-adkb`, listed Public Domain) into `feeds.json`.
@@ -308,6 +372,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// restarting the whole runner.
     private func syncRunnerWatch() {
         feedRunner.setWatched(watchedForRunner)
+        refreshPresence()
     }
 
     /// Toggle background analysis for one camera and apply it immediately.

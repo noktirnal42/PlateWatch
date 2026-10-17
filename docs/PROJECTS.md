@@ -79,6 +79,10 @@ tests must stay green before its status advances.
   recover creator-owned history and explicitly hand it through the REST privacy
   gate into the Moderation queue; automatic mirroring and server-side CloudKit
   publication remain deployment/account gates.
+  The Hub now has an opt-in ephemeral presence lease that reports live processor
+  totals and per-feed demand through the REST boundary; leases expire after 90
+  seconds and are never persisted. iOS/watch clients and hosted deployment
+  remain follow-up gates.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
@@ -141,6 +145,8 @@ tests must stay green before its status advances.
   content-free audit details. Public agency directory/report DTOs and REST routes now cross the shared
   sync boundary, with an iOS directory/detail surface; CloudKit aggregate report delivery remains a
   deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
+  The reference server also exposes the separate ephemeral presence endpoint;
+  it never writes presence into CloudKit sightings or moderation records.
 - CloudKit record-name identity is now deterministic across launches (SHA-256
   UUID derivation); receipt and delta reconciliation no longer depends on Swift's
   randomized `Hasher` seed. Review now exposes bounded delivery history and a

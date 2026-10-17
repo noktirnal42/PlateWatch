@@ -146,6 +146,7 @@ struct DashboardPane: View {
                     Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)", icon: "car.side")
                     Stat(title: "Skipped while busy", value: "\(hub.framesDropped)", icon: "pause.circle")
                     Stat(title: "Outbox pending", value: "\(hub.pendingCount)", icon: "tray.and.arrow.up")
+                    Stat(title: "Live processors", value: hub.presenceEnabled ? "\(hub.presenceAggregate.activeProcessors)" : "Off", icon: "person.2.wave.2")
                 }
                 HStack(spacing: 12) {
                     dashboardAction("Browse cameras", icon: "antenna.radiowaves.left.and.right", pane: "feeds")
@@ -158,6 +159,14 @@ struct DashboardPane: View {
                         LabeledContent("Delivery", value: hub.syncStatus)
                         LabeledContent("Snapshot server", value: hub.snapshotServerStatus)
                         LabeledContent("RTSP streams", value: hub.rtspServerStatus)
+                        LabeledContent("Live demand") {
+                            if hub.presenceEnabled {
+                                Text("\(hub.presenceAggregate.activeProcessors) processors · refreshed ")
+                                + Text(hub.presenceAggregate.generatedAt, style: .time)
+                            } else {
+                                Text("Opt-in in Settings")
+                            }
+                        }
                         LabeledContent("Ingest folder") {
                             Text(hub.ingestFolder.lastPathComponent).help(hub.ingestFolder.path)
                                 .textSelection(.enabled)
@@ -279,6 +288,10 @@ struct SettingsPane: View {
             Section("Hub") {
                 TextField("Preferred snapshot port", value: $port, format: .number.grouping(.never))
                     .onSubmit { Task { await hub.restartSnapshotServer(port: UInt16(clamping: port)) } }
+                Toggle("Share live processing counts", isOn: Binding(get: { hub.presenceEnabled }, set: { hub.presenceEnabled = $0 }))
+                    .onChange(of: hub.presenceEnabled) { _, _ in hub.refreshPresence() }
+                Text("Shares only an anonymous, expiring count of active processing consoles and selected feeds. No plates, frames, names, or history leave this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             if ModeratorAccess.enrollmentOffered || moderator {
                 Section("Moderator") {

@@ -45,6 +45,7 @@ func configure(_ app: Application) async throws {
     try app.register(collection: AgenciesController())
     try app.register(collection: AgencyReportController())
     try app.register(collection: StatsController())
+    try app.register(collection: PresenceController(store: PresenceStore()))
     try app.register(collection: ExportController())
     try app.register(collection: AggregatesController())
     try app.register(collection: TakedownController())
