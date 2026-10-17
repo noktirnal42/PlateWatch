@@ -84,7 +84,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
   - ◐ Accessibility QA and hosted deployment remain open; signed physical watch launch is verified.
 
 ## M5 — Beyond Apple
-- ⬜ REST mirror publicly deployed (Oracle Always Free)
+- ◐ REST mirror container is prepared (`server/Dockerfile` + deployment notes); Oracle Always Free deployment remains open
 - ⬜ Reference Python edge agent (Raspberry Pi HQ cam / OAK-4)
 - ⬜ Android client via shared DTO spec + ONNX models
 - ⬜ Web read-only explorer (Lite: exports; Full: mirror API)
