@@ -199,9 +199,11 @@ tests must stay green before its status advances.
   deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
   The reference server also exposes the separate ephemeral presence endpoint;
   it never writes presence into CloudKit sightings or moderation records.
-  A multi-stage `server/Dockerfile` and deployment notes now package the REST mirror with
-  Swift 6.2 and bind its health/API surface on `0.0.0.0:8083`; the local image build still
-  needs a running Docker/Colima daemon before it can be verified.
+  A multi-stage `server/Dockerfile` and deployment notes package the REST mirror with
+  Swift 6.2 and bind its health/API surface on `0.0.0.0:8083`; the `linux/arm64` image
+  was built successfully as `platewatch-server:qa` on 2026-10-16, and the server suite
+  passed 56 tests with zero failures. Running the image against a production database
+  and deploying it remain external gates.
 - CloudKit record-name identity is now deterministic across launches (SHA-256
   UUID derivation); receipt and delta reconciliation no longer depends on Swift's
   randomized `Hasher` seed. Review now exposes bounded delivery history and a

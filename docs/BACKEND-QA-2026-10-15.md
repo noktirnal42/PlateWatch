@@ -103,3 +103,12 @@ creator-owned submission fields, reconstructs the moderation DTO without crops o
 exact coordinates, and sends each row through `RESTBackend` so its privacy gate
 and idempotency rules run again. It does not delete or mutate CloudKit records and
 is not automatic two-way mirroring.
+
+## REST mirror packaging verification — 2026-10-16
+
+The multi-stage `server/Dockerfile` was built with Colima for `linux/arm64` and
+tagged `platewatch-server:qa` (image digest `sha256:e7d7d838bb8c42d4695809d819bfc582f687cb5b36dbb01faaa70bf728fd605e`).
+The Linux build includes the server test target and uses `swift-crypto` when
+CryptoKit is unavailable. `swift test --package-path server --disable-sandbox`
+passed 56 tests with zero failures. This verifies packaging only; it does not
+prove a production database, CloudKit publication, or two-account isolation.
