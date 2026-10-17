@@ -73,6 +73,7 @@ struct WatchRootView: View {
 
 private struct WatchStatsView: View {
     @State private var stats = WatchComplicationStore.liveStats()
+    @Environment(\.scenePhase) private var scenePhase
     private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -94,7 +95,31 @@ private struct WatchStatsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 3)
-        .onReceive(refreshTimer) { _ in stats = WatchComplicationStore.liveStats() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("watch-live-stats")
+        .accessibilityLabel("Hub live stats")
+        .accessibilityValue(accessibilitySummary)
+        .onReceive(refreshTimer) { _ in refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refresh() }
+        }
+    }
+
+    private func refresh() {
+        stats = WatchComplicationStore.liveStats()
+    }
+
+    private var accessibilitySummary: String {
+        let values = [
+            "Fleet hits today \(stats.fleetHitsToday.map(String.init) ?? "unavailable")",
+            "Active sessions \(stats.activeSessions.map(String.init) ?? "unavailable")",
+            "Live processors \(stats.activeProcessors.map(String.init) ?? "unavailable")",
+            "Frames analysed \(stats.framesAnalyzed.map(String.init) ?? "unavailable")",
+            "Public feed frames \(stats.publicFeedFrames.map(String.init) ?? "unavailable")",
+            "Skipped while busy \(stats.skippedWhileBusy.map(String.init) ?? "unavailable")",
+            "Outbox pending \(stats.outboxPending.map(String.init) ?? "unavailable")"
+        ]
+        return values.joined(separator: ", ")
     }
 
     private func statRow(_ title: String, value: String, icon: String) -> some View {

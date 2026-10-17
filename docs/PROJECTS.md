@@ -49,6 +49,8 @@ tests must stay green before its status advances.
   The watch root observes its extension delegate directly, so push-delivered hits and unread counts
   update in the visible Recent fleet hits list as well as the complication.
   The watch now also presents the Hub dashboard's aggregate counters in a compact Live stats section.
+  The section refreshes when the app returns to the foreground, on its 30-second visible timer,
+  and exposes one stable accessibility surface for device QA.
   Only numeric processing/presence totals cross the ephemeral presence endpoint; frame bytes, plates,
   locations, and evidence remain local. Missing Hub counters render as `—` until a Hub heartbeat arrives;
   a failed heartbeat now clears the cached ephemeral counters so a disconnected watch cannot show stale
