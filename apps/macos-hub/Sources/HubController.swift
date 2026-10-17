@@ -464,6 +464,34 @@ final class HubController: ObservableObject, ReviewHubProviding {
         guard let source = liveFeed else { return }
         if source.kind == .hls {
             feedRunner.setLiveVideoSource(source.id)
+            // NV511 publishes a paired reviewed snapshot for the same stable
+            // camera ID. Fetch it in parallel so Live becomes useful while a
+            // slow or retired HLS route is still inside its bounded attempt.
+            // The snapshot remains subject to the same terms, robots and
+            // analysis gates as every other source.
+            let snapshot = pairedSnapshot(for: source)
+            if snapshot != nil {
+                liveFeedStatus = "HLS connecting · paired snapshot ready"
+            }
+            let pairedSnapshotTask: Task<Void, Never>? = snapshot.map { snapshot in
+                Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                        guard let self, !Task.isCancelled, self.liveFeed?.id == source.id,
+                              self.liveFeedFrame == nil else { return }
+                        let data = try await self.feedRunner.fetchPreview(of: snapshot)
+                        guard !Task.isCancelled, self.liveFeed?.id == source.id,
+                              self.liveFeedFrame == nil else { return }
+                        if await self.analyseFeedFrame(data, from: snapshot) {
+                            self.liveFeedStatus = "HLS connecting · showing paired snapshot"
+                        }
+                    } catch {
+                        // The HLS attempt remains authoritative; its bounded
+                        // error path will report the final provider state.
+                    }
+                }
+            }
+            defer { pairedSnapshotTask?.cancel() }
             // Do not wait for the rotating background decoder to deliver the
             // first frame. Opening a feed is an interactive action, so obtain
             // one bounded preview immediately and put it through the same
@@ -495,7 +523,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 // the media host retires it. The same camera normally still
                 // publishes a snapshot view; use that view as an explicit,
                 // policy-checked fallback rather than leaving Live blank.
-                if previewFailure != nil, let snapshot = pairedSnapshot(for: liveFeed ?? source) {
+                if previewFailure != nil, liveFeedFrame == nil, let snapshot = pairedSnapshot(for: liveFeed ?? source) {
                     liveFeedStatus = "HLS unavailable · trying paired snapshot…"
                     do {
                         let data = try await feedRunner.fetchPreview(of: snapshot)
@@ -509,6 +537,8 @@ final class HubController: ObservableObject, ReviewHubProviding {
                     } catch {
                         liveFeedStatus = "HLS unavailable · paired snapshot failed: \(error.localizedDescription)"
                     }
+                } else if previewFailure != nil, liveFeedFrame != nil {
+                    liveFeedStatus = "HLS unavailable · showing paired snapshot · refreshed at the camera's interval"
                 }
             }
             while !Task.isCancelled, liveFeed?.id == source.id {
@@ -551,9 +581,24 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// source as the selected Live identity.
     private func pairedSnapshot(for source: PublicFeedSource) -> PublicFeedSource? {
         guard source.kind == .hls else { return nil }
-        let base = source.name.replacingOccurrences(of: " · HLS", with: "")
+        let base = source.name
+            .replacingOccurrences(of: " · HLS", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBase = base
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "  ", with: " ")
+            .lowercased()
         return activeFeedSources.values.first {
-            $0.kind == .snapshotJPEG && $0.name == "\(base) · Snapshot" && $0.mayBeAnalysed
+            guard $0.kind == .snapshotJPEG, $0.mayBeAnalysed else { return false }
+            let normalizedName = $0.name
+                .replacingOccurrences(of: " · Snapshot", with: "")
+                .replacingOccurrences(of: "–", with: "-")
+                .replacingOccurrences(of: "—", with: "-")
+                .replacingOccurrences(of: "  ", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return normalizedName == normalizedBase
         }
     }
 

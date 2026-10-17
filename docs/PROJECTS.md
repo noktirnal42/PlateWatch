@@ -105,7 +105,9 @@ tests must stay green before its status advances.
   the stale player before restarting it; this makes provider segment failures visible and recoverable.
   NV511 refreshes now merge the current keyed catalogue; a failed Live preview performs one five-minute-cooldown
   route refresh and retries the stable camera ID before falling back to its paired approved snapshot view, with an
-  explicit status preserving a usable camera while the provider repairs video.
+  explicit status preserving a usable camera while the provider repairs video. Live now starts that paired snapshot
+  fetch in parallel with the bounded HLS attempt and normalizes camera names across catalogue punctuation, so a
+  usable approved image appears during slow decoder recovery instead of leaving the pane blank.
   The feed browser now exposes an explicit Watch NV511 action for all confirmed Nevada sources; snapshots remain
   host-throttled and HLS stays within the rotating four-stream budget.
   Feed status now reports active versus queued HLS rotation explicitly, so queued NV511 cameras are not mistaken
