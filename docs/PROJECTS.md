@@ -45,18 +45,23 @@ tests must stay green before its status advances.
   through WatchConnectivity; pairing and push delivery remain physical-device gates.
   The watch root observes its extension delegate directly, so push-delivered hits and unread counts
   update in the visible Recent fleet hits list as well as the complication.
-  2026-10-16 device pass: the current signed iOS build installed and launched on the connected iPhone;
+  2026-10-17 wireless device pass: the current signed iOS and watchOS builds installed on the paired
+  iPhone 16 Pro Max and Apple Watch Series 9. The watch companion launched and its Recent fleet hits /
+  Quick log surface rendered; the iPhone remained locked when devicectl attempted foreground launch, so
+  its installed-app foreground screenshot is pending an unlock. The current signed iOS build installed
+  and launched on the connected iPhone;
   portrait and landscape captures show the controls and overlay canvas rotating together. The current
   watchOS build installs and signs on the connected watch, but a direct device launch returns to the
   watch face instead of keeping the companion foregrounded; manual wrist launch remains the next watch
   QA gate.
   iOS Live overlays now use the same neutral-label rules as Hub: unknown vehicles no longer display a
   misleading 0% class score, and a coarse colour cue is shown when available. The simulator UI suite
-  passes all seven review/watchlist tests after this change.
+  passes all seven review/watchlist tests after this change; the two keyboard-sensitive tests were rerun
+  on 2026-10-17 and passed 2/2. Xcode still hangs in post-test cleanup after reporting the successful
+  result, so the cleanup symptom is tracked separately from the product test result.
   The overlay is now one VoiceOver element with a per-vehicle spoken summary (body class, colour, fleet label
   and confidence where available), plus a stable accessibility identifier for UI audits. The watchlist now
-  provides an explicit keyboard-toolbar Done action; the non-UI iOS suite passes 7/7, while a clean rerun
-  of the two affected UI tests remains pending after CoreSimulator entered its diagnostic hang.
+  provides an explicit keyboard-toolbar Done action; the non-UI iOS suite passes 7/7.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
