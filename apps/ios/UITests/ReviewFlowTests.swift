@@ -37,12 +37,12 @@ final class ReviewFlowTests: XCTestCase {
         capture("ios-watchlist", app)
         let field = app.textFields["fleet-plate-input"]
         field.tap(); field.typeText("demo1")
-        app.keyboards.buttons["done"].tap()
+        dismissWatchlistKeyboard(app)
         XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
         field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + "GOV123")
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
-        app.keyboards.buttons["done"].tap()
+        dismissWatchlistKeyboard(app)
         XCTAssertEqual(field.value as? String, "GOV123")
         app.switches["fleet-attestation"].coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["Add to watchlist"].isEnabled)
@@ -96,7 +96,7 @@ final class ReviewFlowTests: XCTestCase {
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 3))
         field.typeText("GOV123")
-        app.keyboards.buttons["done"].tap()
+        dismissWatchlistKeyboard(app)
         let attestation = app.switches["fleet-attestation"]
         if !attestation.isHittable { app.swipeUp() }
         XCTAssertTrue(attestation.isHittable)
@@ -116,5 +116,16 @@ final class ReviewFlowTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor private func dismissWatchlistKeyboard(_ app: XCUIApplication) {
+        let toolbarDone = app.buttons["watchlist-keyboard-done"]
+        if toolbarDone.waitForExistence(timeout: 2) && toolbarDone.isHittable {
+            toolbarDone.tap()
+        } else {
+            let keyboardDone = app.keyboards.buttons["done"]
+            XCTAssertTrue(keyboardDone.waitForExistence(timeout: 2))
+            keyboardDone.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
     }
 }

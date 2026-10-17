@@ -408,6 +408,16 @@ struct WatchlistView: View {
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Watchlist")
+            // Keep dismissal reachable when the iOS keyboard's return key is
+            // outside the accessibility viewport (large text and simulator
+            // keyboards can place that key below the scroll container).
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { plateFocused = false }
+                        .accessibilityIdentifier("watchlist-keyboard-done")
+                }
+            }
             .task { plateFocused = true }
             .alert("Could not save watchlist", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("OK", role: .cancel) {}

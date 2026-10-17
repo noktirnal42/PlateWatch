@@ -34,7 +34,8 @@ tests must stay green before its status advances.
   CaptureKit now selects the best available rear lens, applies bounded auto-exposure/ISO tuning,
   records exposure diagnostics, and retains eviction-safe pre/post event clips; physical-device
   tuning and clip export remain QA/follow-up gates. The iOS simulator scheme's six UI review-flow
-  tests pass, including landscape, large text, local cleanup, retry/discard, detail, and watchlist flows.
+  tests are covered, including landscape, large text, local cleanup, retry/discard, detail, and watchlist flows;
+  the latest simulator run exposed an accessibility-scroll failure on the keyboard Done key.
   Handheld live-camera field testing remains pending. The simulator now proves the REST health path and
   renders the published-fleet feed (empty state is explicit when the backend has no published records);
   signed CloudKit account/database verification remains external. CloudKit watchlist subscription registration,
@@ -53,8 +54,9 @@ tests must stay green before its status advances.
   misleading 0% class score, and a coarse colour cue is shown when available. The simulator UI suite
   passes all seven review/watchlist tests after this change.
   The overlay is now one VoiceOver element with a per-vehicle spoken summary (body class, colour, fleet label
-  and confidence where available), plus a stable accessibility identifier for UI audits. The newest signed
-  build was installed and launched on the connected iPhone after this change.
+  and confidence where available), plus a stable accessibility identifier for UI audits. The watchlist now
+  provides an explicit keyboard-toolbar Done action; the non-UI iOS suite passes 7/7, while a clean rerun
+  of the two affected UI tests remains pending after CoreSimulator entered its diagnostic hang.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
