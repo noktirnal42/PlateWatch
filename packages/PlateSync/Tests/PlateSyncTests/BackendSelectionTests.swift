@@ -2,6 +2,10 @@ import XCTest
 @testable import PlateSync
 
 final class BackendSelectionTests: XCTestCase {
+    func testExplicitReferenceServerDestinationOverridesCloudKitEntitlement() {
+        XCTAssertTrue(SyncBackends.makeDefault(destination: .referenceServer) is RESTBackend)
+    }
+
     func testReferenceServerPortMatchesLocalServer() {
         XCTAssertEqual(SyncBackends.mirrorURL(override: nil).absoluteString, "http://127.0.0.1:8083")
     }

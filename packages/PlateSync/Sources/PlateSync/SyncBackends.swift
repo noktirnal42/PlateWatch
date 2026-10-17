@@ -9,6 +9,12 @@ import Security
 /// container is actually declared.
 public enum SyncBackends {
 
+    public enum Destination: String, CaseIterable, Sendable {
+        case automatic
+        case cloudKit
+        case referenceServer
+    }
+
     public static let containerID = "iCloud.org.platewatch.platewatch"
 
     /// True when the app's signature declares our CloudKit container.
@@ -36,8 +42,8 @@ public enum SyncBackends {
     /// - Entitled build  → CloudKit public DB (production path)
     /// - Otherwise       → REST to the configurable mirror (dev default:
     ///   localhost:8083 where `server/` runs). Never nil, never crashes.
-    public static func makeDefault() -> any SyncBackend {
-        if cloudKitAvailable() {
+    public static func makeDefault(destination: Destination = .automatic) -> any SyncBackend {
+        if destination != .referenceServer && cloudKitAvailable() {
             return CloudKitBackend()
         }
         return RESTBackend(baseURL: mirrorURL())

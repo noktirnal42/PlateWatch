@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Read-only probes. Opening Settings must never drain the review queue.
 struct BackendConnectionSection: View {
+    @AppStorage("hubSyncBackend") private var syncBackend = SyncBackends.Destination.automatic.rawValue
     @State private var cloudKit = "Not checked"
     @State private var server = "Not checked"
     @State private var checking = false
@@ -13,6 +14,12 @@ struct BackendConnectionSection: View {
         Section("Backend connections") {
             connectionRow(title: "CloudKit", value: cloudKit, systemImage: "icloud")
             connectionRow(title: "Reference server", value: server, systemImage: "server.rack")
+            Picker("Delivery destination", selection: $syncBackend) {
+                Text("Automatic (CloudKit when entitled)").tag(SyncBackends.Destination.automatic.rawValue)
+                Text("CloudKit").tag(SyncBackends.Destination.cloudKit.rawValue)
+                Text("Reference server (moderation queue)").tag(SyncBackends.Destination.referenceServer.rawValue)
+            }
+            .help("Choose where Review → Sync pending delivers the selected submissions")
             Text("Review items remain on this Mac until you confirm them and choose Sync pending. The probe checks the iCloud account and a read-only public-database query; delivery is operator-triggered, and moderation/publication remain separate paths.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 10) {

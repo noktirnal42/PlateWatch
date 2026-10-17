@@ -507,8 +507,9 @@ final class HubController: ObservableObject, ReviewHubProviding {
         guard let modelContext else { syncStatus = "Local queue unavailable"; return }
         syncStatus = "Syncing pending…"
         lastReceiptSummary = ""
-        let backend = SyncBackends.makeDefault()
-        let cloudKitDelivery = SyncBackends.cloudKitAvailable()
+        let destination = SyncBackends.Destination(rawValue: UserDefaults.standard.string(forKey: "hubSyncBackend") ?? "automatic") ?? .automatic
+        let backend = SyncBackends.makeDefault(destination: destination)
+        let cloudKitDelivery = destination != .referenceServer && SyncBackends.cloudKitAvailable()
         let rows = (try? modelContext.fetch(FetchDescriptor<PendingSubmission>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
         var delivered = 0
         var rejected = 0
