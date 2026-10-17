@@ -59,9 +59,8 @@ tests must stay green before its status advances.
   its installed-app foreground screenshot is pending an unlock. The current signed iOS build installed
   and launched on the connected iPhone;
   portrait and landscape captures show the controls and overlay canvas rotating together. The current
-  watchOS build installs and signs on the connected watch, but a direct device launch returns to the
-  watch face instead of keeping the companion foregrounded; manual wrist launch remains the next watch
-  QA gate.
+  watchOS build installs and launches on the connected watch; the physical screenshot shows the Live
+  stats section with unavailable counters rendered as `—` while the presence heartbeat is absent.
   iOS Live overlays now use the same neutral-label rules as Hub: unknown vehicles no longer display a
   misleading 0% class score, and a coarse colour cue is shown when available. The simulator UI suite
   passes all seven review/watchlist tests after this change; the two keyboard-sensitive tests were rerun
