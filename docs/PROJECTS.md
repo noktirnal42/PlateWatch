@@ -206,7 +206,9 @@ tests must stay green before its status advances.
   and deploying it remain external gates.
 - CloudKit record-name identity is now deterministic across launches (SHA-256
   UUID derivation); receipt and delta reconciliation no longer depends on Swift's
-  randomized `Hasher` seed. Review now exposes bounded delivery history and a
+  randomized `Hasher` seed. Hyphenated idempotency keys now preserve their full
+  record-name identity during public delta pulls, so CloudKit sightings reconcile
+  with the same receipt ID. Review now exposes bounded delivery history and a
   **Recover CloudKit history** action for creator-readable submissions delivered
   by older Hub builds; it never restores private plate/frame/location payloads.
 - **Next:** CloudKit moderator publication and two-account
