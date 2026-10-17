@@ -47,6 +47,9 @@ tests must stay green before its status advances.
   iOS Live overlays now use the same neutral-label rules as Hub: unknown vehicles no longer display a
   misleading 0% class score, and a coarse colour cue is shown when available. The simulator UI suite
   passes all seven review/watchlist tests after this change.
+  The overlay is now one VoiceOver element with a per-vehicle spoken summary (body class, colour, fleet label
+  and confidence where available), plus a stable accessibility identifier for UI audits. The newest signed
+  build was installed and launched on the connected iPhone after this change.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.

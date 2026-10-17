@@ -393,8 +393,19 @@ private struct DetectionOverlay: View {
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Vehicle detections")
-        .accessibilityValue("\(frame?.vehicles.count ?? 0) vehicles in view; \(frame?.vehicles.filter { $0.vehicleClass.isFleet }.count ?? 0) fleet vehicles")
+        .accessibilityValue(accessibilitySummary)
+        .accessibilityIdentifier("vehicle-detections")
         .animation(.easeOut(duration: 0.15), value: frame?.vehicles.count ?? 0)
+    }
+
+    private var accessibilitySummary: String {
+        let vehicles = frame?.vehicles ?? []
+        let fleetCount = vehicles.filter { $0.vehicleClass.isFleet }.count
+        guard !vehicles.isEmpty else { return "No vehicles detected" }
+        let labels = vehicles.enumerated().map { index, vehicle in
+            "Vehicle \(index + 1): \(IOSVehicleOverlayLabel.text(for: vehicle))"
+        }
+        return "\(vehicles.count) vehicles in view; \(fleetCount) fleet vehicles. " + labels.joined(separator: ". ")
     }
 }
 
