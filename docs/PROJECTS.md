@@ -35,7 +35,8 @@ tests must stay green before its status advances.
   records exposure diagnostics, and retains eviction-safe pre/post event clips; physical-device
   tuning and clip export remain QA/follow-up gates. The iOS simulator scheme's six UI review-flow
   tests are covered, including landscape, large text, local cleanup, retry/discard, detail, and watchlist flows;
-  the latest simulator run exposed an accessibility-scroll failure on the keyboard Done key.
+  the latest simulator run exposed an accessibility-scroll failure on the keyboard Done key; the large-text
+  watchlist flow now scrolls boundedly to the fleet-attestation control and the targeted simulator rerun passed.
   Handheld live-camera field testing remains pending. The simulator now proves the REST health path and
   renders the published-fleet feed (empty state is explicit when the backend has no published records);
   signed CloudKit account/database verification remains external. CloudKit watchlist subscription registration,
