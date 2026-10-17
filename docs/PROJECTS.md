@@ -110,8 +110,8 @@ tests must stay green before its status advances.
   and Quick log surface rendered successfully. The watch now includes notification
   permission, visible unread-hit state, and a WidgetKit complication with fleet-hit and
   opt-in active-user counts. Camera permission/real-scene capture and CloudKit push
-  delivery still require an operator field exercise; the latest watch install was blocked
-  when the USB watch connection dropped and should be retried after reconnecting it.
+  delivery still require an operator field exercise. The latest physical install and
+  launch passed after correcting the WidgetKit extension bundle metadata.
 
 ## WS3 — Recognition & evaluation
 

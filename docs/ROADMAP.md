@@ -79,7 +79,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
   - ✅ Ephemeral TTL heartbeats for opted-in Hub/iOS processing and foreground watch sessions.
   - ✅ Hub dashboard total active sessions/live processors and per-feed active processor counts.
   - ✅ Privacy-safe opt-out, expiry, and a local-processing outage fallback that hides stale server counts.
-  - ◐ Accessibility QA, hosted deployment, and signed physical watch launch remain open.
+  - ◐ Accessibility QA and hosted deployment remain open; signed physical watch launch is verified.
 
 ## M5 — Beyond Apple
 - ⬜ REST mirror publicly deployed (Oracle Always Free)
