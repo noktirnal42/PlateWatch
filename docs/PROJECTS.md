@@ -122,9 +122,11 @@ tests must stay green before its status advances.
   deployment/mirror gate until the required public records are present.
   CloudKit-entitled Hub delivery retains local acknowledgement receipts and
   identifies CloudKit versus the separate REST moderation queue. Review can
-  recover creator-owned history and explicitly hand it through the REST privacy
-  gate into the Moderation queue; automatic mirroring and server-side CloudKit
-  publication remain deployment/account gates.
+  recover creator-owned history, explicitly hand it through the REST privacy
+  gate into the Moderation queue, or invoke the guarded moderator-only
+  `CloudKitBackend.publish(_:)` path for confirmed fleet submissions. Automatic
+  mirroring, credentialed production publication, and two-account isolation
+  remain deployment/account gates.
   The Hub now has an opt-in ephemeral presence lease that reports live processor
   totals and per-feed demand through the REST boundary; leases expire after 90
   seconds and are never persisted. iOS/watch clients and hosted deployment
@@ -237,7 +239,7 @@ tests must stay green before its status advances.
   and review fields. `CloudKitBackend.publish(_:)` now performs the guarded
   moderator save with idempotent record identity and explicit permission/quota
   errors; saving with a moderator credential remains a deployment gate.
-- **Next:** CloudKit moderator publication and two-account
+- **Next:** credentialed CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
   A signed Hub rebuild on 2026-10-17 repaired a local installation regression where an
