@@ -26,7 +26,9 @@ use this note for the iOS review surfaces and `EVALUATION.md` for recognition ev
   describes fleet vehicle counts without reading background civilian plates.
 - Landscape orientations and iPad multitasking are enabled in `project.yml`.
   Unavailable-camera content scrolls on short screens; still capture is disabled
-  without a running camera. Live orientation/thermal performance is still unverified.
+  without a running camera. The signed iPhone 16 Pro Max build was exercised in
+  both landscape directions on 2026-10-16; the preview layer and controls now
+  rotate together. Dusk/motion/thermal and spoken VoiceOver coverage remain open.
 - **Startup crash fixed in the iOS app boundary.** An unsigned simulator previously
   ran `SyncBackends.makeDefault()` with `PlateWatchUseCloudKit = true`; constructing
   `CKContainer` trapped. The app, environment default and notification delegate now
@@ -34,6 +36,13 @@ use this note for the iOS review surfaces and `EVALUATION.md` for recognition ev
   the reference server), signed device builds retain PlateSync's CloudKit selection.
 - Info.plist version values now follow `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`
   instead of a stale hardcoded version from the generated plist.
+- The mobile watchlist now mirrors normalized plate strings over WatchConnectivity
+  to the companion watch. The watch consumes only that local list for silent-push
+  matching; no frames, locations, credentials or evidence crops cross the link.
+  Physical phone/watch pairing and push delivery remain a device QA gate.
+- The public Sightings refresh reconciles returned stable IDs into the local
+  receipt ledger, so a receipt can visibly advance to Fleet confirmed without
+  uploading evidence. A missing row is never inferred to be withdrawn.
 
 ## Reproduce and test
 
@@ -83,9 +92,9 @@ A screenshot audit does not replace a full spoken VoiceOver pass.
    build the moderator publication tool and prove the receipt→public-feed loop (WS5).
 2. Handheld live-camera tests in portrait/landscape, daylight/dusk/motion, ten-minute
    thermal run and actual VoiceOver use (WS1). iPhone Mirroring cannot do this.
-3. Durable received-sighting history, remote withdrawal/removal flow, alert history
-   and safe local photo/clip preview are **not implemented**. Sightings is an outbox;
-   a successful receipt removes a row. Do not advertise it as a historical archive.
+3. Remote withdrawal/removal flow and alert history are **not implemented**.
+   Received-submission receipts and bounded local crop history are now retained;
+   they do not constitute a public archive or retract a backend record.
 4. Runtime-configurable mirror settings are still missing. Simulator development
    can set `PLATEWATCH_MIRROR_URL`; device backend configuration is owned by WS5.
 5. Recognition improvements and the open model-release PR remain WS3. No accuracy
@@ -94,3 +103,10 @@ A screenshot audit does not replace a full spoken VoiceOver pass.
    tint/dark/layered icon variants, and smallest-device/RTL accessibility audits remain.
 
 See `NEXT-STEPS.md` for sequencing and `PROJECTS.md` for ownership.
+
+## CI follow-up — 2026-10-16
+
+The watchlist duplicate-validation UI test asserted a message while the keyboard could
+obscure it. It now dismisses the keyboard and waits for the same duplicate warning,
+without changing validation or weakening the assertion. The targeted add/mute/delete
+flow passed on the local iOS 27 iPhone 18 Pro simulator. Full CI remains a separate check.

@@ -24,6 +24,40 @@ public final class PendingSubmission {
     }
 }
 
+/// Privacy-safe local delivery history. This is a receipt ledger, not an
+/// evidence archive: successful delivery removes the payload from the outbox
+/// while retaining enough metadata to explain what the backend acknowledged.
+@Model
+public final class ReceivedSubmissionReceipt {
+    public var sightingID: UUID
+    public var receivedAt: Date
+    public var moderationStateRaw: String
+    public var operatorConfirmed: Bool
+    /// The already-bounded local review crop, when the capture flow supplied
+    /// one. Raw frames and the rest of the submission are never retained.
+    public var cropJPEGData: Data?
+    /// A short idempotency prefix is useful when comparing logs without
+    /// retaining the full submission or any plate/media material.
+    public var idempotencyPrefix: String?
+
+    public init(sightingID: UUID, receivedAt: Date,
+                moderationState: Sighting.ModerationState,
+                operatorConfirmed: Bool = false,
+                idempotencyKey: String? = nil,
+                cropJPEGData: Data? = nil) {
+        self.sightingID = sightingID
+        self.receivedAt = receivedAt
+        self.moderationStateRaw = moderationState.rawValue
+        self.operatorConfirmed = operatorConfirmed
+        self.idempotencyPrefix = idempotencyKey.map { String($0.prefix(12)) }
+        self.cropJPEGData = cropJPEGData.flatMap { $0.count <= 40 * 1024 ? $0 : nil }
+    }
+
+    public var moderationState: Sighting.ModerationState {
+        Sighting.ModerationState(rawValue: moderationStateRaw) ?? .pending
+    }
+}
+
 /// Drains `PendingSubmission` rows through the active backend with
 /// exponential backoff. Safe against duplicate delivery (idempotency keys).
 public actor OutboxDrainer {
@@ -67,7 +101,19 @@ public actor OutboxDrainer {
                 context.delete(row); continue // unparseable = permanently broken row
             }
             do {
-                _ = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                let receipt = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                let existing = try? context.fetch(FetchDescriptor<ReceivedSubmissionReceipt>(
+                    predicate: #Predicate { $0.sightingID == receipt.sightingID }
+                )).first
+                if existing == nil {
+                    context.insert(ReceivedSubmissionReceipt(
+                        sightingID: receipt.sightingID,
+                        receivedAt: receipt.serverReceivedAt,
+                        moderationState: receipt.moderationState,
+                        operatorConfirmed: receipt.operatorConfirmed ?? false,
+                        idempotencyKey: receipt.idempotencyKey ?? row.idempotencyKey,
+                        cropJPEGData: dto.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }))
+                }
                 context.delete(row)
             } catch SyncError.quotaExceeded {
                 return // back off whole run; next drain will resume in order

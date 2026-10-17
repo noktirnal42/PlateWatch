@@ -56,7 +56,9 @@ struct SightingsController: RouteCollection {
             let receipt = SubmissionReceiptDTO(
                 sightingID: try existing.requireID(),
                 moderationState: existing.moderationState,
-                serverReceivedAt: existing.createdAt ?? Date())
+                serverReceivedAt: existing.createdAt ?? Date(),
+                idempotencyKey: existing.idempotencyKey,
+                operatorConfirmed: true)
             return try await receipt.encodeResponse(status: .ok, for: req)
         }
 
@@ -73,7 +75,10 @@ struct SightingsController: RouteCollection {
             // clients can prune their outbox — but marked rejected.
             let receipt = SubmissionReceiptDTO(
                 sightingID: UUID(), moderationState: outcome.state.rawValue,
-                serverReceivedAt: Date())
+                serverReceivedAt: Date(), idempotencyKey: idem,
+                operatorConfirmed: dto.userConfirmed)
+            await AuditEntry.record("submission.rejected", target: idem,
+                                    detail: "reason=\(outcome.dropReason ?? "gate")", on: req.db)
             return try await receipt.encodeResponse(status: .accepted, for: req)
         }
 
@@ -101,11 +106,15 @@ struct SightingsController: RouteCollection {
             record.exactLon = dto.exactLongitude
         }
         try await record.save(on: req.db)
+        await AuditEntry.record("submission.accepted", target: record.id?.uuidString,
+                                detail: "state=\(outcome.state.rawValue); operatorConfirmed=\(dto.userConfirmed.map(String.init) ?? "legacy")", on: req.db)
 
         let receipt = SubmissionReceiptDTO(
             sightingID: try record.requireID(),
             moderationState: outcome.state.rawValue,
-            serverReceivedAt: record.createdAt ?? Date())
+            serverReceivedAt: record.createdAt ?? Date(),
+            idempotencyKey: record.idempotencyKey,
+            operatorConfirmed: dto.userConfirmed)
         return try await receipt.encodeResponse(status: .created, for: req)
     }
 

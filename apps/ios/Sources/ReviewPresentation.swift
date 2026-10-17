@@ -2,6 +2,14 @@ import Foundation
 import PlateKit
 import PlateSync
 
+/// Matches only stable public IDs. Absence from a page is deliberately not a
+/// withdrawal signal because feeds are paginated and moderation can be delayed.
+enum ReceiptPublicationMatcher {
+    static func publishedIDs(from sightings: [PublicSightingDTO]) -> Set<UUID> {
+        Set(sightings.map(\.id))
+    }
+}
+
 /// Presentation rules are separate from the recognition gate: manual fleet
 /// watchlist entries may include short official, all-letter or numeric plates.
 enum FleetWatchlistInput {

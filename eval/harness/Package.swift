@@ -18,5 +18,6 @@ let package = Package(
             .product(name: "CaptureKit", package: "CaptureKit"),
             .product(name: "VehicleML", package: "VehicleML"),
         ]),
+        .testTarget(name: "EvalHarnessTests", dependencies: ["EvalHarness"]),
     ]
 )

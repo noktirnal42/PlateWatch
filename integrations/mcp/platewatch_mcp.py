@@ -155,7 +155,7 @@ def platewatch_review_list(limit: int = 50, offset: int = 0) -> dict:
 
 @server.tool(annotations=READ)
 def platewatch_review_evidence(id: str) -> Image:
-    """View the stored redacted vehicle crop for a queued record (<=40 KB). Never returns the original camera frame."""
+    """View the stored intact local vehicle crop for a queued record (<=40 KB). Never returns the original camera frame."""
     result = call('review.evidence', id=id)
     data = base64.b64decode(result['jpeg_base64'], validate=True)
     if len(data) > 40_000 or not data.startswith(b'\xff\xd8'):

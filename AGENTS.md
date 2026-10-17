@@ -11,12 +11,19 @@ Vapor reference server for cross-platform expansion.
 
 1. **Fleet-focused data only.** New ingestion or enrichment code must respect
    the redaction/moderation rules in `docs/LEGAL-ETHICS.md`. Do not add code
-   paths that persist un-redacted private-citizen plates or DMV-derived PII.
+   paths that index private-citizen plates or persist DMV-derived PII. The owner-approved
+   local Hub Review exception in Rule 1 preserves intact fleet-target evidence crops,
+   including incidental background content. Do not reintroduce overlap-based image
+   suppression or plate/text blackouts there. This exception does not authorize uploading
+   Review image bytes or relaxing shared structured-data rules.
 2. **Provenance everywhere.** Any model or code that enriches a record
    (officer, agency, cost) must write a `SourceCitation`. No unsourced
    enrichment.
 3. **On-device first.** Do not add telemetry, analytics SDKs, frame uploads,
-   or third-party trackers. The sync boundary is `PlateSync`.
+   or third-party trackers. The sync boundary is `PlateSync`. The owner-selected
+   NVIDIA hosted research exception (2026-10-16) permits entered public text and
+   explicitly selected public/licensed document or benchmark images. Never route
+   local Review evidence, raw camera frames, private records or credentials to models.
 4. **No secrets in the repo.** `.gitignore` covers the usual Apple/CloudKit
    material; extend it if you add config formats.
 5. **Licenses matter.** Converted third-party ML models keep their upstream

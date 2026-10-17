@@ -12,6 +12,10 @@ final class LiveController: NSObject, ObservableObject, AVCaptureVideoDataOutput
     @Published private(set) var status = "Idle"
     @Published private(set) var running = false
     @Published private(set) var hits = 0
+    @Published private(set) var pausedVideo = false
+    private var videoURL: URL?
+    private var videoSecond = 0.0
+    private var generation = UUID()
 
     private let hub: HubController
     private var session: AVCaptureSession?
@@ -24,6 +28,7 @@ final class LiveController: NSObject, ObservableObject, AVCaptureVideoDataOutput
 
     func startCamera(_ device: AVCaptureDevice) async {
         stop()
+        videoURL = nil; videoSecond = 0
         guard await AVCaptureDevice.requestAccess(for: .video) else { status = "Camera access denied (System Settings › Privacy)"; return }
         let session = AVCaptureSession()
         guard let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) else { status = "Cannot open \(device.localizedName)"; return }
@@ -40,8 +45,12 @@ final class LiveController: NSObject, ObservableObject, AVCaptureVideoDataOutput
         begin("Camera: \(device.localizedName)", sourceID: "local-\(device.uniqueID)") { box.take() }
     }
 
-    func startVideo(_ url: URL) {
+    func startVideo(_ url: URL, resume: Bool = false) {
+        let offset = resume ? videoSecond : 0
         stop()
+        videoURL = url
+        pausedVideo = false
+        let run = generation
         let box = latest
         loop = Task { [weak self] in
             let asset = AVURLAsset(url: url)
@@ -49,21 +58,42 @@ final class LiveController: NSObject, ObservableObject, AVCaptureVideoDataOutput
             generator.appliesPreferredTrackTransform = true
             generator.requestedTimeToleranceBefore = .zero
             generator.requestedTimeToleranceAfter = .zero
-            var second = 0.0
+            var second = offset
             let duration = (try? await asset.load(.duration).seconds) ?? 0
+            guard !Task.isCancelled, self?.generation == run else { return }
             await MainActor.run { self?.running = true; self?.status = "Video: \(url.lastPathComponent)" }
             while !Task.isCancelled, second < duration {
                 if let cg = try? await generator.image(at: CMTime(seconds: second, preferredTimescale: 600)).image {
+                    guard !Task.isCancelled, self?.generation == run else { return }
                     box.put(cg)
                     await self?.process(sourceID: "video-\(url.lastPathComponent)") { box.take() }
                 }
+                guard !Task.isCancelled, self?.generation == run else { return }
                 second += 1
+                self?.videoSecond = second
+                do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
             }
+            guard !Task.isCancelled, self?.generation == run else { return }
             await MainActor.run { self?.running = false; self?.status = "Finished \(url.lastPathComponent)" }
         }
     }
 
+    func pause() {
+        guard running else { return }
+        let canResume = videoURL != nil
+        stop()
+        pausedVideo = canResume
+        status = "Paused while away from Live"
+    }
+
+    func resumeVideo() {
+        guard let videoURL else { return }
+        startVideo(videoURL, resume: true)
+    }
+
     func stop() {
+        generation = UUID()
+        pausedVideo = false
         loop?.cancel(); loop = nil
         session?.stopRunning(); session = nil
         running = false
@@ -81,9 +111,11 @@ final class LiveController: NSObject, ObservableObject, AVCaptureVideoDataOutput
     }
 
     private func process(sourceID: String, next: @Sendable () -> CGImage?) async {
-        guard let cg = next(), let buffer = Self.pixelBuffer(from: cg) else { return }
+        let run = generation
+        guard !Task.isCancelled, let cg = next(), let buffer = Self.pixelBuffer(from: cg) else { return }
         image = cg
         if let result = await hub.analyseLive(buffer, sourceID: sourceID) {
+            guard !Task.isCancelled, generation == run else { return }
             boxes = result.boxes
             hits += result.hits
         }
@@ -122,12 +154,14 @@ final class LatestFrame: @unchecked Sendable {
 
 struct LivePane: View {
     @ObservedObject private var hub: HubController
+    @ObservedObject private var runner: FeedRunner
     @StateObject private var live: LiveController
+    let isActive: Bool
     @State private var devices: [AVCaptureDevice] = []
-    @State private var selected: String = ""
+    @AppStorage("liveSelectedCamera") private var selected: String = ""
     @AppStorage("hubShowDetectionOverlays") private var showOverlays = true
 
-    init(hub: HubController) { self.hub = hub; _live = StateObject(wrappedValue: LiveController(hub: hub)) }
+    init(hub: HubController, isActive: Bool = true) { self.hub = hub; self.runner = hub.feedRunner; self.isActive = isActive; _live = StateObject(wrappedValue: LiveController(hub: hub)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -136,6 +170,10 @@ struct LivePane: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
                         Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
+                        if source.kind == .snapshotJPEG, let received = runner.lastReceivedAt[source.id] {
+                            SnapshotFreshnessLabel(received: received, changed: runner.contentChangedAt[source.id] ?? received,
+                                                   interval: source.refreshInterval)
+                        }
                         if let frame = hub.liveFeedFrame {
                             Text("Analysed \(frame.updatedAt, format: .dateTime.hour().minute().second()) · \(frame.result.boxes.count) vehicle(s)")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -157,10 +195,22 @@ struct LivePane: View {
                     let panel = NSOpenPanel(); panel.allowedContentTypes = [.movie, .video]
                     if panel.runModal() == .OK, let url = panel.url { hub.stopLiveFeed(); live.startVideo(url) }
                 }
+                if live.pausedVideo { Button("Resume video") { hub.stopLiveFeed(); live.resumeVideo() } }
                 Button("Stop") { live.stop(); hub.stopLiveFeed() }.disabled(!live.running && hub.liveFeed == nil)
                 Spacer()
                 Toggle("Overlays", isOn: $showOverlays).toggleStyle(.checkbox)
-                    .help("Show vehicle boxes and fleet scores. Small boxes show their label on hover.")
+                    .help("Show car, truck, bus and motorcycle boxes; fleet labels include a fleet score. Small boxes show their label on hover.")
+                if showOverlays {
+                    HStack(spacing: 8) {
+                        Label("Vehicle class", systemImage: "square")
+                            .foregroundStyle(.yellow)
+                        Label("Fleet hit", systemImage: "square.fill")
+                            .foregroundStyle(.green)
+                    }
+                    .font(.caption)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Yellow boxes show vehicle classes. Green boxes show fleet hits.")
+                }
                 if hub.liveFeed == nil {
                     Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
                 }
@@ -197,7 +247,7 @@ struct LivePane: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-            Text("In memory only. Overlays show vehicle class and fleet score, never plate text. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
+            Text("In memory only. Overlays show general vehicle classes; fleet labels include a fleet score. Plate text is never shown. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding()
@@ -206,14 +256,35 @@ struct LivePane: View {
                                                        mediaType: .video, position: .unspecified).devices
             if selected.isEmpty { selected = devices.first?.uniqueID ?? "" }
         }
-        .task(id: hub.liveFeed?.id) {
-            if hub.liveFeed != nil { live.stop(); await hub.loadLiveFeed() }
+        .task(id: "\(isActive)-\(hub.liveFeed?.id.uuidString ?? "local")") {
+            if isActive, hub.liveFeed != nil { live.stop(); await hub.loadLiveFeed() }
         }
-        .onDisappear { live.stop(); hub.stopLiveFeed() }
+        .onChange(of: isActive) { _, active in if !active { live.pause() } }
+        .onDisappear { live.stop() }
     }
 
     private func fitted(_ image: CGSize, in box: CGSize) -> CGSize {
         let scale = min(box.width / image.width, box.height / image.height)
         return CGSize(width: image.width * scale, height: image.height * scale)
+    }
+}
+
+private struct SnapshotFreshnessLabel: View {
+    let received: Date
+    let changed: Date
+    let interval: TimeInterval
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { tick in
+            let warning = tick.date.timeIntervalSince(changed) > max(600, interval * 2)
+            Group {
+                if warning {
+                    Text("Received \(received, format: .dateTime.hour().minute().second()) · image unchanged since \(changed, format: .dateTime.hour().minute())")
+                } else {
+                    Text("Received \(received, format: .dateTime.hour().minute().second())")
+                }
+            }
+            .font(.caption).foregroundStyle(warning ? Color.orange : Color.secondary)
+            .help("Receiving an image proves delivery, not camera freshness. Identical image bytes may indicate a static scene or an upstream freeze.")
+        }
     }
 }

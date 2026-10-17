@@ -8,16 +8,18 @@ import UniformTypeIdentifiers
 /// public-records starting points, and the person-records programme boundary.
 /// Person-record collection is a separate, cited review pipeline (M7).
 struct RecordsPane: View {
-    @State private var tab = 0
-    @State private var agency = ""
-    @State private var state = ""
-    @State private var units = ""
-    @State private var inventory = true
-    @State private var assignments = true
-    @State private var policy = true
-    @State private var retention = true
-    @State private var contracts = false
+    @AppStorage("hubRecords_tab") private var tab = 0
+    @AppStorage("hubRecords_agency") private var agency = ""
+    @AppStorage("hubRecords_state") private var state = ""
+    @AppStorage("hubRecords_units") private var units = ""
+    @AppStorage("hubRecords_inventory") private var inventory = true
+    @AppStorage("hubRecords_assignments") private var assignments = true
+    @AppStorage("hubRecords_policy") private var policy = true
+    @AppStorage("hubRecords_retention") private var retention = true
+    @AppStorage("hubRecords_contracts") private var contracts = false
     @State private var notice = ""
+
+    @State private var visitedTabs: Set<Int> = []
 
     private var canDraft: Bool {
         !agency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -43,14 +45,16 @@ struct RecordsPane: View {
                 Text("Directory").tag(1)
                 Text("Programme").tag(2)
             }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
-            switch tab {
-            case 0: builder
-            case 1: directory
-            case 3: RecordsRequestsView()
-            case 4: RecordsCourtListsView()
-            case 5: RecordsPeopleView()
-            default: programme
+            ZStack {
+                if tab == 0 || visitedTabs.contains(0) { builder.opacity(tab == 0 ? 1 : 0).allowsHitTesting(tab == 0).accessibilityHidden(tab != 0).disabled(tab != 0) }
+                if tab == 1 || visitedTabs.contains(1) { directory.opacity(tab == 1 ? 1 : 0).allowsHitTesting(tab == 1).accessibilityHidden(tab != 1).disabled(tab != 1) }
+                if tab == 3 || visitedTabs.contains(3) { RecordsRequestsView().opacity(tab == 3 ? 1 : 0).allowsHitTesting(tab == 3).accessibilityHidden(tab != 3).disabled(tab != 3) }
+                if tab == 4 || visitedTabs.contains(4) { RecordsCourtListsView().opacity(tab == 4 ? 1 : 0).allowsHitTesting(tab == 4).accessibilityHidden(tab != 4).disabled(tab != 4) }
+                if tab == 5 || visitedTabs.contains(5) { RecordsPeopleView().opacity(tab == 5 ? 1 : 0).allowsHitTesting(tab == 5).accessibilityHidden(tab != 5).disabled(tab != 5) }
+                if tab == 2 || visitedTabs.contains(2) { programme.opacity(tab == 2 ? 1 : 0).allowsHitTesting(tab == 2).accessibilityHidden(tab != 2).disabled(tab != 2) }
             }
+            .onChange(of: tab) { _, value in visitedTabs.insert(value) }
+            .onAppear { visitedTabs.insert(tab) }
         }.padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -233,7 +237,7 @@ struct RecordsPane: View {
                      citationType: .fleetRegistry),
     ]
 
-    @State private var query = ""
+    @AppStorage("hubRecords_query") private var query = ""
 
     private var grouped: [(RecordSource.Category, [RecordSource])] {
         let filtered = query.isEmpty

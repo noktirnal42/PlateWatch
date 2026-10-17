@@ -74,7 +74,7 @@ cannot reach 0.55 on a cue alone (max 0.45), and none reached the review band in
   when it is the frame's single candidate.
 - **Plates must look like plates** (5–8 chars, letters and digits). All-letter vanity plates and
   all-digit plates are missed until the plate detector ships.
-- **Plate accuracy is not scored yet** (no ground-truth plate labels in the corpus).
+- **Plate accuracy is scored when labelled registrations are present.** The harness reports normalized exact-match counts and best-read character error rate (CER); the current corpus still has too few labelled plates for a reliable model-quality claim.
 - 62 images is a smoke test, not a benchmark; numbers will move as the corpus grows.
 - This is a still-photo evaluation. The live camera path (orientation, exposure) is
   covered by unit tests and a physical-device run of the app, but not scored here.
@@ -99,3 +99,57 @@ hand-labelled agencies and plates (`agency` / `plates` keys in the manifest).
 - **De-slanting italic lettering does not help** (tried shear −0.5…+0.5 on the US Mint image: every angle garbles the text; the plain read is the best). Dropped.
 - What would move recall: a recogniser trained on stylised vehicle lettering (Create ML has no OCR template — needs a CLI-trained model), more tolerant fuzzy matching for state-agency phrases, and appearance cues (the vehicle-crop classifier, MODEL-TRAINING §7) for vehicles with no readable text.
 - Caveat: 62 images; do not tune the gate to these failures.
+
+## 2026-10-15: missed vehicle in wide Arlington camera view
+
+The owner identified the white SUV at the right of a supplied Arlington airport
+screenshot as the missed police vehicle. A local holdout extracted only the camera
+viewport from that screenshot; the screenshot and model remain outside Git.
+The ordinary installed vehicle detector returned one box on the extracted viewport.
+The bounded detail stage returned five boxes, including one covering the SUV's
+known center (top-left normalized 0.80, 0.72). One warm detail call took 0.034 s on
+this Mac. This is a coverage regression check on a dimmed screenshot, not a general
+recall benchmark, proof of police classification, or a sustained CPU measurement.
+
+`CameraDetailDetectorStage` keeps the whole-frame detection and adds four overlapping
+60% views only for thorough fixed-camera inputs at least 960 pixels on the long side.
+It uses the existing installed model and unchanged 0.25 threshold. Crop results are
+projected to the full frame; internal-edge truncations are rejected and overlapping
+boxes are suppressed across labels. Local/handheld inputs retain the single pass.
+The existing fleet scoring, plate permission, moderation and evidence redaction paths
+remain downstream. A generic car box cannot establish government ownership.
+
+All 31 VehicleML tests passed with the local holdout enabled. Offline runs skip that
+one test unless `PLATEWATCH_DETAIL_IMAGE` points to the locally extracted Arlington
+viewport and `PLATEWATCH_DETAIL_MODEL` points to the installed compiled detector.
+Projection, duplicate-class suppression and neighboring-vehicle preservation have
+ordinary offline tests. Broader labeled public-camera evaluation remains required;
+the historical 62-photo precision/recall numbers above are not new measurements.
+
+### Fixed-camera benchmark and semantic label correction
+
+Native Nevada QA exposed non-vehicle COCO outputs (including traffic lights) being
+mapped to unknown vehicles. Vehicle-task detector output now accepts road-vehicle
+and explicit fleet labels only; plate-task detection is unaffected. Generic car,
+bus and truck labels still cannot establish public ownership. Explicit police/fire
+vehicle labels map to their fleet classes. This is covered by a semantic-label test.
+
+The new `--camera-benchmark` mode compares whole/detail boxes and optional fleet-gate
+coverage with one-to-one IoU matching. Partial labels deliberately omit precision
+and false positives. The owner-reported Arlington SUV annotation is partial: the
+local run measured whole-frame target misses=1, detail target misses=0, and fleet-gate
+target misses=1. That last result is a real remaining classification gap, not a failed
+box test to hide. No image or private plate data was committed. See eval/README.md.
+All 36 VehicleML tests passed with the screenshot holdout enabled; the release
+harness built and ran against the installed detector. Broader annotated camera
+coverage and a validated fleet classifier remain open.
+
+## Generic body classes in Live
+
+CoreML's car/truck/bus/motorcycle labels are preserved in `VehicleAttributes.bodyType`,
+separate from `VehicleClass` (fleet identity). Text inference can still supply a fleet class
+without erasing the generic body label. The Hub displays ordinary body classes without a
+misleading zero fleet score. This is coarse detection output, not a new trained make/model
+classifier or fleet claim. 37 VehicleML tests pass, including the new label-preservation
+contract; the local-image holdout remains a separate opt-in. Native Austin Live showed
+Car and Truck labels. Model misclassification/missed vehicles remain evaluation work.

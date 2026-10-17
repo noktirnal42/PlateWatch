@@ -20,6 +20,25 @@ public struct CoreMLDetectorStage: AnalysisStage {
         self.name = name ?? "coreml-detect:\(task)"
     }
 
+    /// Generic COCO output includes people, traffic lights and other objects.
+    /// A vehicle stage must not relabel those as unknown vehicles.
+    static let vehicleLabels = Set(["car", "truck", "bus", "motorcycle"]).union(VehicleClass.allCases.map(\.rawValue))
+    static func vehicleClass(for label: String) -> VehicleClass {
+        if let value = VehicleClass(rawValue: label) { return value }
+        switch label {
+        case "police", "police_car": return .patrol
+        case "fire_truck": return .fireEngine
+        default: return .unknown // Generic bus/truck appearance is not fleet evidence.
+        }
+    }
+
+    /// Generic body class is useful for overlays but must not promote a car/bus/truck to fleet.
+    static func observation(label: String, confidence: Double, box: NormalizedBox) -> VehicleObservation {
+        let body = ["car", "truck", "bus", "motorcycle"].contains(label) ? label : nil
+        return VehicleObservation(boundingBox: box, vehicleClass: vehicleClass(for: label),
+            classConfidence: confidence, attributes: body.map { VehicleAttributes(bodyType: $0) })
+    }
+
     public struct DetectedObjects: Sendable {
         public var observations: [(label: String, confidence: Double, box: NormalizedBox)]
     }
@@ -32,6 +51,7 @@ public struct CoreMLDetectorStage: AnalysisStage {
         // Map to sendable values inside the handler (VN types are not Sendable).
         typealias Hit = (label: String, confidence: Double, box: NormalizedBox)
         let threshold = Double(confidenceThreshold)
+        let allowed = task == "vehicle-detection" ? Self.vehicleLabels.union(fleetLabels) : nil
         let hits: [Hit] = try await withCheckedThrowingContinuation { continuation in
             let cont = ResumeOnce(continuation)
             let request = VNCoreMLRequest(model: visionModel) { request, error in
@@ -41,7 +61,8 @@ public struct CoreMLDetectorStage: AnalysisStage {
                 }
                 var out: [Hit] = []
                 for obs in (request.results as? [VNRecognizedObjectObservation]) ?? [] {
-                    guard let label = obs.labels.first?.identifier else { continue }
+                    guard let label = obs.labels.first?.identifier,
+                          allowed?.contains(label) != false else { continue }
                     let confidence = Double(obs.confidence)
                     guard confidence >= threshold else { continue }
                     out.append(Hit(label, confidence, NormalizedBox(visionRect: obs.boundingBox)))
@@ -81,13 +102,10 @@ public struct PlateAnalysisPipeline: Sendable {
 
         var vehicleObservations: [VehicleObservation] = []
         if context.models["vehicle-detection"] != nil {
-            let stage = CoreMLDetectorStage(task: "vehicle-detection")
+            let stage = CameraDetailDetectorStage()
             if let detected = try? await stage.process(frame, context: context) {
                 vehicleObservations = detected.observations.map {
-                    let cls = VehicleClass(rawValue: $0.label) ?? ($0.label.hasPrefix("police") ? .patrol : .unknown)
-                    return VehicleObservation(boundingBox: $0.box,
-                                              vehicleClass: cls,
-                                              classConfidence: $0.confidence)
+                    CoreMLDetectorStage.observation(label: $0.label, confidence: $0.confidence, box: $0.box)
                 }
             }
         }

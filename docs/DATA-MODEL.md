@@ -129,3 +129,54 @@ content is stored as released, never summarized beyond the filing.
 `UnitAssignment` (existing) gains the person reference + an `inference`
 confidence. Auto-inferred links never auto-publish; publication requires a
 moderator confirmation that itself carries a citation.
+
+## Network crop boundary (2026-10-15)
+
+`SightingSubmissionDTO.cropJPEGBase64` is an intact local Review crop. It is not blacked out or
+omitted because of neighboring vehicles/text (LEGAL-ETHICS Rule 1, local Review exception). REST submission explicitly
+omits it; CloudKit maps no image field. Only the crop hash crosses that boundary. REST also
+reapplies plate/identity-registration and exact-coordinate redaction for unconfirmed fleet
+submissions, including older queued payloads. DTO wire field compatibility is unchanged.
+
+## Review confirmation boundary (2026-10-16)
+
+`SightingSubmissionDTO.userConfirmed` is optional for wire compatibility. New Hub queues
+write `false` until an operator uses Review's **Confirm selected** action; the queue then
+re-encodes the payload with `true`. The reference server treats omitted values as legacy
+client confirmation, while explicit `false` remains pending and cannot become a
+fleet-confirmed publication row.
+
+Submission receipts may also carry optional `idempotencyKey` and `operatorConfirmed`
+fields. They are audit metadata only: older clients may omit them, and they never grant
+publication or bypass the moderation state returned by the backend.
+
+## Local receipt ledger (2026-10-16)
+
+After a backend receipt removes a `PendingSubmission`, iOS stores a
+`ReceivedSubmissionReceipt` row locally. It contains the sighting UUID, server
+receipt time, returned moderation state, operator-confirmation flag, an optional
+short idempotency-key prefix, and the already-bounded review JPEG when one was
+available (capped at 40 KB). It never stores the submission DTO, raw frame, or exact
+location. The Sightings screen presents this as delivery history; receipt history is
+not proof of public publication.
+
+## Local event clips (2026-10-16)
+
+`EventClipExporter` encodes only the bounded frames already held in the on-device
+rolling buffer into an H.264 `.mp4` in the temporary directory. iOS exposes this
+through an explicit Save/Share control. The movie is not inserted into a submission,
+uploaded by `PlateSync`, or retained as a shared record.
+
+## Local hash-addressed evidence recovery (2026-10-15)
+
+After a Hub queue record saves, its intact JPEG is also stored locally at
+`Application Support/PlateWatchHub/Evidence/<sha256>.jpg`. The original inline DTO
+copy remains. Opening Review backfills valid existing images into this archive.
+Review and the local agent evidence command fall back to the archive when inline bytes
+are absent, damaged or fail their recorded hash. Every archived read verifies the SHA-256,
+bounded JPEG and file type. Archive directories/files are owner-only (0700/0600).
+
+A hash identifies bytes; it cannot reconstruct an image when no copy survives. This
+second copy protects against loss/corruption of one queue payload, not disk loss.
+Intentional rejection deletes the archive copy after the final queued reference to the
+same hash is removed. No raw frames or image bytes are uploaded by this feature.

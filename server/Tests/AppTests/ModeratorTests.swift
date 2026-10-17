@@ -88,6 +88,14 @@ final class ModeratorCSRFTests: XCTestCase {
         XCTAssertTrue(ModeratorController.constantTimeEquals("", ""))
     }
 
+    func testReviewerFingerprintIsStableDistinctAndNonReversibleLength() {
+        let first = ModeratorController.reviewerFingerprint("reviewer-a")
+        XCTAssertEqual(first, ModeratorController.reviewerFingerprint("reviewer-a"))
+        XCTAssertNotEqual(first, ModeratorController.reviewerFingerprint("reviewer-b"))
+        XCTAssertEqual(first.count, 16)
+        XCTAssertFalse(first.contains("reviewer"))
+    }
+
     func testEscapeNeutralisesMarkup() {
         let escaped = ModeratorController.escape(#"<script>alert("x") & 'y'</script>"#)
         XCTAssertFalse(escaped.contains("<script>"))
@@ -114,7 +122,7 @@ private extension SightingSubmissionDTO {
     static func sample(confidence: Double, unit: String?) -> SightingSubmissionDTO {
         let json = """
         {"capturedAt":"2026-10-09T04:00:00Z","geohash6":"9v6kpv",
-         "deviceIDHash":"dev-test","fleetConfidence":\(confidence),
+         "deviceIDHash":"dev-test","fleetConfidence":\(confidence),"userConfirmed":true,
          "plate":{"text":"1ABC234","issuingRegion":"US-CA","country":"US","plateDesign":null,"confidence":0.9},
          "vehicle":{"vehicleClass":"patrol","classConfidence":0.8},
          "markings":\(unit.map { #"{"agencyText":"AUSTIN POLICE","unitNumber":"\#($0)"}"# } ?? "null")}

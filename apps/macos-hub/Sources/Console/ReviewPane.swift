@@ -6,10 +6,25 @@ import SwiftUI
 
 /// Local outbox review: what this Hub has recorded and queued for sync. Discarding removes only the local copy.
 /// Each identified vehicle carries its evidence crop when one could be captured (`SightingSubmissionDTO.cropJPEGBase64`).
+@MainActor
+protocol ReviewHubProviding {
+    var syncStatus: String { get }
+    var lastReceiptSummary: String { get }
+    func syncPending() async
+}
+
 struct ReviewPane: View {
+    let hub: (any ReviewHubProviding)?
+    init(hub: (any ReviewHubProviding)? = nil, onQueueChange: @escaping () -> Void = {}) {
+        self.hub = hub
+        self.onQueueChange = onQueueChange
+    }
+    var onQueueChange: () -> Void = {}
     @Environment(\.modelContext) private var context
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var rows: [PendingSubmission]
-    @State private var selection: PersistentIdentifier?
+    @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
+    @State private var selection: Set<PersistentIdentifier> = []
+    @State private var discardError = ""
 
     private struct Row: Identifiable {
         let id: PersistentIdentifier
@@ -22,6 +37,7 @@ struct ReviewPane: View {
         let confidence: Double
         let retries: Int
         let error: String
+        let confirmed: Bool
         let thumbnail: NSImage?
     }
 
@@ -33,37 +49,103 @@ struct ReviewPane: View {
                        agency: dto?.markings?.agencyText ?? dto?.identity?.agency?.agencyKey ?? "unresolved",
                        agencyKey: dto?.identity?.agency?.agencyKey,
                        confidence: dto?.fleetConfidence ?? 0, retries: r.retryCount, error: r.lastError ?? "",
-                       thumbnail: dto?.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }.flatMap(NSImage.init(data:)))
+                       confirmed: dto?.userConfirmed == true,
+                       thumbnail: dto.flatMap { EvidenceArchive.current.resolve(base64: $0.cropJPEGBase64, hash: $0.cropHashSHA256) }.flatMap(NSImage.init(data:)))
         }
     }
+
+    private var evidenceCount: Int { table.reduce(into: 0) { count, row in if row.thumbnail != nil { count += 1 } } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(rows.count) queued").font(.headline)
+                Label("\(rows.count) queued", systemImage: "tray.full")
+                    .font(.headline)
+                Text("· \(evidenceCount) with evidence")
+                    .font(.caption)
+                    .foregroundStyle(evidenceCount == rows.count ? Color.secondary : Color.orange)
                 Spacer()
-                Button("Discard selected (local only)") {
-                    if let id = selection, let row = rows.first(where: { $0.persistentModelID == id }) {
-                        context.delete(row); try? context.save(); selection = nil
-                    }
+                if !receipts.isEmpty {
+                    Text("\(receipts.count) delivered receipts")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .help("Local acknowledgement history retained after delivery")
+                }
+                Text("\(selection.count) selected").font(.caption).foregroundStyle(.secondary)
+                Button("Select all") { selection = Set(rows.map(\.persistentModelID)) }.disabled(rows.isEmpty).accessibilityLabel("Select all queued sightings")
+                Button("Clear selection") { selection.removeAll() }.disabled(selection.isEmpty)
+                Button("Confirm selected", systemImage: "checkmark.seal") {
+                    do { try ReviewQueue.confirm(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
+                    catch { discardError = "Could not confirm selected items: \(error.localizedDescription)" }
+                }
+                .disabled(selection.isEmpty)
+                .help("Mark selected evidence as reviewed before backend moderation")
+                Button("Reject selected (local only)", role: .destructive) {
+                    do { try ReviewQueue.reject(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
+                    catch { discardError = "Could not reject selected items: \(error.localizedDescription)" }
                 }
                 .buttonStyle(.bordered)
-                .disabled(selection == nil)
+                .disabled(selection.isEmpty)
+                Button("Sync pending", systemImage: "arrow.up.circle") {
+                    Task { await hub?.syncPending() }
+                }
+                .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
+                .help("Deliver confirmed, redaction-gated submissions to the configured backend; moderation remains separate")
             }
+            Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
+                .font(.caption).foregroundStyle(.secondary)
+            if let receipt = hub?.lastReceiptSummary, !receipt.isEmpty {
+                Label(receipt, systemImage: "checkmark.seal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if !rows.isEmpty && evidenceCount < rows.count {
+                Label("\(rows.count - evidenceCount) queued item(s) have no recoverable image. Hashes can verify an image when bytes exist, but cannot recreate missing bytes.", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            if !discardError.isEmpty { Text(discardError).foregroundStyle(.red) }
+            Text("Use Command-click or Shift-click to select multiple items. Rejection removes the selected local queue entries.")
+                .font(.caption).foregroundStyle(.secondary)
             Table(table, selection: $selection) {
                 TableColumn("Image") { EvidenceThumbnail(image: $0.thumbnail) }.width(min: 72, ideal: 80)
-                TableColumn("Captured") { Text($0.captured, format: .dateTime) }
-                TableColumn("Agency") { Text($0.agency) }
-                TableColumn("Unit") { Text($0.unit) }
-                TableColumn("Area") { Text($0.area).monospaced() }
-                TableColumn("Fleet") { Text($0.confidence, format: .percent.precision(.fractionLength(0))) }
-                TableColumn("Retries") { Text("\($0.retries)") }
-                TableColumn("Last error") { Text($0.error).foregroundStyle(.secondary) }
+                TableColumn("Captured") { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.captured, format: .dateTime.month(.twoDigits).day(.twoDigits).year(.twoDigits))
+                        Text(row.captured, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
+                    }.font(.caption).help(row.captured.formatted())
+                }.width(110)
+                TableColumn("Agency") { Text($0.agency).lineLimit(2).help($0.agency) }.width(min: 110, ideal: 170, max: 280)
+                TableColumn("Unit") { Text($0.unit).help($0.unit) }.width(64)
+                TableColumn("Area") { Text($0.area).monospaced() }.width(65)
+                TableColumn("Fleet") { Text($0.confidence, format: .percent.precision(.fractionLength(0))) }.width(55)
+                TableColumn("Review") { row in
+                    Label(row.confirmed ? "Confirmed" : "Pending", systemImage: row.confirmed ? "checkmark.seal.fill" : "clock")
+                        .foregroundStyle(row.confirmed ? Color.green : Color.secondary)
+                        .help(row.confirmed ? "Operator confirmed" : "Awaiting operator confirmation")
+                }.width(92)
+                TableColumn("Retries") { Text("\($0.retries)") }.width(48)
+                TableColumn("Last error") { Text($0.error).foregroundStyle(.secondary).help($0.error) }.width(min: 80, ideal: 140)
             }
-            if let row = table.first(where: { $0.id == selection }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
+            .overlay {
+                if rows.isEmpty { ContentUnavailableView("Nothing queued for review", systemImage: "tray", description: Text("Fleet sightings appear here after on-device analysis.")) }
+            }
+            .onChange(of: rows.map(\.persistentModelID)) { _, ids in selection.formIntersection(ids) }
+            if selection.count == 1, let row = table.first(where: { selection.contains($0.id) }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding()
+        .task(id: rows.map(\.idempotencyKey)) {
+            for row in rows {
+                guard !Task.isCancelled else { return }
+                if let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON),
+                   let hash = dto.cropHashSHA256,
+                   let data = EvidenceArchive.current.resolve(base64: dto.cropJPEGBase64, hash: hash) {
+                    try? EvidenceArchive.current.store(data, hash: hash)
+                }
+                await Task.yield()
+            }
+        }
     }
 }
 
@@ -90,7 +172,7 @@ private struct EvidenceThumbnail: View {
             Image(systemName: "photo")
                 .foregroundStyle(.tertiary)
                 .frame(width: 64, height: 40)
-                .help("No evidence image was captured for this sighting")
+                .help("No image saved: an older record, unavailable frame, or a crop omitted by privacy rules")
         }
     }
 }
@@ -115,7 +197,7 @@ private struct EvidenceViewer: View {
             }
         }
         .padding()
-        .frame(minWidth: 520, minHeight: 400)
+        .frame(minWidth: max(520, image.size.width + 48), minHeight: max(400, image.size.height + 100))
     }
 }
 

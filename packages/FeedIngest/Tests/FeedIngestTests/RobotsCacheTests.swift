@@ -60,6 +60,34 @@ final class RobotsCacheTests: XCTestCase {
         RobotsStubProtocol.requestCount = 0
     }
 
+    func testNevadaPublishedStreamPlaceholderExceptionIsScopedAndKeepsRealRefusals() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RobotsStubProtocol.self]
+        let url = URL(string: "https://d1wse1.its.nv.gov/vegasxcd01/synthetic_public.stream/playlist.m3u8")!
+        func cache() -> RobotsCache { RobotsCache(session: URLSession(configuration: config), userAgent: userAgent, publicAPIPermissions: PublicAPIPermission.nevada511Video, maximumAttempts: 1) }
+        RobotsStubProtocol.responder = { _ in (200, "text/html", Data("<html><head><title>Wowza Streaming Engine 4</title></head></html>".utf8)) }
+        let allowed = await cache().decision(for: url)
+        XCTAssertTrue(allowed.isAllowed)
+        for ext in ["ts", "m4s", "mp4", "aac", "key"] {
+            let child = await cache().decision(for: url.deletingLastPathComponent().appendingPathComponent("segment.\(ext)"))
+            XCTAssertTrue(child.isAllowed)
+        }
+        for raw in ["https://other.example/vegasxcd01/a.stream/playlist.m3u8", "https://d1wse1.its.nv.gov/private/playlist.m3u8", "https://d1wse1.its.nv.gov/vegasxcd01/a.jpg"] {
+            let refused = await cache().decision(for: URL(string: raw)!)
+            XCTAssertFalse(refused.isAllowed)
+        }
+        RobotsStubProtocol.responder = { _ in (200, "text/plain", Data("User-agent: *\nDisallow: /\n".utf8)) }
+        let policyRefusal = await cache().decision(for: url)
+        XCTAssertFalse(policyRefusal.isAllowed)
+        RobotsStubProtocol.responder = { _ in (403, "text/html", Data()) }
+        let authRefusal = await cache().decision(for: url)
+        XCTAssertFalse(authRefusal.isAllowed)
+        RobotsStubProtocol.failureCode = .serverCertificateUntrusted
+        let tlsRefusal = await cache().decision(for: url)
+        XCTAssertFalse(tlsRefusal.isAllowed)
+        RobotsStubProtocol.failureCode = nil
+    }
+
     func testBatchUsesOnePolicySnapshotEvenWhenCacheExpiresImmediately() async {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [RobotsStubProtocol.self]

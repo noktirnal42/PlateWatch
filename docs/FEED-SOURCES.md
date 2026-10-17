@@ -1,12 +1,11 @@
 # FEED-SOURCES.md — public camera feeds and reference data the app suite can ingest
 
-> **Current Hub status (2026-10-14):** [continuation / verification](HUB-HANDOFF-2026-10-14.md) and
-> [USA access audit](research/USA-FEEDS-2026-10-14.md) supersede older reachability notes below.
-> Public feeds use refreshed snapshots; **`.hls` entries now run continuous background analysis**
-> through `FeedIngest.HLSFrameSource` under the same gates as snapshots (robots on the manifest
-> origin, person-confirmed terms, redaction gate, tiering, evidence crops). `.rtsp` entries are
-> honestly marked as needing the VLCKit fallback, which is not bundled. Continuous-video analysis
-> has not yet been verified against a real public HLS camera — that acceptance gate stays open.
+> **Current Hub status (2026-10-15):** [repair evidence](HUB-REPAIR-2026-10-15.md) supersedes older
+> implementation/reachability notes. Snapshot feeds analyze in the background; HLS decodes on demand for
+> the selected Live source. NV511 snapshots/HLS and real installed-app video analysis are verified.
+> Human-reviewed terms, manifest policy, source-specific gates and shared structured-data redaction remain in force. Local Review crops are preserved intact under LEGAL-ETHICS Rule 1.
+> Full child-playlist/CDN/segment policy enforcement and raw RTSP transport remain open.
+
 
 
 Reference for the macOS Hub (and any future ingest service) as it grows from handheld capture to **public feeds**:
@@ -261,8 +260,47 @@ Every host is checked before sources are labelled polling, with per-path rules a
 
 ⦸ blocks a source locally: its polling and in-flight previews stop; it disappears from All feeds and Favorites, but its star remains stored. Blocked → ↶ restores it after policy checks. Blocked sources cannot enter Live. No terms or upstream records are changed.
 
-**Open in Live** displays the selected snapshot's analysis overlays. One first-frame preview uses the same policy/throttle; subsequent analysed frames come from the existing background poller, using the camera's own location and resolution rules. Raw frames are in memory, only the selected latest frame is displayed, and leaving/closing/blocking clears it. Fetched/Analysed times are local processing times, not verified upstream capture times. Continuous HLS playback is not connected; the JPEG runner suspends HLS/RTSP records instead of fetching video manifests as images. Canadian options were removed from the Hub menu; historical parsers remain compatible.
+**Open in Live** displays the selected snapshot's analysis overlays. One first-frame preview uses the same policy/throttle; subsequent analysed frames come from the existing background poller, using the camera's own location and resolution rules. Raw frames are in memory; only the selected latest frame is displayed. Navigation retains the selected feed, while Close, Stop, blocking or permission revocation clears it. Fetched/Analysed times are local processing times, not verified upstream capture times. HLS uses the bounded live decoder and source-specific analysis; unselected streams remain idle. RTSP remains unsupported by the bundled transport. Canadian options were removed from the Hub menu; historical parsers remain compatible.
 
 ### Shared fetch-header and recovery follow-up
 
 The canonical identifying User-Agent is `PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)`. Pangborn rejected the prior long prose comment with HTTP 403; both its robots file and image return 200 to the corrected native client. Shared `RobotsDecision` exposes allowed / disallowed / unavailable outcomes, so network/5xx/HTML failures no longer appear as a policy refusal. Manual refresh retries only unavailable policy lookups. This fixes the header/recovery issue across adapters without pretending real provider restrictions or outages cannot occur.
+
+
+### NV511 and image-health recovery (2026-10-15)
+
+The official NV511 camera API publishes independent snapshot and HLS URLs for each enabled view. Import
+creates unconfirmed, cited entries and never writes the API key into media URLs or catalogue citations.
+The owner confirmed review of the Nevada media hosts on this date. Several exact official Wowza origins
+answer a missing robots route with a generic welcome page and HTTP 200. `PublicAPIPermission.nevada511Video`
+provides a cited, host/path/HTTPS-scoped exception only for that recognized placeholder on published HLS
+routes. Valid robots rules, authentication/rate refusals, unrelated HTML and TLS failures still stop access.
+See the [repair record](HUB-REPAIR-2026-10-15.md) for scope, tests and the remaining segment-policy limit.
+
+Camera HTTP/media/network failures now have separate diagnostics from unavailable policy lookups.
+A successful Refresh now clears stale image failure state and restarts a suspended snapshot poller.
+Received-frame timestamps represent receipt/processing, not a verified upstream capture time.
+
+### Selective background analysis (2026-10-15)
+
+Use the eye control beside a camera to watch it, or **Watch all favorites** to add
+starred cameras to the selection. Opening Live temporarily includes that source.
+An approved, unwatched source stays idle; its preview still works. Stars, watch
+choices and blocks persist independently. HLS uses at most four concurrent decoders,
+prioritizing Live; additional watched streams show a capacity wait. Closing Live
+releases its temporary selection, while explicit watches continue in the background.
+
+### HLS request mediation and receipt diagnostics (2026-10-15)
+
+HLS now uses a loopback-only policy relay for playlists, media, keys and redirects.
+Only URLs introduced by fetched playlists acquire capability routes, and every
+upstream request must pass reviewed-origin and robots checks. Normal references,
+byte ranges and bounded streaming are tested; variable substitution and content
+steering are refused until supported. Favorites share two preview decoder slots,
+separate from the four watched streams. See CONTINUATION-ROADMAP-2026-10-15.md for
+limits, proof and the remaining sustained-pilot gate.
+
+Live snapshot receipt time is separate from analysis time. Identical image bytes
+retain their content-change time and eventually show an “image unchanged” notice.
+This does not prove an upstream outage; a static scene can also stay identical.
+Hashes/timestamps are transient local state and no additional image data is stored.

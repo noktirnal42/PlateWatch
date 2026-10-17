@@ -9,6 +9,12 @@ import Security
 /// container is actually declared.
 public enum SyncBackends {
 
+    public enum Destination: String, CaseIterable, Sendable {
+        case automatic
+        case cloudKit
+        case referenceServer
+    }
+
     public static let containerID = "iCloud.org.platewatch.platewatch"
 
     /// True when the app's signature declares our CloudKit container.
@@ -35,13 +41,23 @@ public enum SyncBackends {
     /// The right backend for this binary, right now.
     /// - Entitled build  → CloudKit public DB (production path)
     /// - Otherwise       → REST to the configurable mirror (dev default:
-    ///   localhost:8080 where `server/` runs). Never nil, never crashes.
-    public static func makeDefault() -> any SyncBackend {
-        if cloudKitAvailable() {
+    ///   localhost:8083 where `server/` runs). Never nil, never crashes.
+    public static func makeDefault(destination: Destination = .automatic) -> any SyncBackend {
+        if destination != .referenceServer && cloudKitAvailable() {
             return CloudKitBackend()
         }
-        let mirror = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"]
-            ?? "http://127.0.0.1:8080"
-        return RESTBackend(baseURL: URL(string: mirror)!)
+        return RESTBackend(baseURL: mirrorURL())
     }
+
+    /// Invalid overrides fall back safely; plaintext remote servers and embedded credentials are refused.
+    public static func mirrorURL(override: String? = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"]) -> URL {
+        if let override, let url = URL(string: override),
+           url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+           let host = url.host, !host.isEmpty,
+           url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1", "::1"].contains(host)) {
+            return url
+        }
+        return URL(string: "http://127.0.0.1:8083")!
+    }
+
 }

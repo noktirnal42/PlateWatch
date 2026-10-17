@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 import CoreVideo
 import CoreMedia
 @testable import CaptureKit
@@ -146,6 +147,39 @@ final class FrameRollingBufferTests: XCTestCase {
         // Within 1.0 seconds: 0.0 and 0.5 = 2 frames
         let recent = buffer.framesInLast(1.0)
         XCTAssertEqual(recent.count, 2)
+    }
+}
+
+final class EventClipMetadataTests: XCTestCase {
+    func testMetadataDescribesPartialBufferWithoutTouchingPixels() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let frames = (0..<3).map { index in
+            FramePacket(pixelBuffer: makeTestPixelBuffer(),
+                        timestamp: start.addingTimeInterval(Double(index) * 0.25),
+                        sequenceNumber: UInt64(index + 10))
+        }
+        let clip = EventClip(frames: frames, triggerFrameIndex: 1,
+                             triggerTimestamp: frames[1].timestamp)
+        XCTAssertEqual(clip.frameCount, 3)
+        XCTAssertEqual(clip.duration, 0.5, accuracy: 0.001)
+        XCTAssertEqual(clip.startTimestamp, start)
+        XCTAssertEqual(clip.endTimestamp, start.addingTimeInterval(0.5))
+    }
+
+    func testExporterWritesBoundedLocalMovie() throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let frames = (0..<3).map { index in
+            FramePacket(pixelBuffer: makeTestPixelBuffer(),
+                        timestamp: start.addingTimeInterval(Double(index) * 0.1),
+                        sequenceNumber: UInt64(index))
+        }
+        let clip = EventClip(frames: frames, triggerFrameIndex: 1, triggerTimestamp: frames[1].timestamp)
+        let url = FileManager.default.temporaryDirectory.appending(path: "platewatch-export-test-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try EventClipExporter.export(clip, to: url)
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        XCTAssertGreaterThan((attrs[.size] as? NSNumber)?.intValue ?? 0, 0)
     }
 }
 

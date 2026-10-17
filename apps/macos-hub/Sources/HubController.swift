@@ -15,12 +15,14 @@ import CoreImage
 /// v2: Bonjour-advertised HTTP snapshot endpoint for cameras/phones to POST
 /// directly. v3: RTSP ingest for cameras that only expose RTSP.
 @MainActor
-final class HubController: ObservableObject {
+final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var ingestFolder: URL
     @Published private(set) var framesAnalyzed = 0
     @Published private(set) var fleetHitsToday = 0
     @Published private(set) var feedFramesAnalyzed = 0
     @Published private(set) var pendingCount = 0
+    @Published private(set) var syncStatus = "Not synced"
+    @Published private(set) var lastReceiptSummary = ""
     @Published private(set) var snapshotServerStatus = "Stopped"
     @Published private(set) var snapshotPort: UInt16 = 0
     @Published private(set) var rtspServerStatus = "Stopped"
@@ -33,11 +35,14 @@ final class HubController: ObservableObject {
     private let identityResolver = IdentityResolver()
     private var deduper = SightingDeduper()
     /// Public camera feeds (docs/FEED-SOURCES.md). Only sources a person confirmed the terms of are polled.
+    let assistant = HubAssistant()
     let feedRunner = FeedRunner()
     let favorites = FeedFavorites()
+    let feedBrowserState = FeedBrowserState()
     private var activeFeedSources: [UUID: PublicFeedSource] = [:]
     var feedsFile: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        if HubQAFixture.enabled { return HubQAFixture.directory.appendingPathComponent("feeds.json") }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appending(path: "PlateWatchHub/feeds.json")
     }
     @Published private(set) var modelStatus = "baseline vision"
@@ -81,6 +86,8 @@ final class HubController: ObservableObject {
         self.modelManager = ModelManager(config: .init(
             registryURL: URL(string: "https://raw.githubusercontent.com/noktirnal42/PlateWatch/main/models/registry.json")!,
             cacheDirectory: support))
+        refreshPendingCount()
+        if HubQAFixture.enabled { startFeeds(); return }
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
         Task { await refreshModels() }
@@ -134,6 +141,7 @@ final class HubController: ObservableObject {
 
     enum OpenCatalogue: String, CaseIterable, Identifiable {
         case arizona = "Arizona — AZ511 (needs API key)"
+        case nevada = "Nevada — NV511 (needs API key)"
         case caltrans = "California — Caltrans (about 3,400 cameras)"
         case wsdot = "Washington — WSDOT (about 1,700; low-volume use only)"
         case iowa = "Iowa DOT (about 1,300)"
@@ -144,6 +152,7 @@ final class HubController: ObservableObject {
         var key: String {
             switch self {
             case .arizona: "arizona"
+            case .nevada: "nevada"
             case .caltrans: "caltrans"
             case .wsdot: "wsdot"
             case .iowa: "iowa"
@@ -199,6 +208,20 @@ final class HubController: ObservableObject {
                 let (data, response) = try await fetchSigned(request)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
                 result = try AZ511Cameras.sources(fromJSON: data, key: key)
+            case .nevada:
+                // One catalogue request per import — well inside the 10 calls / 60 s the API allows.
+                guard let key = SourceCredentials.key(for: "nv511"), !key.isEmpty else {
+                    importStatus = "Nevada 511 needs an API key. Add one in Settings › Source API keys — the signup link is next to the key field."
+                    return
+                }
+                var request = URLRequest(url: NV511Cameras.endpoint
+                    .appending(queryItems: [URLQueryItem(name: "key", value: key),
+                                            URLQueryItem(name: "format", value: "json")]))
+                request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 60
+                let (data, response) = try await fetchSigned(request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                result = try NV511Cameras.sources(fromJSON: data, key: key)
             case .caltrans:
                 let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
                                             attribution: "Caltrans", licenseClass: .publicDomain, refreshInterval: 300, state: "CA")
@@ -265,11 +288,39 @@ final class HubController: ObservableObject {
         }
         activeFeedSources = Dictionary(uniqueKeysWithValues: catalogue.sources.map { ($0.id, $0) })
         if let liveFeed, activeFeedSources[liveFeed.id]?.mayBeAnalysed != true { stopLiveFeed() }
-        feedRunner.start(catalogue: catalogue, blockedIDs: favorites.blockedIDs) { [weak self] data, source in
+        feedRunner.start(catalogue: catalogue, blockedIDs: favorites.blockedIDs, watchedIDs: watchedForRunner) { [weak self] data, source in
             await self?.analyseFeedFrame(data, from: source)
         } analyseVideoFrame: { [weak self] box, source in
             await self?.analyseFeedVideoFrame(box.buffer, from: source)
         }
+        feedRunner.setLiveVideoSource(liveFeed?.kind == .hls ? liveFeed?.id : nil)
+    }
+
+    /// Watched selection = the persisted eye toggles, plus whatever feed is
+    /// open in Live (it is analysed while open, regardless of its toggle).
+    private var watchedForRunner: Set<UUID> {
+        var watched = favorites.watchedIDs
+        if let liveFeed { watched.insert(liveFeed.id) }
+        return watched
+    }
+
+    /// Re-apply the watched union after a toggle or Live open/close, without
+    /// restarting the whole runner.
+    private func syncRunnerWatch() {
+        feedRunner.setWatched(watchedForRunner)
+    }
+
+    /// Toggle background analysis for one camera and apply it immediately.
+    func toggleFeedWatch(_ id: UUID) {
+        favorites.toggleWatched(id)
+        syncRunnerWatch()
+    }
+
+    /// Convenience: watch every favorite (the curated set), keeping non-favorite
+    /// watches as they are.
+    func watchAllFavorites() {
+        favorites.watch(favorites.ids)
+        syncRunnerWatch()
     }
 
     @Published private(set) var liveFeed: PublicFeedSource?
@@ -277,19 +328,43 @@ final class HubController: ObservableObject {
     @Published private(set) var liveFeedStatus = ""
 
     func openFeedInLive(_ source: PublicFeedSource) {
-        guard source.kind == .snapshotJPEG, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
+        guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
         liveFeedFrame = nil
         liveFeedStatus = "Waiting for a frame…"
         liveFeed = source
+        syncRunnerWatch()
+        feedRunner.setLiveVideoSource(source.kind == .hls ? source.id : nil)
     }
 
     func stopLiveFeed() {
+        feedRunner.setLiveVideoSource(nil)
         liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
+        syncRunnerWatch()
     }
 
     /// An immediate, rate-limited first frame; subsequent frames come from the existing background poller.
     func loadLiveFeed() async {
         guard let source = liveFeed else { return }
+        if source.kind == .hls {
+            feedRunner.setLiveVideoSource(source.id)
+            // Do not wait for the rotating background decoder to deliver the
+            // first frame. Opening a feed is an interactive action, so obtain
+            // one bounded preview immediately and put it through the same
+            // on-device analysis path as the continuing HLS sink.
+            do {
+                let data = try await feedRunner.fetchPreview(of: source)
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                await analyseFeedFrame(data, from: source)
+            } catch {
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                liveFeedStatus = error.localizedDescription
+            }
+            while !Task.isCancelled, liveFeed?.id == source.id {
+                if liveFeedFrame == nil { liveFeedStatus = feedRunner.state(of: source).text }
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            }
+            return
+        }
         while !Task.isCancelled, liveFeed?.id == source.id {
             do {
                 let data = try await feedRunner.fetchPreview(of: source)
@@ -418,6 +493,65 @@ final class HubController: ObservableObject {
 
     func attach(context: ModelContext) {
         self.modelContext = context
+        refreshPendingCount()
+    }
+
+    func refreshPendingCount() {
+        guard let modelContext else { return }
+        if let count = try? modelContext.fetchCount(FetchDescriptor<PendingSubmission>()) { pendingCount = count }
+    }
+
+    /// Delivers only locally queued, redaction-gated submissions. Moderation and
+    /// world-readable publication remain separate server-side steps.
+    func syncPending() async {
+        guard let modelContext else { syncStatus = "Local queue unavailable"; return }
+        syncStatus = "Syncing pending…"
+        lastReceiptSummary = ""
+        let destination = SyncBackends.Destination(rawValue: UserDefaults.standard.string(forKey: "hubSyncBackend") ?? "automatic") ?? .automatic
+        let backend = SyncBackends.makeDefault(destination: destination)
+        let cloudKitDelivery = destination != .referenceServer && SyncBackends.cloudKitAvailable()
+        let rows = (try? modelContext.fetch(FetchDescriptor<PendingSubmission>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        var delivered = 0
+        var rejected = 0
+        var lastReceipt: SubmissionReceipt?
+        for row in rows where row.retryCount < 8 {
+            guard let dto = try? JSONDecoder.withISODates.decode(SightingSubmissionDTO.self, from: row.payloadJSON) else {
+                modelContext.delete(row)
+                continue
+            }
+            do {
+                let receipt = try await backend.submit(dto, idempotencyKey: row.idempotencyKey)
+                lastReceipt = receipt
+                if receipt.moderationState == .rejected { rejected += 1 } else { delivered += 1 }
+                let alreadyRecorded = (try? modelContext.fetch(FetchDescriptor<ReceivedSubmissionReceipt>(
+                    predicate: #Predicate { $0.sightingID == receipt.sightingID }
+                )))?.isEmpty == false
+                if !alreadyRecorded {
+                    modelContext.insert(ReceivedSubmissionReceipt(
+                        sightingID: receipt.sightingID,
+                        receivedAt: receipt.serverReceivedAt,
+                        moderationState: receipt.moderationState,
+                        operatorConfirmed: receipt.operatorConfirmed ?? false,
+                        idempotencyKey: receipt.idempotencyKey ?? row.idempotencyKey,
+                        cropJPEGData: dto.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }))
+                }
+                modelContext.delete(row)
+            } catch SyncError.quotaExceeded {
+                break
+            } catch {
+                row.retryCount += 1
+                row.lastError = String(describing: error)
+            }
+        }
+        try? modelContext.save()
+        refreshPendingCount()
+        let destination = cloudKitDelivery ? "CloudKit submission store" : "reference server"
+        syncStatus = pendingCount == 0 ? "Delivered to \(destination)" : "\(pendingCount) still pending"
+        if delivered > 0 || rejected > 0 {
+            lastReceiptSummary = "Recorded \(delivered) accepted · \(rejected) rejected · backend: \(destination)"
+        } else if let lastReceipt {
+            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · backend: \(destination)"
+        }
     }
 
     func chooseIngestFolder() {
@@ -636,7 +770,7 @@ final class HubController: ObservableObject {
     /// Gate each vehicle and queue fleet hits for sync. Shared by the folder watch and the HTTP
     /// endpoint so both apply identical rules. Returns the number of fleet hits.
     /// `source` is the analysed frame as a bitmap: when present, every recorded hit
-    /// carries an evidence crop of the vehicle (redacted per `EvidenceCrop` policy).
+    /// carries an intact local evidence crop of the vehicle (see `EvidenceCrop`).
     @discardableResult
     private func recordFleetHits(in frame: DetectionFrame, tier: AnalysisTier,
                                  geohash6: String? = nil, mayResolveIdentity: Bool = true,
@@ -687,8 +821,11 @@ final class HubController: ObservableObject {
                 context.insert(PendingSubmission(
                     idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
                     payloadJSON: payload))
-                try? context.save()
-                pendingCount += 1
+                do {
+                    try context.save()
+                    if let crop { try? EvidenceArchive.current.store(crop.jpegData, hash: crop.sha256Hex) }
+                    pendingCount += 1
+                } catch { context.rollback() }
             }
         }
         return (hits, agencyKeys)
@@ -743,7 +880,7 @@ final class HubController: ObservableObject {
         let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             return .init(id: vehicle.id, rect: vehicle.boundingBox,
-                         label: "\(vehicle.vehicleClass.rawValue) \(Int(confidence * 100))%",
+                         label: VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence),
                          isFleet: gate.verdict(fleetConfidence: confidence) == .persistAndSync)
         }
         return LiveFrameResult(boxes: boxes, hits: hits)
@@ -1039,7 +1176,10 @@ final class RTSPStreamHandler: @unchecked Sendable {
                         context.insert(PendingSubmission(
                             idempotencyKey: OutboxDrainer.idempotencyKey(for: dto),
                             payloadJSON: payload))
-                        try? context.save()
+                        do {
+                            try context.save()
+                            if let crop { try? EvidenceArchive.current.store(crop.jpegData, hash: crop.sha256Hex) }
+                        } catch { context.rollback() }
                     }
                 }
             }

@@ -2,6 +2,10 @@ import XCTest
 
 final class ReviewFlowTests: XCTestCase {
     @MainActor private func preview(tab: Int, extraArguments: [String] = []) -> XCUIApplication {
+        // XCTest may run methods in a different order, and the landscape test
+        // leaves the simulator rotated. Reset before every preview so large
+        // text/accessibility checks exercise the intended portrait layout.
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["-PWPreviewData", "-PWTab", String(tab)] + extraArguments
         app.launch()
@@ -33,7 +37,8 @@ final class ReviewFlowTests: XCTestCase {
         capture("ios-watchlist", app)
         let field = app.textFields["fleet-plate-input"]
         field.tap(); field.typeText("demo1")
-        XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].exists)
+        app.keyboards.buttons["done"].tap()
+        XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
         field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + "GOV123")
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
@@ -84,7 +89,13 @@ final class ReviewFlowTests: XCTestCase {
         let field = app.textFields["fleet-plate-input"]
         if !field.isHittable { app.swipeUp() }
         XCTAssertTrue(field.isHittable)
-        field.tap(); field.typeText("GOV123")
+        // Dynamic Type can place the SwiftUI field inside a List cell whose
+        // accessibility tap does not promote the UIKit responder on iOS 27.
+        // A coordinate tap exercises the same visible control and is stable
+        // across the large-text layout.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 3))
+        field.typeText("GOV123")
         app.keyboards.buttons["done"].tap()
         let attestation = app.switches["fleet-attestation"]
         if !attestation.isHittable { app.swipeUp() }

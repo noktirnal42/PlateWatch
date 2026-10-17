@@ -27,11 +27,20 @@ tests must stay green before its status advances.
   path, review flow, on-device self-test.
 - **Docs:** NEXT-STEPS §2 (field test), QA-REPORT, EVALUATION.
 - **Test:** `swift test --package-path packages/CaptureKit` + iOS build.
-- **Status:** still-photo core loop inherited; 2026-10-14 iOS review/branding pass
+- **Status:** still-photo core loop inherited; 2026-10-16 iOS mobile extension pass adds published-fleet sightings, backend connection diagnostics, all-vehicle class overlays, and reliable large-text watchlist focus; 2026-10-14 iOS review/branding pass
   adds observation detail/export, retry recovery, validated fleet watchlists,
   local cleanup and simulator CloudKit startup-crash fix. See
   [IOS-UI-HANDOFF.md](IOS-UI-HANDOFF.md) for validation and screenshot boundaries.
-  Handheld live-camera field testing remains pending.
+  CaptureKit now selects the best available rear lens, applies bounded auto-exposure/ISO tuning,
+  records exposure diagnostics, and retains eviction-safe pre/post event clips; physical-device
+  tuning and clip export remain QA/follow-up gates.
+  Handheld live-camera field testing remains pending. The simulator now proves the REST health path and
+  renders the published-fleet feed (empty state is explicit when the backend has no published records);
+  signed CloudKit account/database verification remains external. CloudKit watchlist subscription registration,
+  watchOS silent-push delta matching, haptics and local alert presentation are implemented; signed
+  entitlement and physical-device push delivery remain external QA gates.
+  The phone now mirrors its normalized local watchlist to the companion watch
+  through WatchConnectivity; pairing and push delivery remain physical-device gates.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
@@ -45,22 +54,37 @@ tests must stay green before its status advances.
 - **Test:** `swift test --package-path packages/FeedIngest` + Hub scheme tests (see handoff).
 - **CSV import:** standard header mapping, agency and citation URL fields added; [export/source research](research/BRADY-CSV-EXPORTS-2026-10-14.md) records verified conversions and next sources.
 - **QA follow-up:** see [HUB-QA-2026-10-14.md](HUB-QA-2026-10-14.md) for post-Claude/GLM render fixes, source links and outstanding visual checks.
-- **Status:** 2026-10-14 desktop console builds and runs; favorites/block, shared polite polling,
-  Caltrans's scoped robots fallback, selected snapshot analysis in Live, and moderator audit refresh
-  implemented. Feed browser state survives sidebar navigation; Records & FOIA exposes the fleet FOIA
-  builder, a cited public-records directory and the programme boundary. Merged with the evidence-image
-  work: recorded fleet hits carry redacted vehicle crops (≤40 KB JPEG + SHA-256), shown as Review-pane
-  thumbnails with click-to-enlarge. `.hls` feed entries now run continuous background analysis through
-  `FeedIngest.HLSFrameSource` (same gates/tiering/crops as snapshots; manifest-origin robots; AVPlayer's
-  own CDN segment fetches are a documented limitation); `.rtsp` states it needs the unbundled VLCKit
-  fallback. Oregon/Utah/New Mexico imports added; new hosts remain unconfirmed. Continuous HLS and raw
-  RTSP are not yet validated against real streams end-to-end.
+- **Status:** 2026-10-15 Hub repair builds, tests and signed local installation verified; see
+  [repair evidence](HUB-REPAIR-2026-10-15.md). Nevada's keyed catalogue now preserves snapshots and HLS
+  per view. Real NV511 HLS playback/analysis and all ten existing favorite previews verified.
+  HLS decodes on demand for the selected Live camera; ordinary previews use the bounded live decoder.
+  Review multi-rejection/enlargement and pane persistence repaired; original eight queued records
+  preserved (their payloads lacked image bytes before this repair). Snapshot failures, policy failures
+  and manual recovery are distinct. OpenCode watch controls reconciled: persisted selective polling,
+  four-stream HLS budget and Live priority; watch scan hang fixed and native toggling verified.
+  Local Review preserves intact evidence crops: overlapping vehicles and foreign text no longer
+  remove or black out photos (owner clarification, 2026-10-15; 37 Hub tests, four opt-in skips).
+  Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
+  163 FeedIngest and 45 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
+  with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
+  The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
+  to the complete catalogue, preventing cameras from appearing lost after relaunch.
+  Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
+  readable SUV/van/pickup/sedan/motorbike aliases and classifier confidence when a body label is unavailable).
+  iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared
+  sync boundary; CloudKit directory records are supported, while aggregate report delivery remains a
+  deployment/mirror gate until the required public records are present.
+  CloudKit-entitled Hub delivery retains local acknowledgement receipts and
+  identifies CloudKit versus the separate REST moderation queue; a CloudKit
+  moderator inbox/publication path remains the next backend milestone.
+  Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
-- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Internal Foundation Models/PCC/MLX agents remain planned.
-- **Next:** follow [HUB-HANDOFF-2026-10-14.md](HUB-HANDOFF-2026-10-14.md): verify a real permitted HLS
-  camera end-to-end,
-  credentialed US sources, hardware/permission QA and a small camera-quality pilot.
+- **Agent interface:** authenticated app-owned commands + local MCP/skill; [integration and internal-agent plan](AGENT-INTEGRATION.md). Local MLX and on-device Foundation Models now complete bounded tasks in the signed Hub; seven agent-core tests and 45 Hub tests pass (four Hub opt-in skips). Stop/journal verified. Owner-selected NVIDIA hosted agent/retrieval/extraction/vehicle-benchmark integration is implemented; live endpoint corrections and limits are recorded in the NIM research report. PCC remains pending.
+- **Next:** extend the mediated real-camera proof into
+  a sustained quality/freshness/CPU pilot and broader internal-agent task/attribution evaluation
+  in AGENT-INTEGRATION.md. Credentialed source expansion and physical hardware/permission QA remain.
+  Current continuation evidence and remaining gates: [repair report](HUB-REPAIR-2026-10-15.md).
 
 ## WS3 — Recognition & evaluation
 
@@ -72,9 +96,15 @@ tests must stay green before its status advances.
 - **Status:** baseline 59 % auto recall / 100 % precision (62-image corpus);
   official-plate reading landed; CoreML plate detector lifts plate reads
   10→15/62 images; vehicle-detector fusion fixed to not erase text-inferred
-  fleet class. Plate OCR model + ground-truth labels still open.
-- **Next:** ground-truth `plate` labels + exact-match/CER scoring in the
-  harness; grow corpus (USA, licensed, challenging low-contrast examples);
+  fleet class. 2026-10-15: bounded detail detection recovers the owner-reported Arlington
+  SUV in a local screenshot holdout; 31 VehicleML tests pass with that opt-in enabled.
+  Semantic label filtering now excludes non-vehicle COCO objects; a labeled camera benchmark separately
+  scores geometry and fleet coverage (36 tests pass). The local SUV box is recovered but its fleet
+  identity remains unconfirmed. Generic car/truck/bus/motorcycle labels are now retained separately
+  as body-type attributes for all Live detections, without promoting fleet status (37 VehicleML
+  tests, one local-image opt-in skip). See EVALUATION.md; OCR and broader fleet recall remain open.
+- **Next:** grow the ground-truth `plate` corpus (USA, licensed, challenging
+  low-contrast examples); improve the Vision baseline with a trained OCR model,
   make/model/color classifier (Create ML GUI path); fleet-specific
   classifier for recall.
 
@@ -98,10 +128,22 @@ tests must stay green before its status advances.
 - **Docs:** BACKEND, NEXT-STEPS §1, DECISIONS.
 - **Test:** `swift test --package-path packages/PlateSync` &&
   `swift test --package-path server` (41 tests, no database needed).
-- **Status:** schema written, not imported (owner Apple-account step);
-  moderator publish tool not started; REST mirror not deployed.
-- **Next:** import + deploy `cloudkit/schema.ckdb`; moderator publish CLI;
-  verify `_creator`-only roles; optional mirror hosting.
+- **Status:** 2026-10-15 production schema export confirms deployment and creator-only
+  submission roles. Hub capability and read-only connection diagnostics added; REST fallback
+  port now matches server 8083. Signed installed Hub account access and native REST moderation
+  refresh/reconnect verified; local per-user reference service restored. REST submissions now strip
+  thumbnail bytes and reapply plate/location privacy (19 PlateSync tests, 53 server tests pass).
+  Hub automatic queue delivery and CloudKit publication remain
+  unfinished; schema deployment alone does not prove either. Receipts now carry optional idempotency and
+  operator-confirmation metadata for audit surfaces. Intake and moderator state transitions now append
+  content-free audit details. Public agency directory/report DTOs and REST routes now cross the shared
+  sync boundary, with an iOS directory/detail surface; CloudKit aggregate report delivery remains a
+  deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
+- CloudKit record-name identity is now deterministic across launches (SHA-256
+  UUID derivation); receipt and delta reconciliation no longer depends on Swift's
+  randomized `Hasher` seed.
+- **Next:** CloudKit moderator publication and two-account
+  isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
 ## WS6 — Trust & redaction (cross-cutting)
 
@@ -109,12 +151,13 @@ tests must stay green before its status advances.
   field-compatibility, LEGAL-ETHICS encoding, moderation states.
 - **Docs:** LEGAL-ETHICS, DATA-MODEL, AGENTS.md guardrails.
 - **Test:** `swift test --package-path packages/PlateKit`.
-- **Status:** gate + official-plate evidence landed; **known drift risk** —
-  three call sites hand-roll the scoring call (iOS, EvalHarness, Hub) and the
-  Hub already broke once when the signature changed.
-- **Next:** add `PlateKit.FleetScoring.vehicleGateScore(gate:vehicle:)` as the
-  single scoring entry point and adopt it in iOS/EvalHarness/Hub so signature
-  evolution cannot desync callers; DTO `userConfirmed` field (NEXT-STEPS §8).
+- **Status:** gate + official-plate evidence landed; shared
+  `PlateKit.FleetScoring.vehicleGateScore(gate:vehicle:)` is now used by iOS,
+  EvalHarness and Hub. The wire DTO carries optional `userConfirmed`; Hub Review
+  can bulk-confirm selected evidence, and explicit unconfirmed payloads remain
+  pending at the reference server boundary.
+- **Next:** add publication receipts and moderator-facing confirmation audit fields;
+  run all package/server compatibility tests whenever this DTO evolves.
 
 ---
 

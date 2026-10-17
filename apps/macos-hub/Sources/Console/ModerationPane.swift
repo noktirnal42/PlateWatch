@@ -20,6 +20,10 @@ struct ModerationPane: View {
                 if store.busy { ProgressView().controlSize(.small).accessibilityLabel("Refreshing moderation data") }
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await store.refresh() } }.disabled(store.busy)
             }
+            if let server = ModeratorAccess.serverURL {
+                Text("Moderation server: \(server.absoluteString) · REST, separate from CloudKit")
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
             if let error = activeError { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
             if let actionError = store.actionError { Text(actionError).foregroundStyle(.red) }
             if tab == 2 { auditView } else if tab == 1 { takedownView } else { sightingsView }
@@ -76,12 +80,23 @@ struct ModerationPane: View {
 
     private var sightingsView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(store.items.count) pending").font(.headline)
+            Text(store.queueError == nil ? "\(store.items.count) pending" : "Queue unavailable · \(store.items.count) last loaded").font(.headline)
             Table(store.items, selection: $selection) {
                 TableColumn("Unit") { Text($0.unitNumber ?? "—") }
                 TableColumn("Area (geohash6)") { Text($0.geohash6).monospaced() }
                 TableColumn("Fleet confidence") { Text($0.fleetConfidence, format: .percent.precision(.fractionLength(0))) }
                 TableColumn("Captured") { Text($0.capturedAt, format: .dateTime) }
+            }
+            .overlay {
+                if store.items.isEmpty && !store.busy {
+                    if store.queueError != nil {
+                        ContentUnavailableView("Moderation server unavailable", systemImage: "network.slash",
+                            description: Text("Start the configured reference server, then Refresh. CloudKit does not serve this REST queue."))
+                    } else {
+                        ContentUnavailableView("No pending server submissions", systemImage: "checkmark.shield",
+                            description: Text("Items in local Review have not been delivered to this queue."))
+                    }
+                }
             }
             HStack {
                 Button("Approve as fleet vehicle") { Task { await decide(.approve) } }.keyboardShortcut("a", modifiers: .command)

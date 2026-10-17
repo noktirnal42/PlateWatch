@@ -33,6 +33,11 @@ targets:
         NSBonjourServices: [_platewatch-snapshot._tcp]   # advertises the snapshot ingest endpoint to IP cameras on the LAN
         CFBundleDisplayName: PlateWatch Hub
         ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Support/PlateWatchHub.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [iCloud.org.platewatch.platewatch]
+        com.apple.developer.icloud-services: [CloudKit]
     dependencies:
       - package: PlateKit
       - package: CaptureKit
@@ -41,26 +46,40 @@ targets:
       - package: FeedIngest
       - package: FleetImporters
       - package: AccountabilityKit
+      - package: HubAgents
+        product: HubAgentProviders
+      - package: HubAgents
+        product: HubAgentCore
+      - package: HubAgents
+        product: NIMKit
 
   PlateWatchHubTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - Tests
+      - Sources/EvidenceCrop.swift
+      - Sources/EvidenceArchive.swift
+      - Sources/VehicleOverlayLabel.swift
       - Sources/FeedRunner.swift
+      - Sources/HLSPreviewBudget.swift
       - Sources/Console/FeedPreferences.swift
       - Sources/Console/ModeratorAccess.swift
       - Sources/Console/ModerationStore.swift
       - Sources/Console/RecordsWorkspace.swift
+      - Sources/Console/ReviewPane.swift
+      - Sources/Console/ReviewQueue.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - package: FeedIngest
       - package: PlateKit
+      - package: PlateSync
       - package: AccountabilityKit
 
 packages:
+  HubAgents: { path: ../../packages/HubAgents }
   PlateKit: { path: ../../packages/PlateKit }
   CaptureKit: { path: ../../packages/CaptureKit }
   VehicleML: { path: ../../packages/VehicleML }

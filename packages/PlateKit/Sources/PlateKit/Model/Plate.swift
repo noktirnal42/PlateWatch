@@ -1,5 +1,15 @@
 import Foundation
 
+/// Coarse design families used by the fleet gate. This exposes only a
+/// privacy-safe category and never establishes fleet identity by itself.
+public enum PlateDesignFamily: String, Sendable, Codable, CaseIterable {
+    case standard
+    case exempt
+    case government
+    case official
+    case unknown
+}
+
 /// A normalized license plate reading.
 ///
 /// Normalization rules (OpenALPR-compatible): uppercase, strip spaces, dashes,
@@ -191,4 +201,17 @@ public struct Plate: Sendable, Hashable, Codable {
 
     /// True when the plate itself carries an official-use word (POLICE, OFFICIAL…).
     public var isOfficialPlate: Bool { plateDesign?.lowercased().contains("official") == true }
+
+    /// Conservative mapping until a licensed trained classifier is available.
+    public var designFamily: PlateDesignFamily {
+        let design = plateDesign?.lowercased() ?? ""
+        if isOfficialPlate || !officialWords.isEmpty || design.contains("government-official") {
+            return .official
+        }
+        if design.contains("exempt") { return .exempt }
+        if design.contains("gov") || design.contains("municipal") || design.contains("state-owned") || design.contains("federal") {
+            return .government
+        }
+        return plateDesign == nil ? .unknown : .standard
+    }
 }

@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import SwiftData
 @testable import PlateSync
 import PlateKit
 
@@ -47,6 +48,29 @@ final class OutboxTests: XCTestCase {
         // Compile-time contract: any SyncBackend can be used existentially.
         let backend: any SyncBackend = RESTBackend(baseURL: URL(string: "http://localhost:8080")!)
         _ = backend
+    }
+
+    func testReceiptLedgerKeepsBoundedCropWithoutSubmissionPayload() {
+        let sightingID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let receipt = ReceivedSubmissionReceipt(
+            sightingID: sightingID,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            moderationState: .fleetConfirmed,
+            operatorConfirmed: true,
+            idempotencyKey: "0123456789abcdef",
+            cropJPEGData: Data(repeating: 0xFF, count: 24))
+
+        XCTAssertEqual(receipt.sightingID, sightingID)
+        XCTAssertEqual(receipt.moderationState, .fleetConfirmed)
+        XCTAssertEqual(receipt.idempotencyPrefix, "0123456789ab")
+        XCTAssertTrue(receipt.operatorConfirmed)
+        XCTAssertEqual(receipt.cropJPEGData?.count, 24)
+        XCTAssertFalse(Mirror(reflecting: receipt).children.contains { $0.label == "payloadJSON" })
+
+        let oversized = ReceivedSubmissionReceipt(
+            sightingID: sightingID, receivedAt: Date(), moderationState: .pending,
+            cropJPEGData: Data(repeating: 0, count: 40 * 1024 + 1))
+        XCTAssertNil(oversized.cropJPEGData)
     }
 }
 
@@ -96,8 +120,41 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertFalse(CloudKitBackend.mayUploadPlate(dto(confidence: 0.95, markings: nil)))
     }
 
+    func testExplicitlyUnconfirmedReviewNeverUploadsPlate() {
+        let marked = FleetMarkingsDTO(agencyText: "CITY OF AUSTIN", unitNumber: "4421")
+        var pending = dto(confidence: 0.95, markings: marked)
+        pending.userConfirmed = false
+        XCTAssertFalse(CloudKitBackend.mayUploadPlate(pending))
+    }
+
     func testRecordTypesAreTheDocumentedOnes() {
         XCTAssertEqual(CloudKitBackend.RecordType.submission, "SightingSubmission")
         XCTAssertEqual(CloudKitBackend.RecordType.sighting, "Sighting")
+    }
+
+    func testCloudKitRecordIdentityIsStableAcrossCalls() {
+        let first = CloudKitBackend.uuid(fromRecordName: "sighting-opaque-record-name")
+        let second = CloudKitBackend.uuid(fromRecordName: "sighting-opaque-record-name")
+        let different = CloudKitBackend.uuid(fromRecordName: "sighting-other-record-name")
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(first, different)
+        XCTAssertEqual(first.uuidString.count, 36)
+    }
+}
+
+final class AgencyReportDTOTests: XCTestCase {
+    func testAgencyReportRoundTripsPublicAggregateFields() throws {
+        let agency = PublicAgencyDTO(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            name: "Example Police Department", shortName: "EPD", level: "city",
+            publicContactURL: "https://example.gov/contact",
+            budgetURL: "https://example.gov/budget")
+        let report = AgencyReportDTO(
+            agency: agency, fleetSize: 42, sightings30d: 17, activeUnits: 31,
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        let decoded = try JSONDecoder().decode(
+            AgencyReportDTO.self, from: JSONEncoder().encode(report))
+        XCTAssertEqual(decoded, report)
     }
 }

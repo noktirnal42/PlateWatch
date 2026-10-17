@@ -125,4 +125,73 @@ public struct EventClip: Sendable {
         self.triggerFrameIndex = triggerFrameIndex
         self.triggerTimestamp = triggerTimestamp
     }
+
+    public var frameCount: Int { frames.count }
+    public var startTimestamp: Date? { frames.first?.timestamp }
+    public var endTimestamp: Date? { frames.last?.timestamp }
+    public var duration: TimeInterval {
+        guard let startTimestamp, let endTimestamp else { return 0 }
+        return max(0, endTimestamp.timeIntervalSince(startTimestamp))
+    }
+}
+
+/// Encodes a bounded event clip to a local H.264 movie. The exporter accepts
+/// only frames already retained by the on-device rolling buffer; it performs
+/// no upload, persistence, or network work.
+public enum EventClipExporter {
+    public enum ExportError: Error, LocalizedError {
+        case emptyClip
+        case writerUnavailable
+        case appendFailed
+
+        public var errorDescription: String? {
+            switch self {
+            case .emptyClip: "The event buffer has no frames to export."
+            case .writerUnavailable: "The device could not create a local movie writer."
+            case .appendFailed: "The device could not encode one of the retained frames."
+            }
+        }
+    }
+
+    /// Writes an H.264 movie at `url`, replacing any existing file there.
+    /// Call from a utility task; encoding may take longer than one frame.
+    public static func export(_ clip: EventClip, to url: URL) throws {
+        guard let first = clip.frames.first else { throw ExportError.emptyClip }
+        try? FileManager.default.removeItem(at: url)
+        let width = CVPixelBufferGetWidth(first.pixelBuffer)
+        let height = CVPixelBufferGetHeight(first.pixelBuffer)
+        guard width > 0, height > 0 else { throw ExportError.writerUnavailable }
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: min(8_000_000, max(1_000_000, width * height * 2)),
+                AVVideoExpectedSourceFrameRateKey: 30
+            ]
+        ])
+        input.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height
+        ])
+        guard writer.canAdd(input) else { throw ExportError.writerUnavailable }
+        writer.add(input)
+        guard writer.startWriting() else { throw writer.error ?? ExportError.writerUnavailable }
+        writer.startSession(atSourceTime: .zero)
+        let base = first.timestamp
+        for frame in clip.frames {
+            while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.002) }
+            let timestamp = CMTime(seconds: max(0, frame.timestamp.timeIntervalSince(base)), preferredTimescale: 600)
+            guard adaptor.append(frame.pixelBuffer, withPresentationTime: timestamp) else {
+                input.markAsFinished(); writer.cancelWriting(); throw writer.error ?? ExportError.appendFailed
+            }
+        }
+        input.markAsFinished()
+        let semaphore = DispatchSemaphore(value: 0)
+        writer.finishWriting { semaphore.signal() }
+        semaphore.wait()
+        guard writer.status == .completed else { throw writer.error ?? ExportError.appendFailed }
+    }
 }

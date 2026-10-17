@@ -43,6 +43,28 @@ struct CaptureView: View {
                     }
                 }
                 Spacer()
+                if let clip = viewModel.latestEventClip {
+                    HStack(spacing: 8) {
+                        Label("Event buffer · \(clip.frameCount) frames · \(clip.duration, format: .number.precision(.fractionLength(1)))s", systemImage: "film.stack")
+                            .accessibilityLabel("Fleet event buffer ready")
+                            .accessibilityValue("\(clip.frameCount) frames, \(clip.duration, format: .number.precision(.fractionLength(1))) seconds")
+                        if let url = viewModel.exportedEventClipURL {
+                            ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
+                                .accessibilityLabel("Share event clip")
+                        } else {
+                            Button {
+                                Task { _ = await viewModel.exportLatestEventClip() }
+                            } label: { Image(systemName: "arrow.down.to.line.compact") }
+                                .accessibilityLabel("Save event clip")
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.62), in: Capsule())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 CaptureControls(viewModel: viewModel, photoItem: $photoItem)
                     .padding(.bottom, 4)
                 StatusBar(text: PreviewFixtures.isEnabled ? "Demo preview — camera and sync disabled" : viewModel.statusText)
@@ -275,7 +297,9 @@ private struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
     func makeUIView(context: Context) -> PreviewView { PreviewView(session: session) }
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        uiView.updateVideoOrientation()
+    }
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -285,13 +309,38 @@ private struct CameraPreview: UIViewRepresentable {
             videoLayer?.session = session
             videoLayer?.videoGravity = .resizeAspectFill
         }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            updateVideoOrientation()
+        }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            updateVideoOrientation()
+        }
+        /// Keep the preview layer's sensor rotation in step with the rotated
+        /// sample buffers delivered by CaptureKit. Without this, the live
+        /// image rotates independently of the controls and detection overlay.
+        func updateVideoOrientation() {
+            guard let connection = videoLayer?.connection,
+                  let orientation = window?.windowScene?.interfaceOrientation else { return }
+            let angle: CGFloat
+            switch orientation {
+            case .portrait: angle = 90
+            case .portraitUpsideDown: angle = 270
+            case .landscapeLeft: angle = 180
+            case .landscapeRight: angle = 0
+            default: return
+            }
+            guard connection.isVideoRotationAngleSupported(angle) else { return }
+            connection.videoRotationAngle = angle
+        }
         required init?(coder: NSCoder) { fatalError("storyboard-free") }
     }
 }
 
-/// Draws detections over the preview. Fleet vehicles get corner brackets
-/// (a "targeting" look that reads as a classification, not a generic box);
-/// everything else is a faint, dashed outline so it does not draw the eye.
+/// Draws every detected vehicle over the preview. Fleet vehicles get corner
+/// brackets; ordinary vehicles get a quieter outline, while both retain a
+/// readable body-class label so the phone view matches Hub Live.
 /// Coordinates arrive in our NormalizedBox (top-left origin).
 private struct DetectionOverlay: View {
     let frame: DetectionFrame?
@@ -323,17 +372,60 @@ private struct DetectionOverlay: View {
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                 }
-                if let plate = vehicle.plates.first?.best {
-                    PlateBadge(text: plate.text, compact: true)
-                        .position(x: rect.midX, y: max(16, rect.minY - 14))
+                if rect.width >= 58, rect.height >= 34 {
+                    Text(IOSVehicleOverlayLabel.text(for: vehicle))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .foregroundStyle(.black)
+                        .background(vehicle.vehicleClass.isFleet ? PWStyle.fleet : .white.opacity(0.86), in: Capsule())
+                        .position(x: min(max(rect.midX, 52), geo.size.width - 52),
+                                  y: max(12, rect.minY + 12))
                 }
             }
         }
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Vehicle detections")
-        .accessibilityValue("\(frame?.vehicles.filter { $0.vehicleClass.isFleet }.count ?? 0) fleet vehicles in view")
+        .accessibilityValue("\(frame?.vehicles.count ?? 0) vehicles in view; \(frame?.vehicles.filter { $0.vehicleClass.isFleet }.count ?? 0) fleet vehicles")
         .animation(.easeOut(duration: 0.15), value: frame?.vehicles.count ?? 0)
+    }
+}
+
+private enum IOSVehicleOverlayLabel {
+    static func text(for vehicle: VehicleObservation) -> String {
+        let body = vehicle.attributes?.bodyType.flatMap { value -> String? in
+            switch value.lowercased().replacingOccurrences(of: "_", with: " ") {
+            case "car", "automobile", "sedan", "coupe", "hatchback": return "Car"
+            case "truck", "lorry": return "Truck"
+            case "bus", "coach": return "Bus"
+            case "motorcycle", "motorbike": return "Motorcycle"
+            case "suv", "sport utility vehicle", "sport utility": return "SUV"
+            case "van", "minivan": return "Van"
+            case "pickup", "pickup truck": return "Pickup"
+            default: return nil
+            }
+        }
+        guard vehicle.vehicleClass.isFleet else {
+            let score = Int(min(1, max(0, vehicle.classConfidence)) * 100)
+            return "\(body ?? "Vehicle") · class \(score)%"
+        }
+        let fleet = switch vehicle.vehicleClass {
+        case .patrol: "Patrol"
+        case .fireEngine: "Fire engine"
+        case .ambulance: "Ambulance"
+        case .publicWorks: "Public works"
+        case .transit: "Transit"
+        case .schoolBus: "School bus"
+        case .federal: "Federal"
+        case .military: "Military"
+        case .parkRanger: "Park ranger"
+        case .highway: "Highway"
+        default: "Fleet"
+        }
+        return [body, fleet].compactMap { $0 }.joined(separator: " · ")
     }
 }
 

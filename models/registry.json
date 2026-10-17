@@ -79,5 +79,49 @@
       "format": "aar",
       "notes": "OSNet x0.25 trained on MSMT17 (person re-ID), transfers to vehicle re-ID. Converted via deep-person-reid (torchreid) PyTorch trace -> CoreML mlprogram. Complements the Vision feature-print fallback."
     }
+  ],
+  "agentModels": [
+    {
+      "name": "hub-local-qwen-1.5b",
+      "task": "bounded-local-agent",
+      "repository": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "license": "Apache-2.0",
+      "format": "mlx-safetensors-4bit",
+      "sourceURL": "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit/tree/8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "notes": "Read-only shared Hugging Face cache. No automatic download; all cached blobs verified before first load. Agent metadata is separate from CoreML registry entries. See docs/AGENT-INTEGRATION.md."
+    }
+  ],
+  "hostedModels": [
+    {
+      "name": "nvidia/nemotron-3-super-120b-a12b",
+      "task": "bounded-hosted-agent",
+      "license": "NVIDIA Nemotron Open Model License; NVIDIA API Trial Terms",
+      "sourceURL": "https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-super-120b-a12b"
+    },
+    {
+      "name": "nvidia/nemotron-3-embed-1b",
+      "task": "public-passage-embedding",
+      "license": "OpenMDW-1.1; NVIDIA API Trial Terms",
+      "sourceURL": "https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-embed-1b"
+    },
+    {
+      "name": "nvidia/llama-nemotron-rerank-vl-1b-v2",
+      "task": "public-passage-reranking",
+      "license": "NVIDIA Open Model License; Llama 3.2 Community License additional terms; NVIDIA API Trial Terms",
+      "sourceURL": "https://docs.api.nvidia.com/nim/reference/nvidia-llama-nemotron-rerank-vl-1b-v2"
+    },
+    {
+      "name": "nvidia/nemotron-parse",
+      "task": "public-page-extraction",
+      "license": "NVIDIA Community Model License; tokenizer CC-BY-4.0; NVIDIA API Trial Terms",
+      "sourceURL": "https://build.nvidia.com/nvidia/nemotron-parse/modelcard"
+    },
+    {
+      "name": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "task": "public-vehicle-geometry-benchmark",
+      "license": "OpenMDW-1.1; NVIDIA API Trial Terms",
+      "sourceURL": "https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b/modelcard"
+    }
   ]
 }

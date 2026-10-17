@@ -1,4 +1,5 @@
 import CloudKit
+import CryptoKit
 import Foundation
 import PlateKit
 
@@ -29,13 +30,13 @@ public struct CloudKitBackend: SyncBackend {
     /// meaningful across pulls.
     static func uuid(fromRecordName name: String) -> UUID {
         if let direct = UUID(uuidString: name) { return direct }
-        var hasher = Hasher()
-        hasher.combine(name)
-        var bytes = [UInt8](repeating: 0, count: 16)
-        var h = UInt64(bitPattern: Int64(hasher.finalize()))
-        for i in 0..<8 { bytes[i] = UInt8((h >> (i * 8)) & 0xff) }
-        h ^= 0x9E3779B97F4A7C15
-        for i in 8..<16 { bytes[i] = UInt8((h >> ((i - 8) * 8)) & 0xff) }
+        // Swift's Hasher is deliberately re-seeded for every process. Using
+        // it here made a CloudKit record appear as a different sighting after
+        // every relaunch, breaking receipt reconciliation and delta identity.
+        // SHA-256 gives us a stable, cross-process mapping without exposing
+        // the record name as a public identifier.
+        let digest = SHA256.hash(data: Data(name.utf8))
+        var bytes = Array(digest.prefix(16))
         bytes[6] = (bytes[6] & 0x0F) | 0x50  // version 5-ish marker
         bytes[8] = (bytes[8] & 0x3F) | 0x80
         return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -58,7 +59,10 @@ public struct CloudKitBackend: SyncBackend {
     /// markings). Below that, the plate stays on the device.
     static func mayUploadPlate(_ sighting: SightingSubmissionDTO) -> Bool {
         let hasMarkings = sighting.markings?.agencyText != nil || sighting.markings?.unitNumber != nil
-        return sighting.fleetConfidence >= 0.8 && hasMarkings
+        // New Hub queues explicitly write false until local Review confirms the
+        // evidence. Omitted remains compatible with legacy clients.
+        let operatorConfirmed = sighting.userConfirmed ?? true
+        return operatorConfirmed && sighting.fleetConfidence >= 0.8 && hasMarkings
     }
 
     // MARK: - SyncBackend
@@ -75,6 +79,7 @@ public struct CloudKitBackend: SyncBackend {
         record["geohash6"] = sighting.geohash6
         record["deviceIDHash"] = sighting.deviceIDHash
         record["fleetConfidence"] = sighting.fleetConfidence
+        record["userConfirmed"] = sighting.userConfirmed as NSNumber?
         if Self.mayUploadPlate(sighting) {
             record["plateText"] = sighting.plate?.text
             record["plateRegion"] = sighting.plate?.issuingRegion
@@ -94,14 +99,17 @@ public struct CloudKitBackend: SyncBackend {
             let saved = try await publicDB.save(record)
             return SubmissionReceipt(sightingID: stableID,
                                      moderationState: .pending,
-                                     serverReceivedAt: saved.modificationDate ?? Date())
+                                     serverReceivedAt: saved.modificationDate ?? Date(),
+                                     idempotencyKey: idempotencyKey,
+                                     operatorConfirmed: sighting.userConfirmed)
         } catch let error as CKError {
             switch error.code {
             case .quotaExceeded, .requestRateLimited: throw SyncError.quotaExceeded
             case .serverRecordChanged, .unknownItem:
                 // Retry loop hit an existing idempotent write → treat published.
                 return SubmissionReceipt(sightingID: stableID, moderationState: .pending,
-                                         serverReceivedAt: Date())
+                                         serverReceivedAt: Date(), idempotencyKey: idempotencyKey,
+                                         operatorConfirmed: sighting.userConfirmed)
             case .notAuthenticated: throw SyncError.notAuthenticated
             default: throw SyncError.serverRejected(reason: error.localizedDescription)
             }
@@ -190,6 +198,86 @@ public struct CloudKitBackend: SyncBackend {
                 status: r["status"] as? String ?? "unknown",
                 sightingsCount: (r["sightingsCount"] as? Int) ?? 0)
         }
+    }
+
+    public func agencies() async throws -> [PublicAgencyDTO] {
+        let query = CKQuery(recordType: RecordType.agency, predicate: NSPredicate(value: true))
+        let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
+                                                      desiredKeys: ["agencyKey", "name", "shortName", "level", "parentAgencyID", "publicContactURL", "budgetURL"],
+                                                      resultsLimit: 200)
+        return results.compactMap { _, result in
+            guard case .success(let record) = result else { return nil }
+            return PublicAgencyDTO(id: Self.uuid(fromRecordName: record.recordID.recordName),
+                                   name: record["name"] as? String ?? "Unknown agency",
+                                   shortName: record["shortName"] as? String,
+                                   level: record["level"] as? String ?? "unknown",
+                                   parentAgencyID: (record["parentAgencyID"] as? String).flatMap(UUID.init),
+                                   publicContactURL: record["publicContactURL"] as? String,
+                                   budgetURL: record["budgetURL"] as? String)
+        }
+    }
+
+    public func agencyReport(id: UUID) async throws -> AgencyReportDTO {
+        let agencyQuery = CKQuery(recordType: RecordType.agency,
+                                  predicate: NSPredicate(format: "agencyKey == %@", id.uuidString))
+        let (agencyRows, _) = try await publicDB.records(
+            matching: agencyQuery, inZoneWith: nil,
+            desiredKeys: ["agencyKey", "name", "shortName", "level", "parentAgencyID", "publicContactURL", "budgetURL"],
+            resultsLimit: 1)
+        guard let agencyRecord = agencyRows.compactMap({ result -> CKRecord? in
+            guard case .success(let record) = result.1 else { return nil }
+            return record
+        }).first else { throw SyncError.unsupported }
+
+        let agencyKey = (agencyRecord["agencyKey"] as? String) ?? id.uuidString
+        let vehicleQuery = CKQuery(recordType: RecordType.vehicle,
+                                   predicate: NSPredicate(format: "agencyKey == %@", agencyKey))
+        let vehicleRecords = try await allRecords(matching: vehicleQuery, desiredKeys: ["unitNumber"])
+        let unitNumbers: Set<String> = Set(vehicleRecords.compactMap { $0["unitNumber"] as? String })
+
+        let since = Date().addingTimeInterval(-30 * 86_400)
+        let sightingQuery = CKQuery(recordType: RecordType.sighting,
+            predicate: NSCompoundPredicate(andPredicateWithSubpredicates: [
+                NSPredicate(format: "agencyKey == %@", agencyKey),
+                NSPredicate(format: "capturedAt >= %@", since as NSDate),
+                NSPredicate(format: "moderationState == %@", Sighting.ModerationState.fleetConfirmed.rawValue)
+            ]))
+        let sightingRecords = try await allRecords(matching: sightingQuery, desiredKeys: [])
+        let agency = PublicAgencyDTO(
+            id: id,
+            name: agencyRecord["name"] as? String ?? "Unknown agency",
+            shortName: agencyRecord["shortName"] as? String,
+            level: agencyRecord["level"] as? String ?? "unknown",
+            parentAgencyID: (agencyRecord["parentAgencyID"] as? String).flatMap(UUID.init),
+            publicContactURL: agencyRecord["publicContactURL"] as? String,
+            budgetURL: agencyRecord["budgetURL"] as? String)
+        return AgencyReportDTO(agency: agency, fleetSize: vehicleRecords.count,
+                               sightings30d: sightingRecords.count, activeUnits: unitNumbers.count,
+                               publicContactURL: agency.publicContactURL,
+                               budgetURL: agency.budgetURL, generatedAt: Date())
+    }
+
+    /// CloudKit caps each query page. Report cards must count the complete
+    /// public set, so follow cursors instead of silently undercounting at 200.
+    private func allRecords(matching query: CKQuery, desiredKeys: [CKRecord.FieldKey]) async throws -> [CKRecord] {
+        var records: [CKRecord] = []
+        var cursor: CKQueryOperation.Cursor?
+        repeat {
+            let page: ([(CKRecord.ID, Result<CKRecord, Error>)], CKQueryOperation.Cursor?)
+            if let cursor {
+                page = try await publicDB.records(continuingMatchFrom: cursor,
+                                                  desiredKeys: desiredKeys, resultsLimit: 200)
+            } else {
+                page = try await publicDB.records(matching: query, inZoneWith: nil,
+                                                  desiredKeys: desiredKeys, resultsLimit: 200)
+            }
+            records.append(contentsOf: page.0.compactMap { result in
+                guard case .success(let record) = result.1 else { return nil }
+                return record
+            })
+            cursor = page.1
+        } while cursor != nil
+        return records
     }
 
     public func ensureWatchlistSubscription() async throws {

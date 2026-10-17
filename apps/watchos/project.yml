@@ -25,6 +25,7 @@ targets:
       properties:
         CFBundleDisplayName: PlateWatch
         WKWatchOnly: true
+        WKApplication: true
         ITSAppUsesNonExemptEncryption: false
     dependencies:
       - package: PlateKit

@@ -19,8 +19,22 @@ public struct RESTBackend: SyncBackend {
                        idempotencyKey: String) async throws -> SubmissionReceipt {
         var request = try JSONRequest.post(baseURL.appending(path: "v1/sightings"))
         request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
-        let receipt: SubmissionReceipt = try await request.send(sighting, using: session)
+        let receipt: SubmissionReceipt = try await request.send(Self.networkPayload(sighting), using: session)
         return receipt
+    }
+
+    /// The local review DTO carries a thumbnail; the network protocol carries only its hash.
+    /// Reapply privacy rules here so an older local queue cannot bypass the ingest gate.
+    static func networkPayload(_ sighting: SightingSubmissionDTO) -> SightingSubmissionDTO {
+        var result = sighting
+        result.cropJPEGBase64 = nil
+        if !CloudKitBackend.mayUploadPlate(sighting) {
+            result.plate = nil
+            result.identity = result.identity?.redactingRegistration()
+            result.exactLatitude = nil
+            result.exactLongitude = nil
+        }
+        return result
     }
 
     public func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta {
@@ -38,14 +52,25 @@ public struct RESTBackend: SyncBackend {
         return try await request.sendEmpty(using: session)
     }
 
+    public func agencies() async throws -> [PublicAgencyDTO] {
+        let request = try JSONRequest.get(baseURL.appending(path: "v1/agencies"))
+        return try await request.sendEmpty(using: session)
+    }
+
+    public func agencyReport(id: UUID) async throws -> AgencyReportDTO {
+        let request = try JSONRequest.get(baseURL.appending(path: "v1/agencies/\(id.uuidString)/report"))
+        return try await request.sendEmpty(using: session)
+    }
+
     /// k-anonymous heatmap/timeline from the reference server.
-    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+    public func heatmap(since: Date?, until: Date?, agencyID: UUID?) async throws -> HeatmapAggregateDTO {
         var comps = URLComponents(url: baseURL.appending(path: "v1/aggregates/heatmap"),
                                   resolvingAgainstBaseURL: false)!
         var items: [URLQueryItem] = []
         let iso = ISO8601DateFormatter()
         if let since { items.append(URLQueryItem(name: "since", value: iso.string(from: since))) }
         if let until { items.append(URLQueryItem(name: "until", value: iso.string(from: until))) }
+        if let agencyID { items.append(URLQueryItem(name: "agencyID", value: agencyID.uuidString)) }
         if !items.isEmpty { comps.queryItems = items }
         let request = try JSONRequest.get(comps.url!)
         return try await request.sendEmpty(using: session)

@@ -2,12 +2,21 @@ import PlateKit
 import PlateSync
 import SwiftData
 import SwiftUI
+import UIKit
 
-/// The outbox, not a historical archive: a successful receipt removes the row.
+/// The outbox is paired with a privacy-safe receipt history. Payloads leave
+/// the device after acknowledgement; only delivery metadata and an optional
+/// bounded review crop remain locally.
 struct SightingsListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.syncBackend) private var backend
     @Query(sort: \PendingSubmission.createdAt, order: .reverse) private var outbox: [PendingSubmission]
+    @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var errorText: String?
+    @State private var publicSightings: [PublicSightingDTO] = []
+    @State private var publicError: String?
+    @State private var backendStatus = "Not checked"
+    @State private var loadingPublic = false
 
     var body: some View {
         NavigationStack {
@@ -35,9 +44,51 @@ struct SightingsListView: View {
                         Text("Swipe to discard a local queued copy. If a transfer has already started, discarding cannot retract it from the backend.")
                     }
                 }
+                Section {
+                    if loadingPublic {
+                        HStack { ProgressView(); Text("Loading published sightings…") }
+                    } else if let publicError {
+                        Label(publicError, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    } else if publicSightings.isEmpty {
+                        Label("No published sightings yet", systemImage: "dot.radiowaves.left.and.right")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(publicSightings, id: \.id) { sighting in
+                            PublicSightingRow(sighting: sighting)
+                        }
+                    }
+                } header: {
+                    Text("Public feed · \(publicSightings.count)")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Only moderator-published fleet sightings appear here. Plates and exact locations are withheld from this mobile list.")
+                        Label(backendStatus, systemImage: backendStatus.localizedCaseInsensitiveContains("Connected") ? "checkmark.circle" : "network.slash")
+                            .foregroundStyle(backendStatus.localizedCaseInsensitiveContains("Connected") ? .green : .secondary)
+                    }
+                }
+                Section {
+                    if receipts.isEmpty {
+                        Label("No received submissions yet", systemImage: "tray")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(receipts) { receipt in
+                            NavigationLink { ReceiptDetailView(receipt: receipt) } label: {
+                                ReceiptRow(receipt: receipt)
+                            }
+                            .accessibilityIdentifier("receipt-" + receipt.sightingID.uuidString)
+                        }
+                    }
+                } header: {
+                    Text("Received · \(receipts.count)")
+                } footer: {
+                    Text("Receipts confirm backend acceptance. This state refreshes to Fleet confirmed when the public feed returns the same ID; a missing row is not treated as withdrawal. Only a bounded local review crop may remain in this history.")
+                }
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Sightings")
+            .refreshable { await loadPublicSightings() }
+            .task { await loadPublicSightings() }
             .alert("Could not save", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(errorText ?? "") }
@@ -47,6 +98,137 @@ struct SightingsListView: View {
     private func discard(_ offsets: IndexSet) {
         for index in offsets { modelContext.delete(outbox[index]) }
         do { try modelContext.save() } catch { modelContext.rollback(); errorText = error.localizedDescription }
+    }
+
+    private func loadPublicSightings() async {
+        guard !loadingPublic else { return }
+        loadingPublic = true
+        publicError = nil
+        defer { loadingPublic = false }
+        do {
+            let delta = try await backend.pullSightings(since: nil)
+            publicSightings = Array(delta.sightings.prefix(100))
+            let publishedIDs = ReceiptPublicationMatcher.publishedIDs(from: delta.sightings)
+            var receiptsChanged = false
+            for receipt in receipts where publishedIDs.contains(receipt.sightingID)
+                && receipt.moderationState != .fleetConfirmed {
+                receipt.moderationStateRaw = Sighting.ModerationState.fleetConfirmed.rawValue
+                receiptsChanged = true
+            }
+            if receiptsChanged { try? modelContext.save() }
+            backendStatus = "Connected · public feed readable"
+        } catch {
+            publicSightings = []
+            publicError = "Public sightings could not be loaded. Check the connection in About."
+            backendStatus = await BackendDiagnostics.status(for: backend)
+        }
+    }
+}
+
+private struct PublicSightingRow: View {
+    let sighting: PublicSightingDTO
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "car.fill")
+                .foregroundStyle(PWStyle.fleetText)
+                .frame(width: 36, height: 36)
+                .background(PWStyle.fleet.opacity(0.15), in: .rect(cornerRadius: 10))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(sighting.agencyName ?? "Fleet vehicle").font(.headline)
+                Text(sighting.capturedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Area \(sighting.geohash6) · fleet \(Int(sighting.fleetConfidence * 100))%")
+                    .font(.caption2.monospaced()).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Published fleet sighting")
+    }
+}
+
+private struct ReceiptRow: View {
+    let receipt: ReceivedSubmissionReceipt
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: receipt.moderationState == .fleetConfirmed ? "checkmark.seal.fill" : "arrow.down.doc.fill")
+                .font(.title3)
+                .foregroundStyle(receipt.moderationState == .fleetConfirmed ? PWStyle.fleetText : .secondary)
+                .frame(width: 40, height: 40)
+                .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 12))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(receipt.moderationState.displayName).font(.headline)
+                Text(receipt.receivedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if receipt.operatorConfirmed {
+                Image(systemName: "person.badge.checkmark")
+                    .foregroundStyle(PWStyle.fleetText)
+                    .accessibilityLabel("Operator confirmed")
+            }
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct ReceiptDetailView: View {
+    let receipt: ReceivedSubmissionReceipt
+
+    var body: some View {
+        List {
+            Section {
+                PWSectionIntro(eyebrow: "BACKEND RECEIPT", title: receipt.moderationState.displayName,
+                message: "The backend accepted this submission. The local ledger keeps only the bounded review crop when one was available; raw frames and the original payload are not retained.",
+                               systemImage: "checkmark.seal.fill")
+                .listRowBackground(Color.clear)
+            }
+            Section("Delivery") {
+                LabeledContent("Received") { Text(receipt.receivedAt, format: .dateTime.month().day().year().hour().minute()) }
+                LabeledContent("Sighting ID") { Text(receipt.sightingID.uuidString.prefix(8) + "…").font(.caption.monospaced()) }
+                if let prefix = receipt.idempotencyPrefix {
+                    LabeledContent("Receipt key") { Text(prefix + "…").font(.caption.monospaced()) }
+                }
+                LabeledContent("Operator confirmation", value: receipt.operatorConfirmed ? "Confirmed" : "Not recorded")
+            }
+            if let data = receipt.cropJPEGData, let image = UIImage(data: data) {
+                Section {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .clipShape(.rect(cornerRadius: 12))
+                        .accessibilityLabel("Saved bounded review crop")
+                } header: {
+                    Text("Review crop")
+                } footer: {
+                    Text("This is the local, bounded crop captured for review. It is not a raw camera frame and was not uploaded by PlateSync.")
+                }
+            }
+            Section {
+                Label("Publication still requires moderation and policy checks.", systemImage: "info.circle")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .safeAreaInset(edge: .top) { PreviewBanner() }
+        .navigationTitle("Receipt")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private extension Sighting.ModerationState {
+    var displayName: String {
+        switch self {
+        case .pending: "Pending review"
+        case .fleetConfirmed: "Fleet confirmed"
+        case .redacted: "Redacted by policy"
+        case .rejected: "Rejected"
+        }
     }
 }
 
@@ -226,6 +408,7 @@ struct WatchlistView: View {
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
             .navigationTitle("Watchlist")
+            .task { plateFocused = true }
             .alert("Could not save watchlist", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(errorText ?? "") }
@@ -247,7 +430,9 @@ struct WatchlistView: View {
             // including deletion and mute. Never append to an outdated defaults array.
             let saved = try modelContext.fetch(FetchDescriptor<WatchlistItem>())
             if !PreviewFixtures.isEnabled {
-                UserDefaults.standard.set(WatchlistNotificationMirror.plates(from: saved), forKey: "watchlistPlates")
+                let plates = WatchlistNotificationMirror.plates(from: saved)
+                UserDefaults.standard.set(plates, forKey: "watchlistPlates")
+                WatchlistConnectivity.shared.send(plates: plates)
             }
             return true
         } catch { modelContext.rollback(); errorText = error.localizedDescription; return false }

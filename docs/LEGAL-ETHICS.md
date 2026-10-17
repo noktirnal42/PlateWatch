@@ -26,8 +26,17 @@ records program and its guardrails.
   default.
 - Only when a fleet-confidence threshold is crossed (classifier +
   markings + known unit format) does a record enter the shared database.
-- Non-fleet plate text in the background of an otherwise-fleet capture is
-  **redacted before upload** (blur mask in stored crop; plate field dropped).
+- **Local Review exception (owner clarification, 2026-10-15):** preserve the target
+  vehicle's evidence crop intact for human review. Do not black out its plate, lettering,
+  or incidental background plate/text regions, and do not discard the image because
+  another detected vehicle overlaps. Earlier crop suppression/redaction made evidence
+  unreviewable; those image rules are removed for the local Hub Review store.
+- This exception does not permit private-vehicle plate indexing, private-person enrichment,
+  or image publication. Review JPEG bytes stay on the Mac: REST explicitly omits them
+  and CloudKit maps no image field. Shared structured plate/registration and location
+  fields retain their fleet-confirmation rules. Any future image-export feature needs
+  its own explicit publication policy; local evidence must not be destructively altered
+  to implement that policy.
 - **Server-enforced (`server/`):** a plate is persisted only for
   `fleetConfirmed` sightings. `pending` and `redacted` rows keep unit number,
   bucketed area, and fleet confidence for moderator review, but never the
@@ -157,3 +166,17 @@ disciplined than the systems it audits.
   fleet-confirmed rule would publish it anyway.
 - Evaluation photos are third-party, licensed (see `eval/manifest.json`), kept out of the repo, and
   never converted into synthetic "sightings".
+
+## Optional hosted public research — owner selection, 2026-10-16
+
+The owner selected NVIDIA hosted agents, cited search, document extraction and a
+separate vehicle benchmark after reviewing the proposed uses. The explicit NVIDIA
+provider sends the user's entered public task and allowlisted public feed diagnostics.
+It cannot read local queue or record tools. The research pane sends only entered
+public passages or an explicitly selected public/licensed image/PDF page after
+content confirmation; the preview shows the prepared image sent. No background frame
+upload, local Review image routing, biometric matching or automatic acceptance is
+authorized by this exception. Model output remains untrusted research data; original
+source URL/page and extracted regions accompany it. Accepted record enrichment still
+requires `SourceCitation` and human review. No API key or image bytes enter the action
+journal. The original local evidence and shared structured-data rules remain in force.

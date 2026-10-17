@@ -1,13 +1,15 @@
 # BACKEND.md — CloudKit-first, free-forever hosting strategy
 
-> **Status (2026-10-13): CloudKit backend is implemented but not deployed.**
-> The public database has one default zone and everything readable is readable by
-> everyone, so uploads go to a creator-only `SightingSubmission` type and only moderated
-> records exist as world-readable `Sighting`/`Vehicle`/`Agency`. The schema is in
-> [`cloudkit/schema.ckdb`](../cloudkit/schema.ckdb); the one-time import/deploy (needs the
-> developer account) is in [`cloudkit/README.md`](../cloudkit/README.md). A moderator tool
-> that publishes accepted submissions is not built yet. Until then the REST reference server
-> (moderator console, exports) is the working path.
+> **Status (2026-10-15): Production CloudKit schema verified by a read-only management export.**
+> `Agency`, `Sighting`, `SightingSubmission`, and `Vehicle` exist; submission permissions
+> grant creator read/write and iCloud create. This is schema evidence, not a two-account
+> isolation test or proof of a client submission. The Hub previously shipped without its
+> CloudKit capability, and its local moderation server was stopped. Connection diagnostics
+> now distinguish CloudKit account availability from the reference server's health.
+> The Hub review queue remains local; automatic delivery and CloudKit moderator publication
+> are not enabled. The development schema now declares queryable `agencyKey` fields on
+> `Agency` and `Vehicle`; deploy and populate those fields before enabling CloudKit
+> agency-scoped reports. See [connection QA](BACKEND-QA-2026-10-15.md).
 
 ## Decision: CloudKit public database is the primary backend
 
@@ -23,7 +25,7 @@ other platforms. CloudKit satisfies both:
 | Push alerts | `CKQuerySubscription` delivers watchlist hits as silent pushes — free APNs, no server code. This powers the watchOS alert feature. |
 | Offline-first mobile capture | `PlateSync` outbox + CloudKit retry semantics. |
 
-Container: `iCloud.org.platewatch` (register under the project's
+Container: `iCloud.org.platewatch.platewatch` (register under the project's
 Apple Developer account). Record types mirror `docs/DATA-MODEL.md`.
 
 ### What CloudKit deliberately does not do here
@@ -46,9 +48,8 @@ use the **reference REST protocol**. Two free ways to serve it:
     forever — the best free VM on the market, plenty for this workload).
   - **Render / Fly.io free tiers** (suspect long-term; oracle preferred).
   - A volunteer's Mac mini in a closet — literally fine at our scale.
-- The mirror **two-way syncs with CloudKit** via CloudKit Web Services
-  (server-to-server token) so Apple users and everyone else share one truth.
-  Sync service is a small Swift job in `server/` (`CloudKitMirrorService`).
+- Two-way CloudKit mirroring is planned, not implemented. The REST database and
+  CloudKit remain separate stores until a reviewed server-to-server sync service exists.
 
 ### REST delta-sync protocol (stable contract for non-Apple clients)
 
@@ -112,6 +113,11 @@ job, plate text included. `POST /v1/takedowns` (`sightingID?`, `reason`, `contac
 moderators list open requests and resolve them (`hide` = never published again, `dismiss`) through `/moderator/api/takedowns`.
 Moderator decisions, takedown requests/resolutions and retention purges are written to an append-only `audit_log`
 (action + target ID, never content).
+
+Set `REQUIRE_SECOND_REVIEW=1` to require two distinct reviewer fingerprints for
+approval. The first approval keeps the sighting pending; a different reviewer
+must approve it. Rejections remain single-review actions. The default remains
+the existing one-review workflow for compatibility.
 
 **Public aggregates.** `GET /v1/aggregates/heatmap?since=&until=&agencyID=`
 returns counts per geohash-6 cell and per UTC day for fleet-confirmed sightings.

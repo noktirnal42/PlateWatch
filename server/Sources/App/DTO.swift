@@ -53,6 +53,9 @@ struct SightingSubmissionDTO: Content {
     var plate: PlateDTO?
     var vehicle: VehicleObservationDTO
     var markings: FleetMarkingsDTO?
+    /// Operator confirmation from the local review queue. Missing/false stays
+    /// pending until an enrolled moderator makes the publication decision.
+    var userConfirmed: Bool?
     /// Mirrors PlateKit's `VehicleIdentity` — only the fields the server indexes; the rest of the
     /// client's JSON is ignored on decode.
     var identity: IdentityDTO?
@@ -83,6 +86,8 @@ struct SubmissionReceiptDTO: Content {
     var sightingID: UUID
     var moderationState: String
     var serverReceivedAt: Date
+    var idempotencyKey: String?
+    var operatorConfirmed: Bool?
 }
 
 struct PublicSightingDTO: Content {

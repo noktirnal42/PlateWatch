@@ -18,6 +18,12 @@ public protocol SyncBackend: Sendable {
     /// Resolve vehicles matching a plate text (public read).
     func vehicles(matchingPlate plateText: String) async throws -> [PublicVehicleDTO]
 
+    /// Public agency directory used by the report-card surface.
+    func agencies() async throws -> [PublicAgencyDTO]
+
+    /// Aggregated public report for one agency. It contains no individual movement data.
+    func agencyReport(id: UUID) async throws -> AgencyReportDTO
+
     /// Register (or refresh) a watchlist-driven push subscription.
     /// No-op for REST deployments without push infrastructure.
     func ensureWatchlistSubscription() async throws
@@ -25,7 +31,7 @@ public protocol SyncBackend: Sendable {
     /// k-anonymous heatmap/timeline. A requirement (not just an extension
     /// method) so a backend's own implementation — REST's server-side
     /// aggregate — is what `any SyncBackend` actually dispatches to.
-    func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO
+    func heatmap(since: Date?, until: Date?, agencyID: UUID?) async throws -> HeatmapAggregateDTO
 }
 
 public struct SyncCursor: Sendable, Codable, Equatable {
@@ -46,12 +52,54 @@ public struct SubmissionReceipt: Sendable, Codable, Equatable {
     public var sightingID: UUID
     public var moderationState: Sighting.ModerationState
     public var serverReceivedAt: Date
+    /// Optional audit metadata. Older backends may omit these fields.
+    public var idempotencyKey: String?
+    public var operatorConfirmed: Bool?
 
     public init(sightingID: UUID, moderationState: Sighting.ModerationState,
-                serverReceivedAt: Date) {
+                serverReceivedAt: Date, idempotencyKey: String? = nil,
+                operatorConfirmed: Bool? = nil) {
         self.sightingID = sightingID
         self.moderationState = moderationState
         self.serverReceivedAt = serverReceivedAt
+        self.idempotencyKey = idempotencyKey
+        self.operatorConfirmed = operatorConfirmed
+    }
+}
+
+public struct PublicAgencyDTO: Sendable, Codable, Equatable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var shortName: String?
+    public var level: String
+    public var parentAgencyID: UUID?
+    public var publicContactURL: String?
+    public var budgetURL: String?
+
+    public init(id: UUID, name: String, shortName: String? = nil, level: String,
+                parentAgencyID: UUID? = nil, publicContactURL: String? = nil,
+                budgetURL: String? = nil) {
+        self.id = id; self.name = name; self.shortName = shortName; self.level = level
+        self.parentAgencyID = parentAgencyID; self.publicContactURL = publicContactURL
+        self.budgetURL = budgetURL
+    }
+}
+
+public struct AgencyReportDTO: Sendable, Codable, Equatable {
+    public var agency: PublicAgencyDTO
+    public var fleetSize: Int
+    public var sightings30d: Int
+    public var activeUnits: Int
+    public var publicContactURL: String?
+    public var budgetURL: String?
+    public var generatedAt: Date
+
+    public init(agency: PublicAgencyDTO, fleetSize: Int, sightings30d: Int,
+                activeUnits: Int, publicContactURL: String? = nil,
+                budgetURL: String? = nil, generatedAt: Date) {
+        self.agency = agency; self.fleetSize = fleetSize; self.sightings30d = sightings30d
+        self.activeUnits = activeUnits; self.publicContactURL = publicContactURL
+        self.budgetURL = budgetURL; self.generatedAt = generatedAt
     }
 }
 
@@ -143,9 +191,15 @@ public enum HeatmapAggregator {
 }
 
 extension SyncBackend {
+    /// Unscoped aggregate convenience used by the public Explore surface.
+    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+        try await heatmap(since: since, until: until, agencyID: nil)
+    }
+
     /// Default: aggregate client-side from the public sightings feed
     /// (CloudKit serves records, not aggregates). Reads at most a few pages.
-    public func heatmap(since: Date?, until: Date?) async throws -> HeatmapAggregateDTO {
+    public func heatmap(since: Date?, until: Date?, agencyID: UUID?) async throws -> HeatmapAggregateDTO {
+        guard agencyID == nil else { throw SyncError.unsupported }
         let end = until ?? Date()
         let start = since ?? end.addingTimeInterval(-30 * 86_400)
         var all: [PublicSightingDTO] = []
