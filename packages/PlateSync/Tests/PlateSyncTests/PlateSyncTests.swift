@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import CloudKit
 import SwiftData
 @testable import PlateSync
 import PlateKit
@@ -139,6 +140,31 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertEqual(first, second)
         XCTAssertNotEqual(first, different)
         XCTAssertEqual(first.uuidString.count, 36)
+    }
+
+    func testOwnedSubmissionReconstructionCarriesModerationFieldsOnly() {
+        let record = CKRecord(recordType: "SightingSubmission",
+                              recordID: CKRecord.ID(recordName: "sighting-recovery-key"))
+        record["capturedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as NSDate
+        record["geohash6"] = "9v6kn7"
+        record["deviceIDHash"] = "device-hash"
+        record["fleetConfidence"] = 0.91 as NSNumber
+        record["plateText"] = "1ABC234"
+        record["plateRegion"] = "TX"
+        record["vehicleClass"] = "SUV"
+        record["agencyName"] = "Example Police"
+        record["unitNumber"] = "42"
+        record["userConfirmed"] = true as NSNumber
+
+        let recovered = CloudKitBackend.ownedSubmission(from: record)
+        XCTAssertEqual(recovered?.idempotencyKey, "recovery-key")
+        XCTAssertEqual(recovered?.dto.geohash6, "9v6kn7")
+        XCTAssertEqual(recovered?.dto.vehicle.vehicleClass, "SUV")
+        XCTAssertEqual(recovered?.dto.markings?.unitNumber, "42")
+        XCTAssertEqual(recovered?.dto.plate?.text, "1ABC234")
+        XCTAssertNil(recovered?.dto.cropJPEGBase64)
+        XCTAssertNil(recovered?.dto.exactLatitude)
+        XCTAssertNil(recovered?.dto.exactLongitude)
     }
 }
 

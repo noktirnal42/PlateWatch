@@ -163,31 +163,37 @@ public struct CloudKitBackend: SyncBackend {
         let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
                                                       desiredKeys: desiredKeys, resultsLimit: 200)
         return results.compactMap { _, result in
-            guard case .success(let record) = result,
-                  let capturedAt = record["capturedAt"] as? Date else { return nil }
-            let name = record.recordID.recordName
-            let key = name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
-            let confidence = (record["fleetConfidence"] as? NSNumber)?.doubleValue ?? 0
-            let vehicleClass = record["vehicleClass"] as? String ?? "vehicle"
-            let dto = SightingSubmissionDTO(
-                capturedAt: capturedAt,
-                geohash6: record["geohash6"] as? String ?? "",
-                deviceIDHash: record["deviceIDHash"] as? String ?? "cloudkit-owner",
-                fleetConfidence: confidence,
-                plate: (record["plateText"] as? String).map {
-                    PlateDTO(text: $0, issuingRegion: record["plateRegion"] as? String,
-                             confidence: confidence)
-                },
-                vehicle: VehicleObservationDTO(vehicleClass: vehicleClass,
-                                               classConfidence: confidence),
-                markings: ((record["agencyName"] as? String) != nil || (record["unitNumber"] as? String) != nil)
-                    ? FleetMarkingsDTO(agencyText: record["agencyName"] as? String,
-                                       unitNumber: record["unitNumber"] as? String)
-                    : nil,
-                userConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
-            return OwnedSubmission(dto: dto, idempotencyKey: key,
-                                   receivedAt: record.modificationDate ?? record.creationDate ?? Date())
+            guard case .success(let record) = result else { return nil }
+            return Self.ownedSubmission(from: record)
         }
+    }
+
+    /// Pure record-to-wire conversion kept separate so the privacy boundary is
+    /// testable without a live CloudKit account.
+    static func ownedSubmission(from record: CKRecord) -> OwnedSubmission? {
+        guard let capturedAt = record["capturedAt"] as? Date else { return nil }
+        let name = record.recordID.recordName
+        let key = name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+        let confidence = (record["fleetConfidence"] as? NSNumber)?.doubleValue ?? 0
+        let vehicleClass = record["vehicleClass"] as? String ?? "vehicle"
+        let dto = SightingSubmissionDTO(
+            capturedAt: capturedAt,
+            geohash6: record["geohash6"] as? String ?? "",
+            deviceIDHash: record["deviceIDHash"] as? String ?? "cloudkit-owner",
+            fleetConfidence: confidence,
+            plate: (record["plateText"] as? String).map {
+                PlateDTO(text: $0, issuingRegion: record["plateRegion"] as? String,
+                         confidence: confidence)
+            },
+            vehicle: VehicleObservationDTO(vehicleClass: vehicleClass,
+                                           classConfidence: confidence),
+            markings: ((record["agencyName"] as? String) != nil || (record["unitNumber"] as? String) != nil)
+                ? FleetMarkingsDTO(agencyText: record["agencyName"] as? String,
+                                   unitNumber: record["unitNumber"] as? String)
+                : nil,
+            userConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+        return OwnedSubmission(dto: dto, idempotencyKey: key,
+                               receivedAt: record.modificationDate ?? record.creationDate ?? Date())
     }
 
     /// CKQueryOperation.Cursor only round-trips through keyed archiving;
