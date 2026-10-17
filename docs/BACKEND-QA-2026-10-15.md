@@ -85,3 +85,14 @@ unchanged. A PlateSync regression test covers repeat calls and distinct names.
 
 The local REST moderation queue and CloudKit are separate stores. A healthy server or an
 available iCloud account must never be labeled a completed end-to-end publication pipeline.
+
+## Recovery after an older Hub sync — 2026-10-16
+
+An older signed Hub removed a local `PendingSubmission` after CloudKit accepted it
+without retaining a local receipt. Those records are creator-readable
+`SightingSubmission` rows in the same iCloud account; they do not appear in the
+loopback REST Moderation queue until a moderator publishes them. The repaired Hub
+adds **Review → Recover CloudKit history**, which queries only the current user's
+creator-readable submission metadata and rebuilds bounded local receipt rows. It
+does not restore plate text, raw frames, exact coordinates, or submission payloads.
+Use it after installing an entitled build while signed into the same iCloud account.
