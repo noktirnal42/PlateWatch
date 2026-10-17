@@ -76,6 +76,8 @@ tests must stay green before its status advances.
   `/tmp/pw-ios-sim-full-fix`; the test now dismisses Apple's first-use keyboard coachmark before
   asserting large-text watchlist controls. The physical iPhone and watch are currently reported
   unavailable by `devicectl`, so this is simulator evidence rather than a new physical-device claim.
+  The run emitted one non-fatal SwiftUI/XCTest `Invalid frame dimension (negative or non-finite)` warning
+  during the large-text keyboard path; no product assertion failed and the warning remains an explicit QA follow-up.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
