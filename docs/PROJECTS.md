@@ -162,6 +162,11 @@ tests must stay green before its status advances.
   presence boundary as Hub. The watch also receives the Hub's aggregate
   processing counters for its Live stats section; hosted deployment and
   accessibility validation remain follow-up gates.
+  2026-10-17 accessibility QA reproduced the report that only a few feeds were visible:
+  the persisted Favorites scope was active and its banner exposed the recovery action.
+  Activating Show all feeds restored 10,570 visible non-blocked cameras out of 10,590;
+  20 locally blocked cameras remained intentionally excluded, and the catalogue status
+  continued to report 1,295 watched feeds. This confirms the feeds were not deleted.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
