@@ -68,6 +68,9 @@ were inserted. Database counts before connection QA: zero sightings, two audit e
    moderation queue. The Hub retains a bounded `ReceivedSubmissionReceipt` and
    now reports the destination plus accepted/rejected counts, so a zero-row REST
    queue does not by itself indicate that a CloudKit submission was lost.
+   Settings now offers an explicit delivery destination: Automatic, CloudKit,
+   or the local reference server when the operator needs the REST moderation
+   queue immediately.
 2. CloudKit read/write proof using approved test records, plus two-account creator isolation.
 3. CloudKit moderator publication tool with audit/provenance and withdrawal behavior.
 4. Optional REST/CloudKit mirroring, hosted service and device-to-device proof.
