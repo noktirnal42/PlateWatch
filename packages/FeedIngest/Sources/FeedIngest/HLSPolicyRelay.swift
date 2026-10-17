@@ -84,6 +84,16 @@ public final class HLSPolicyRelay {
         return url.scheme == "https" || (url.scheme == "http" && url.host == "127.0.0.1")
     }
 
+    /// Parses only the request-line shape accepted by the loopback relay.
+    /// Keeping this separate makes malformed client input a normal 405 path,
+    /// rather than relying on subscripting an unvalidated token array.
+    nonisolated static func requestLine(_ line: String) -> (method: String, path: String)? {
+        let parts = line.split(separator: " ")
+        guard parts.count == 3, parts[0] == "GET" || parts[0] == "HEAD",
+              parts[1].hasPrefix("/") else { return nil }
+        return (String(parts[0]), String(parts[1]))
+    }
+
     /// Rewrites segment lines and quoted URI attributes (keys, maps, renditions,
     /// parts). Unsupported variable/steering playlists fail closed rather than
     /// handing AVPlayer an unmediated alternate network path.
@@ -144,11 +154,10 @@ public final class HLSPolicyRelay {
 
     private func respond(_ connection: NWConnection, id: UUID, header: Data) async {
         let lines = String(decoding: header, as: UTF8.self).components(separatedBy: "\r\n")
-        let parts = (lines.first ?? "").split(separator: " ")
-        guard parts.count == 3, parts[0] == "GET" || parts[0] == "HEAD" else {
+        guard let request = Self.requestLine(lines.first ?? "") else {
             send(connection, id: id, code: 405, type: "text/plain", data: Data()); return
         }
-        let path = String(parts[1]).split(separator: "/")
+        let path = request.path.split(separator: "/")
         guard path.count == 2, String(path[0]) == capability, let remote = routes[String(path[1])],
               !lines.contains(where: { $0.lowercased().hasPrefix("origin:") }) else {
             send(connection, id: id, code: 403, type: "text/plain", data: Data()); return
@@ -177,7 +186,7 @@ public final class HLSPolicyRelay {
             }
             guard !stopped else { return }
             send(connection, id: id, code: result.response.statusCode, type: type, data: data,
-                 contentRange: result.response.value(forHTTPHeaderField: "Content-Range"), head: parts[0] == "HEAD")
+                 contentRange: result.response.value(forHTTPHeaderField: "Content-Range"), head: request.method == "HEAD")
         } catch {
             guard !stopped else { return }
             // No remote URL, query, credential or image bytes in the diagnostic.

@@ -47,6 +47,15 @@ private final class RelayUpstream: URLProtocol, @unchecked Sendable {
 }
 
 final class HLSPolicyRelayTests: XCTestCase {
+
+    func testRequestLineRejectsMalformedOrUnsafeMethodsWithoutTokenAccess() {
+        XCTAssertNil(HLSPolicyRelay.requestLine(""))
+        XCTAssertNil(HLSPolicyRelay.requestLine("GET"))
+        XCTAssertNil(HLSPolicyRelay.requestLine("POST /relay HTTP/1.1"))
+        XCTAssertNil(HLSPolicyRelay.requestLine("GET relay HTTP/1.1"))
+        XCTAssertEqual(HLSPolicyRelay.requestLine("HEAD /cap/key HTTP/1.1")?.method, "HEAD")
+        XCTAssertEqual(HLSPolicyRelay.requestLine("GET /cap/key HTTP/1.1")?.path, "/cap/key")
+    }
     private func configuration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [RelayUpstream.self]; return config
     }
