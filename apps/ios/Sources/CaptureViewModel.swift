@@ -60,6 +60,10 @@ final class CaptureViewModel: ObservableObject {
 
     @Published private(set) var cameraState = CameraState.starting
     @Published private(set) var statusText = "Starting camera…"
+    /// A running AVCaptureSession can still be waiting for its first sample
+    /// buffer (for example while a physical lens is waking). Keep that state
+    /// explicit so the UI never claims that analysis is active prematurely.
+    @Published private(set) var hasReceivedFrame = false
     @Published var fleetHitPending = false
     @Published var permissionDenied = false
     @Published private(set) var latestEventClip: EventClip?
@@ -152,6 +156,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func start() async {
+        hasReceivedFrame = false
         // Models are opt-in upgrades; try to install detectors before the
         // first frame, and never block capture on the network result.
         Task { await refreshModels() }
@@ -413,6 +418,7 @@ final class CaptureViewModel: ObservableObject {
 
     private func handle(_ packet: FramePacket) async {
         lastPacket = packet
+        hasReceivedFrame = true
         refreshPlateGate()
         guard let frame = try? await executor.submit(
             .init(pixelBuffer: packet.pixelBuffer), mode: .live) else { return }

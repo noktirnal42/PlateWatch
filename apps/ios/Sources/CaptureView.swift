@@ -67,7 +67,11 @@ struct CaptureView: View {
                 }
                 CaptureControls(viewModel: viewModel, photoItem: $photoItem)
                     .padding(.bottom, 4)
-                StatusBar(text: PreviewFixtures.isEnabled ? "Demo preview — camera and sync disabled" : viewModel.statusText)
+                StatusBar(text: PreviewFixtures.isEnabled
+                          ? "Demo preview — camera and sync disabled"
+                          : (viewModel.cameraState == .running && !viewModel.hasReceivedFrame
+                             ? "Waiting for camera frames…"
+                             : viewModel.statusText))
             }
             .padding()
             .animation(.snappy, value: viewModel.fleetHitPending)
