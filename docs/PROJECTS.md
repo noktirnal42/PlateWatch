@@ -121,6 +121,8 @@ tests must stay green before its status advances.
   paired-snapshot delivery and local-analysis failures separately.
   The relay pins the root playlist capability while bounding child-resource routes, preventing long-lived live
   streams from evicting the URL AVPlayer is polling.
+  When live presence sharing is enabled, each feed row now shows its current processor count, `0`, or an
+  explicit unavailable marker instead of hiding the demand state.
   The Hub status popover repeats that recovery action and shows the confirmed NV511 count, so a relaunch that
   leaves the catalogue idle can be repaired without navigating away from the dashboard.
   A duplicate Hub-process regression was reproduced during NV511 QA: two schedulers shared the same local store and

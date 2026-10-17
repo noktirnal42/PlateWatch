@@ -291,11 +291,8 @@ struct FeedsPane: View {
                 TableColumn("Watch") { source in
                     VStack(spacing: 2) {
                         FeedWatchButton(hub: hub, favorites: favorites, source: source)
-                        if let count = hub.processorCount(for: source.id), count > 0 {
-                            Label("\(count)", systemImage: "person.2")
-                                .font(.caption2.monospacedDigit()).foregroundStyle(.tint)
-                                .help("\(count) active processing console(s) selected this feed")
-                                .accessibilityLabel("\(count) active processing console(s) selected this feed")
+                        if hub.presenceEnabled {
+                            FeedDemandBadge(hub: hub, source: source)
                         }
                     }
                 }.width(42)
@@ -344,6 +341,23 @@ struct FeedsPane: View {
         // Grouping 8,000+ URLs on every frame/status notification starves the main thread.
         hosts = catalogue?.hosts() ?? []
         refreshRows()
+    }
+}
+
+private struct FeedDemandBadge: View {
+    @ObservedObject var hub: HubController
+    let source: PublicFeedSource
+
+    var body: some View {
+        let count = hub.processorCount(for: source.id)
+        let value = count.map(String.init) ?? "—"
+        let demandText = count.map { "\($0) active processing console(s) selected this feed" }
+            ?? ("Active processing count unavailable while presence is " + hub.presenceStatus.lowercased())
+        Label(value, systemImage: "person.2")
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(count == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+            .help(demandText)
+            .accessibilityLabel(demandText)
     }
 }
 
