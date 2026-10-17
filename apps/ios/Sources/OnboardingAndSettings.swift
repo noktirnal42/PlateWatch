@@ -88,6 +88,7 @@ struct SettingsView: View {
     @State private var errorText: String?
     @State private var connectionStatus = "Not checked"
     @State private var checkingConnection = false
+    @AppStorage("presenceEnabled") private var presenceEnabled = false
 
     private var backendName: String {
         backend is CloudKitBackend ? "iCloud (CloudKit public database)" : "Self-hosted server"
@@ -135,6 +136,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Agency report cards", systemImage: "building.columns")
                     }
+                }
+                Section("Live presence") {
+                    Toggle("Share active processing count", isOn: $presenceEnabled)
+                    Text("Optional and off by default. Shares only an anonymous expiring count while this device is actively scanning; no plates, frames, names, or history are sent.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section {
                     LabeledContent("Queued observations", value: String(queued.count))

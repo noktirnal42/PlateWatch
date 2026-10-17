@@ -82,7 +82,10 @@ tests must stay green before its status advances.
   The Hub now has an opt-in ephemeral presence lease that reports live processor
   totals and per-feed demand through the REST boundary; leases expire after 90
   seconds and are never persisted. iOS/watch clients and hosted deployment
-  remain follow-up gates.
+  remain follow-up gates. The iOS capture path now contributes an opt-in
+  ephemeral active-processing lease, and the watch companion contributes an
+  in-use lease while foregrounded; both use the same non-persistent REST
+  presence boundary as Hub.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.

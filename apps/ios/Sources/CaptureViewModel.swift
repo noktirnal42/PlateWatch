@@ -169,6 +169,7 @@ final class CaptureViewModel: ObservableObject {
         do {
             try session.configure()
             session.start()
+            PresenceCoordinator.shared.start()
             cameraState = .running
             statusText = "Scanning for fleet vehicles"
         } catch {
@@ -180,6 +181,7 @@ final class CaptureViewModel: ObservableObject {
 
     func stop() {
         session.stop()
+        PresenceCoordinator.shared.stop()
         if cameraState == .running { statusText = "Paused" }
     }
 

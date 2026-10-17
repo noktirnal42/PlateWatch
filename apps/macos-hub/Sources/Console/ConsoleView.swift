@@ -146,7 +146,8 @@ struct DashboardPane: View {
                     Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)", icon: "car.side")
                     Stat(title: "Skipped while busy", value: "\(hub.framesDropped)", icon: "pause.circle")
                     Stat(title: "Outbox pending", value: "\(hub.pendingCount)", icon: "tray.and.arrow.up")
-                    Stat(title: "Live processors", value: hub.presenceEnabled ? "\(hub.presenceAggregate.activeProcessors)" : "Off", icon: "person.2.wave.2")
+                    Stat(title: "Active PlateWatch sessions", value: hub.presenceEnabled ? "\(hub.presenceAggregate.activeSessions)" : "Off", icon: "person.2.wave.2")
+                    Stat(title: "Live processors", value: hub.presenceEnabled ? "\(hub.presenceAggregate.activeProcessors)" : "Off", icon: "wave.3.right")
                 }
                 HStack(spacing: 12) {
                     dashboardAction("Browse cameras", icon: "antenna.radiowaves.left.and.right", pane: "feeds")
@@ -161,7 +162,7 @@ struct DashboardPane: View {
                         LabeledContent("RTSP streams", value: hub.rtspServerStatus)
                         LabeledContent("Live demand") {
                             if hub.presenceEnabled {
-                                Text("\(hub.presenceAggregate.activeProcessors) processors · refreshed ")
+                                Text("\(hub.presenceAggregate.activeSessions) sessions · \(hub.presenceAggregate.activeProcessors) processors · refreshed ")
                                 + Text(hub.presenceAggregate.generatedAt, style: .time)
                             } else {
                                 Text("Opt-in in Settings")

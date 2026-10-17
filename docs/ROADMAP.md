@@ -74,10 +74,10 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ iOS UI pass: plate-style badges, privacy chip, Open Settings, sync pills, app icon, launch screen, onboarding, About, branded empty states, Explore map (full redesign still open — see M-Alpha)
 - ◐ CarPlay passive capture mode: scene delegate written; needs the Apple CarPlay entitlement and on-device verification (QA P1-8)
 
-- ⬜ Live operator presence and feed demand counts (P1-9)
-  - ⬜ Ephemeral TTL heartbeats for explicitly active Hub/iOS/watch processing sessions.
-  - ⬜ Dashboard total live processors and per-feed active processor counts.
-  - ⬜ Privacy-safe opt-out, expiry, outage fallback, and accessibility QA.
+- ◐ Live operator presence and feed demand counts (P1-9)
+  - ✅ Ephemeral TTL heartbeats for opted-in Hub/iOS processing and foreground watch sessions.
+  - ✅ Hub dashboard total active sessions/live processors and per-feed active processor counts.
+  - ◐ Privacy-safe opt-out, expiry, outage fallback, and accessibility QA; hosted deployment and physical watch launch remain open.
 
 ## M5 — Beyond Apple
 - ⬜ REST mirror publicly deployed (Oracle Always Free)

@@ -7,12 +7,17 @@ import WatchKit
 @main
 struct PlateWatchWatchApp: App {
     @WKExtensionDelegateAdaptor(WatchExtensionDelegate.self) private var delegate
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             WatchRootView(hits: Binding(
                 get: { delegate.hits.map(\.title) },
                 set: { _ in }))
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { WatchPresenceCoordinator.shared.start() }
+            else { WatchPresenceCoordinator.shared.stop() }
         }
     }
 }
