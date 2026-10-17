@@ -422,6 +422,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// Live view task identity cancels the old decoder before starting a fresh
     /// bounded attempt, rather than stacking HLS players on a stalled source.
     @Published private(set) var liveFeedReloadToken = UUID()
+    /// NV511 HLS paths are operator-issued and can rotate while the catalogue
+    /// keeps the camera ID stable. Keep a short local cooldown so a stale path
+    /// can be repaired without turning a failed preview into API polling.
+    private var lastNV511RouteRefresh: Date?
 
     func openFeedInLive(_ source: PublicFeedSource) {
         guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
@@ -468,11 +472,25 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
                 previewFailure = error.localizedDescription
                 liveFeedStatus = previewFailure ?? "Video unavailable"
+                // NV511 rotates the media path independently of the camera
+                // catalogue. Refresh once per cooldown and retry the same
+                // stable camera ID before falling back to its snapshot view.
+                if let refreshed = await refreshNV511RouteIfNeeded(for: source) {
+                    do {
+                        let data = try await feedRunner.fetchPreview(of: refreshed)
+                        guard !Task.isCancelled, liveFeed?.id == refreshed.id else { return }
+                        await analyseFeedFrame(data, from: refreshed)
+                        liveFeedStatus = "HLS route refreshed · live video restored"
+                        previewFailure = nil
+                    } catch {
+                        liveFeedStatus = "Video unavailable: \(previewFailure ?? error.localizedDescription)"
+                    }
+                }
                 // NV511 occasionally keeps an HLS route in its catalogue after
                 // the media host retires it. The same camera normally still
                 // publishes a snapshot view; use that view as an explicit,
                 // policy-checked fallback rather than leaving Live blank.
-                if let snapshot = pairedSnapshot(for: source) {
+                if previewFailure != nil, let snapshot = pairedSnapshot(for: liveFeed ?? source) {
                     do {
                         let data = try await feedRunner.fetchPreview(of: snapshot)
                         guard !Task.isCancelled, liveFeed?.id == source.id else { return }
@@ -505,6 +523,17 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             }
         }
+    }
+
+    private func refreshNV511RouteIfNeeded(for source: PublicFeedSource) async -> PublicFeedSource? {
+        guard source.kind == .hls, Self.isNV511(source), SourceCredentials.hasKey("nv511") else { return nil }
+        if let lastNV511RouteRefresh, Date().timeIntervalSince(lastNV511RouteRefresh) < 300 { return nil }
+        lastNV511RouteRefresh = Date()
+        await importCatalogue(.nevada)
+        guard let refreshed = activeFeedSources[source.id], refreshed.kind == .hls, refreshed.mayBeAnalysed else { return nil }
+        liveFeed = refreshed
+        feedRunner.setLiveVideoSource(refreshed.id)
+        return refreshed
     }
 
     /// NV511 publishes one snapshot and one HLS view for many cameras. Match

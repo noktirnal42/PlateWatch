@@ -83,8 +83,9 @@ tests must stay green before its status advances.
   it merges the current keyed catalogue without requiring the operator to open the source menu.
   HLS Live now bounds a selected decoder attempt to 15 seconds and exposes a Retry action that tears down
   the stale player before restarting it; this makes provider segment failures visible and recoverable.
-  NV511 refreshes now merge the current keyed catalogue, and a retired HLS route can fall back to its paired
-  approved snapshot view in Live with an explicit status, preserving a usable camera while the provider repairs video.
+  NV511 refreshes now merge the current keyed catalogue; a failed Live preview performs one five-minute-cooldown
+  route refresh and retries the stable camera ID before falling back to its paired approved snapshot view, with an
+  explicit status preserving a usable camera while the provider repairs video.
   The feed browser now exposes an explicit Watch NV511 action for all confirmed Nevada sources; snapshots remain
   host-throttled and HLS stays within the rotating four-stream budget.
   The Hub status popover repeats that recovery action and shows the confirmed NV511 count, so a relaunch that

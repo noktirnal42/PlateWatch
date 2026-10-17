@@ -6,6 +6,7 @@ WORKDIR /build
 COPY Package.swift Package.resolved ./
 RUN swift package resolve
 COPY Sources ./Sources
+COPY Tests ./Tests
 RUN swift build -c release --product App
 
 FROM ubuntu:22.04

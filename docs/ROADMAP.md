@@ -99,7 +99,7 @@ Sources: [CAMERA-SOURCES.md](CAMERA-SOURCES.md). Every source feeds the same
 - ✅ Favorites, reversible local blocks, and selected snapshot analysis overlays in Live.
 - ✅ Offline help, native desktop toolbar/sidebar and primary glass action; UI/hardware coverage tracked in the [Hub handoff](HUB-HANDOFF-2026-10-14.md).
 - ✅ Offline importer/poller/policy fixtures and hostless Hub regressions in CI.
-- ◐ Continuous public-video playback and sampled analysis: real NV511 HLS and cancellation/restart fixtures verified 2026-10-15; selected Live attempts now fail within 15 seconds with an explicit retry action, refresh keyed NV511 routes, and fall back to a paired approved snapshot when a provider retires an HLS route (2026-10-17). Full child-playlist/CDN/segment policy enforcement remains open. See [repair evidence](HUB-REPAIR-2026-10-15.md).
+- ◐ Continuous public-video playback and sampled analysis: real NV511 HLS and cancellation/restart fixtures verified 2026-10-15; selected Live attempts now fail within 15 seconds, refresh a stale keyed route once per five-minute cooldown, and fall back to a paired approved snapshot when a provider retires an HLS route (2026-10-17). Full child-playlist/CDN/segment policy enforcement remains open. See [repair evidence](HUB-REPAIR-2026-10-15.md).
 
 ## M7 — Accountability records (people & vehicles cross-reference)
 Sources: [ACCOUNTABILITY-DATA.md](ACCOUNTABILITY-DATA.md),
