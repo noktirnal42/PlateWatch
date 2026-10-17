@@ -45,7 +45,7 @@ final class ReviewFlowTests: XCTestCase {
         let app = preview(tab: 2)
         capture("ios-watchlist", app)
         let field = app.textFields["fleet-plate-input"]
-        field.tap(); field.typeText("demo1")
+        field.tap(); dismissKeyboardCoachmark(app); field.typeText("demo1")
         dismissWatchlistKeyboard(app)
         XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
@@ -103,6 +103,7 @@ final class ReviewFlowTests: XCTestCase {
         // A coordinate tap exercises the same visible control and is stable
         // across the large-text layout.
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        dismissKeyboardCoachmark(app)
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 3))
         field.typeText("GOV123")
         dismissWatchlistKeyboard(app)
@@ -138,6 +139,16 @@ final class ReviewFlowTests: XCTestCase {
             let keyboardDone = app.keyboards.buttons["done"]
             XCTAssertTrue(keyboardDone.waitForExistence(timeout: 2))
             keyboardDone.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+    }
+
+    /// Fresh simulators can show Apple's first-use keyboard coachmark above
+    /// the app. It intercepts the large-text scroll gestures, so dismiss it
+    /// before asserting the actual watchlist controls.
+    @MainActor private func dismissKeyboardCoachmark(_ app: XCUIApplication) {
+        let continueButton = app.buttons["Continue"]
+        if continueButton.waitForExistence(timeout: 1) && continueButton.isHittable {
+            continueButton.tap()
         }
     }
 }
