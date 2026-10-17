@@ -88,6 +88,31 @@ public struct CloudKitBackend: SyncBackend {
         return operatorConfirmed && sighting.fleetConfidence >= 0.8 && hasMarkings
     }
 
+    /// Builds the moderator-only public record without carrying creator-only
+    /// identity or review fields across the publication boundary. The caller
+    /// must still save this record with a moderator credential; app clients
+    /// never have a CloudKit create grant for `Sighting`.
+    static func publishedRecord(from submission: OwnedSubmission) -> CKRecord? {
+        let dto = submission.dto
+        guard dto.userConfirmed != false,
+              dto.fleetConfidence >= 0.8,
+              dto.markings?.agencyText != nil || dto.markings?.unitNumber != nil else { return nil }
+        let record = CKRecord(recordType: RecordType.sighting,
+                              recordID: CKRecord.ID(recordName: "sighting-\(submission.idempotencyKey)"))
+        record["capturedAt"] = dto.capturedAt as NSDate
+        record["geohash6"] = dto.geohash6
+        record["fleetConfidence"] = dto.fleetConfidence as NSNumber
+        record["vehicleClass"] = dto.vehicle.vehicleClass
+        record["unitNumber"] = dto.markings?.unitNumber
+        record["agencyKey"] = dto.identity?.agency?.agencyKey
+        record["agencyName"] = dto.identity?.agency?.name ?? dto.markings?.agencyText
+        record["moderationState"] = Sighting.ModerationState.fleetConfirmed.rawValue
+        if mayUploadPlate(dto) {
+            record["plateText"] = dto.plate?.text
+        }
+        return record
+    }
+
     // MARK: - SyncBackend
 
     public func submit(_ sighting: SightingSubmissionDTO,

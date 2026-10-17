@@ -174,6 +174,40 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertNil(recovered?.dto.exactLatitude)
         XCTAssertNil(recovered?.dto.exactLongitude)
     }
+
+    func testPublishedRecordStripsCreatorOnlyFields() {
+        let record = CKRecord(recordType: "SightingSubmission",
+                              recordID: CKRecord.ID(recordName: "sighting-publish-key"))
+        record["capturedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as NSDate
+        record["geohash6"] = "9v6kn7"
+        record["deviceIDHash"] = "creator-only"
+        record["fleetConfidence"] = 0.91 as NSNumber
+        record["plateText"] = "1ABC234"
+        record["vehicleClass"] = "patrol"
+        record["agencyName"] = "Example Police"
+        record["unitNumber"] = "42"
+        record["userConfirmed"] = true as NSNumber
+
+        let submission = try! XCTUnwrap(CloudKitBackend.ownedSubmission(from: record))
+        let published = try! XCTUnwrap(CloudKitBackend.publishedRecord(from: submission))
+        XCTAssertEqual(published.recordType, "Sighting")
+        XCTAssertEqual(published["moderationState"] as? String, "fleetConfirmed")
+        XCTAssertEqual(published["plateText"] as? String, "1ABC234")
+        XCTAssertNil(published["deviceIDHash"])
+        XCTAssertNil(published["userConfirmed"])
+    }
+
+    func testUnconfirmedSubmissionCannotBecomePublishedRecord() {
+        let record = CKRecord(recordType: "SightingSubmission",
+                              recordID: CKRecord.ID(recordName: "sighting-pending-key"))
+        record["capturedAt"] = Date() as NSDate
+        record["fleetConfidence"] = 0.99 as NSNumber
+        record["vehicleClass"] = "patrol"
+        record["agencyName"] = "Example Police"
+        record["userConfirmed"] = false as NSNumber
+        let submission = try! XCTUnwrap(CloudKitBackend.ownedSubmission(from: record))
+        XCTAssertNil(CloudKitBackend.publishedRecord(from: submission))
+    }
 }
 
 final class AgencyReportDTOTests: XCTestCase {

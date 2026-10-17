@@ -225,6 +225,10 @@ tests must stay green before its status advances.
 - CloudKit history recovery now follows every query cursor instead of stopping
   at the first 200 creator-owned submissions, so older receipts and pending
   handoffs remain recoverable after a large sync backlog.
+- The moderator publication boundary is now a tested `Sighting` record builder:
+  it requires confirmation plus fleet evidence and strips creator-only device
+  and review fields. Saving with a moderator credential remains a deployment
+  gate.
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 

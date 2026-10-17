@@ -31,7 +31,9 @@ world-readable `Sighting` / `Vehicle` / `Agency`. A raw detection — and its pl
 
 ## Publishing (moderation)
 
-Accepted submissions are copied to `Sighting` by the moderator tool (dashboard
-or a server-to-server key). That tool is **not built yet** — until it exists the
-public feed is empty on CloudKit builds; the Vapor reference server's moderator
-console and exports are the working path (see docs/BACKEND.md).
+Accepted submissions are copied to `Sighting` by moderator tooling (dashboard
+or a server-to-server key). PlateSync now provides and tests the privacy-safe
+record mapping; the credentialed save/queue worker is still a deployment gate.
+Until that worker is enabled, the public feed is empty on CloudKit builds; the
+Vapor reference server's moderator console and exports are the working path
+(see docs/BACKEND.md).
