@@ -66,11 +66,15 @@ public final class HLSPolicyRelay {
         guard let origin, Self.supported(remote) else { throw URLError(.unsupportedURL) }
         if let key = reverse[remote] { return origin.appendingPathComponent("\(capability)/\(key)") }
         let key = UUID().uuidString + (remote.pathExtension.isEmpty ? "" : "." + remote.pathExtension)
-        routes[key] = remote; reverse[remote] = key; routeOrder.append(key)
-        // Live playlists refresh forever; do not keep an unbounded segment map.
+        routes[key] = remote; reverse[remote] = key
+        // Keep the root capability alive for the lifetime of the relay. Live
+        // playlists refresh forever, so only child resources participate in
+        // the bounded FIFO and cannot evict the entry AVPlayer is polling.
+        if remote != root { routeOrder.append(key) }
         while routeOrder.count > 2048 {
             let old = routeOrder.removeFirst()
-            if let url = routes[old], url != root { reverse[url] = nil; routes[old] = nil }
+            if let url = routes[old], reverse[url] == old { reverse[url] = nil }
+            routes[old] = nil
         }
         return origin.appendingPathComponent("\(capability)/\(key)")
     }
