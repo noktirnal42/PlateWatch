@@ -13,6 +13,17 @@ any outbox delivery, so a local Review item was never proof of server delivery.
   Adding the entitlement initially exposed SwiftData's automatic CloudKit selection and
   caused a startup failure; the local-only store repair was built and relaunched successfully.
   Existing local Review count remains two. No store reset or queue submission was performed.
+
+## 2026-10-17 entitlement regression and repair
+
+During follow-up QA, the installed app had again been replaced by a CI-style
+`CODE_SIGNING_ALLOWED=NO` build. The project entitlements were still correct, but the running
+binary consequently reported `Unavailable — this build has no CloudKit entitlement` and used the
+loopback server only. The Hub was rebuilt with automatic signing, verified to contain
+`iCloud.org.platewatch.platewatch` and the CloudKit service entitlement, then relaunched. The live
+Settings probe now reports `Connected · public database readable` while the separate reference
+server probe reports its health-only status. A signed-install script now refuses to replace the
+operator app when those entitlements are absent.
 - Corrected REST fallback to 8083 and reject malformed/credential-bearing or remote HTTP
   overrides. Two new backend-selection tests pass; all 15 PlateSync tests and 36 Hub tests pass (four opt-in skips).
 - Settings now has read-only connection checks. The signed running Hub reports an available

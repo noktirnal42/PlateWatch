@@ -239,6 +239,13 @@ tests must stay green before its status advances.
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
+  A signed Hub rebuild on 2026-10-17 repaired a local installation regression where an
+  unsigned CI-style app had replaced the operator build and therefore reported no CloudKit
+  entitlement. The rebuilt app was verified with the container entitlement and its live Settings
+  probe reported `Connected · public database readable`. The new
+  `apps/macos-hub/scripts/build_signed_and_install.sh` path refuses to install a build without
+  that entitlement; CI remains intentionally unsigned.
+
 ## WS6 — Trust & redaction (cross-cutting)
 
 - **Owns:** `packages/PlateKit` model + `RedactionGate`, DTO
