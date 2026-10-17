@@ -267,6 +267,9 @@ tests must stay green before its status advances.
   and review fields. `CloudKitBackend.publish(_:)` now performs the guarded
   moderator save with idempotent record identity and explicit permission/quota
   errors; saving with a moderator credential remains a deployment gate.
+- A reference Python edge client now implements the stable REST submission contract for a Raspberry Pi/OAK-class processor.
+  It accepts only explicit operator-confirmed fleet observations, rejects exact coordinates and review/raw image bytes,
+  uses the same content-addressed idempotency digest as `OutboxDrainer`, and is covered by four standard-library fixture tests.
 - **Next:** credentialed CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 

@@ -89,7 +89,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 
 ## M5 — Beyond Apple
 - ◐ REST mirror container is prepared (`server/Dockerfile` + deployment notes); Oracle Always Free deployment remains open
-- ⬜ Reference Python edge agent (Raspberry Pi HQ cam / OAK-4)
+- ✅ Reference Python edge agent (Raspberry Pi HQ cam / OAK-4): standard-library REST client with content-addressed retries and fail-closed fleet/media policy; detector/model runtime remains local and separately reviewed
 - ⬜ Android client via shared DTO spec + ONNX models
 - ✅ Web read-only explorer: public CSV/GeoJSON exports, k-anonymous heatmap page, agency directory/report pages, and read-only mirror API; no write surface is exposed.
 
