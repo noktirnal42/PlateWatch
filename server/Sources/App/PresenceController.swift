@@ -6,6 +6,15 @@ struct PresenceHeartbeat: Content, Sendable {
     var platform: String
     var feedIDs: [UUID]
     var activeProcessing: Bool
+    var stats: PresenceStats?
+}
+
+struct PresenceStats: Content, Sendable, Equatable {
+    var framesAnalyzed: Int
+    var publicFeedFrames: Int
+    var fleetHitsToday: Int
+    var skippedWhileBusy: Int
+    var outboxPending: Int
 }
 
 struct PresenceAggregate: Content, Sendable, Equatable {
@@ -13,6 +22,7 @@ struct PresenceAggregate: Content, Sendable, Equatable {
     var activeProcessors: Int
     var processorsByFeed: [UUID: Int]
     var generatedAt: Date
+    var stats: PresenceStats?
 }
 
 /// Ephemeral operator presence. Leases are deliberately process-local and
@@ -23,6 +33,7 @@ actor PresenceStore {
         var feedIDs: Set<UUID>
         var activeProcessing: Bool
         var expiresAt: Date
+        var stats: PresenceStats?
     }
 
     private var leases: [String: Lease] = [:]
@@ -30,10 +41,14 @@ actor PresenceStore {
 
     func heartbeat(_ payload: PresenceHeartbeat, now: Date = .now) -> PresenceAggregate {
         let cleanFeeds = Set(payload.feedIDs.prefix(100))
+        // Only a Hub may publish its local dashboard counters. Other clients
+        // contribute presence/processors, but cannot spoof processing totals.
+        let cleanStats = payload.platform == "macOS-hub" ? payload.stats.map(Self.sanitize) : nil
         leases[payload.sessionID] = Lease(platform: String(payload.platform.prefix(32)),
                                           feedIDs: cleanFeeds,
                                           activeProcessing: payload.activeProcessing,
-                                          expiresAt: now.addingTimeInterval(ttl))
+                                          expiresAt: now.addingTimeInterval(ttl),
+                                          stats: cleanStats)
         return aggregate(now: now)
     }
 
@@ -46,14 +61,33 @@ actor PresenceStore {
         leases = leases.filter { $0.value.expiresAt > now }
         var feedCounts: [UUID: Int] = [:]
         var processors = 0
+        var stats: PresenceStats?
         for lease in leases.values where lease.activeProcessing {
             processors += 1
             for id in lease.feedIDs { feedCounts[id, default: 0] += 1 }
+            if let leaseStats = lease.stats {
+                if stats == nil { stats = PresenceStats(framesAnalyzed: 0, publicFeedFrames: 0, fleetHitsToday: 0, skippedWhileBusy: 0, outboxPending: 0) }
+                stats?.framesAnalyzed += leaseStats.framesAnalyzed
+                stats?.publicFeedFrames += leaseStats.publicFeedFrames
+                stats?.fleetHitsToday += leaseStats.fleetHitsToday
+                stats?.skippedWhileBusy += leaseStats.skippedWhileBusy
+                stats?.outboxPending += leaseStats.outboxPending
+            }
         }
         return PresenceAggregate(activeSessions: leases.count,
                                  activeProcessors: processors,
                                  processorsByFeed: feedCounts,
-                                 generatedAt: now)
+                                 generatedAt: now,
+                                 stats: stats)
+    }
+
+    private static func sanitize(_ value: PresenceStats) -> PresenceStats {
+        let cap = 100_000_000
+        return PresenceStats(framesAnalyzed: min(max(0, value.framesAnalyzed), cap),
+                             publicFeedFrames: min(max(0, value.publicFeedFrames), cap),
+                             fleetHitsToday: min(max(0, value.fleetHitsToday), cap),
+                             skippedWhileBusy: min(max(0, value.skippedWhileBusy), cap),
+                             outboxPending: min(max(0, value.outboxPending), cap))
     }
 }
 

@@ -66,6 +66,16 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDel
             if hits.count > 20 { hits.removeLast(hits.count - 20) }
             unreadCount += 1
             WatchComplicationStore.update(fleetHits: hits.count)
+            let current = WatchComplicationStore.liveStats()
+            WatchComplicationStore.updateLiveStats(
+                activeSessions: current.activeSessions ?? 0,
+                activeProcessors: current.activeProcessors ?? 0,
+                framesAnalyzed: current.framesAnalyzed,
+                publicFeedFrames: current.publicFeedFrames,
+                fleetHitsToday: max(current.fleetHitsToday ?? 0, hits.count),
+                skippedWhileBusy: current.skippedWhileBusy,
+                outboxPending: current.outboxPending,
+                updatedAt: current.updatedAt ?? .now)
             hapticAlert(title: title)
         }
     }

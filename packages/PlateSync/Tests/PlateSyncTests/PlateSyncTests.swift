@@ -238,6 +238,16 @@ final class PresenceDTOTests: XCTestCase {
         XCTAssertEqual(decoded, value)
     }
 
+    func testPresenceAggregateCarriesPrivacySafeHubCounters() throws {
+        let stats = PresenceStats(framesAnalyzed: 1202, publicFeedFrames: 1202,
+                                  fleetHitsToday: 3, skippedWhileBusy: 327,
+                                  outboxPending: 4)
+        let value = PresenceAggregate(activeSessions: 2, activeProcessors: 1, stats: stats)
+        let decoded = try JSONDecoder().decode(PresenceAggregate.self,
+                                                from: JSONEncoder().encode(value))
+        XCTAssertEqual(decoded.stats, stats)
+    }
+
     func testHeartbeatPreservesOnlyFeedDemandFields() throws {
         let value = PresenceHeartbeat(sessionID: "install-session-123456",
                                       platform: "macOS-hub",

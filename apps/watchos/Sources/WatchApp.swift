@@ -29,6 +29,9 @@ struct WatchRootView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Live stats") {
+                    WatchStatsView()
+                }
                 Section {
                     if delegate.hits.isEmpty {
                         Text("No alerts yet")
@@ -63,6 +66,37 @@ struct WatchRootView: View {
                 }
             }
             .navigationTitle("PlateWatch")
+        }
+    }
+}
+
+private struct WatchStatsView: View {
+    @State private var stats = WatchComplicationStore.liveStats()
+    private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            statRow("Fleet hits today", value: stats.fleetHitsToday.map(String.init) ?? "—", icon: "car.fill")
+            statRow("Active sessions", value: stats.activeSessions.map(String.init) ?? "—", icon: "person.2.fill")
+            statRow("Live processors", value: stats.activeProcessors.map(String.init) ?? "—", icon: "wave.3.right")
+            statRow("Frames analysed", value: stats.framesAnalyzed.map(String.init) ?? "—", icon: "viewfinder")
+            statRow("Public feed frames", value: stats.publicFeedFrames.map(String.init) ?? "—", icon: "antenna.radiowaves.left.and.right")
+            statRow("Skipped while busy", value: stats.skippedWhileBusy.map(String.init) ?? "—", icon: "pause.circle")
+            statRow("Outbox pending", value: stats.outboxPending.map(String.init) ?? "—", icon: "tray.and.arrow.up")
+            Text(stats.updatedAt.map { "Updated \($0, format: .dateTime.hour().minute().second())" } ?? "Waiting for Hub stats")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 3)
+        .onReceive(refreshTimer) { _ in stats = WatchComplicationStore.liveStats() }
+    }
+
+    private func statRow(_ title: String, value: String, icon: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon).frame(width: 16).foregroundStyle(.blue)
+            Text(title).font(.caption)
+            Spacer(minLength: 4)
+            Text(value).font(.headline.monospacedDigit())
         }
     }
 }

@@ -72,6 +72,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 ## M4 — Network & UX
 - ✅ CloudKit watchlist subscriptions → watchOS haptic/local alerts (subscription save, silent-push wake, delta matching, wrist haptic, notification permission, and visible unread-hit count)
 - ✅ watchOS complication target (circular, rectangular, and inline families show recent fleet-hit count plus opt-in active-user count; the user count stays `—` until a current presence heartbeat is available)
+- ✅ watchOS live stats surface: the companion now receives privacy-safe aggregate Hub counters (frames, public-feed frames, fleet hits, skipped work, outbox) alongside active sessions/processors and refreshes them every 30 seconds while visible
 - ◐ Heatmap + timeline: k-anonymous aggregate API, REST agency filter, and iOS map/timeline scope picker shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); agency scoping still needs deployed vehicle linking on CloudKit
 - ◐ "Agency report card": server-rendered report page and iOS agency directory/detail surface implemented (fleet size, 30-day sightings, active units, budget link); CloudKit now has an explicit agencyKey join and aggregate query path, pending schema deployment/population
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)

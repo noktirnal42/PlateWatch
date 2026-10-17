@@ -45,6 +45,9 @@ tests must stay green before its status advances.
   through WatchConnectivity; pairing and push delivery remain physical-device gates.
   The watch root observes its extension delegate directly, so push-delivered hits and unread counts
   update in the visible Recent fleet hits list as well as the complication.
+  The watch now also presents the Hub dashboard's aggregate counters in a compact Live stats section.
+  Only numeric processing/presence totals cross the ephemeral presence endpoint; frame bytes, plates,
+  locations, and evidence remain local. Missing Hub counters render as `—` until a Hub heartbeat arrives.
   2026-10-17 wireless device pass: the current signed iOS and watchOS builds installed on the paired
   iPhone 16 Pro Max and Apple Watch Series 9. The watch companion launched and its Recent fleet hits /
   Quick log surface rendered; the iPhone remained locked when devicectl attempted foreground launch, so

@@ -124,6 +124,17 @@ final class SightingCursorTests: XCTestCase {
 }
 
 final class PresenceStoreTests: XCTestCase {
+    func testHubCountersAggregateWithoutExposingMedia() async {
+        let store = PresenceStore()
+        let stats = PresenceStats(framesAnalyzed: 1202, publicFeedFrames: 1202,
+                                  fleetHitsToday: 3, skippedWhileBusy: 327,
+                                  outboxPending: 4)
+        let aggregate = await store.heartbeat(PresenceHeartbeat(sessionID: "hub-stats-123456",
+                                                                  platform: "macOS-hub", feedIDs: [],
+                                                                  activeProcessing: true, stats: stats))
+        XCTAssertEqual(aggregate.stats, stats)
+    }
+
     func testHeartbeatAggregatesAndReleaseRemovesLease() async {
         let store = PresenceStore()
         let feed = UUID()

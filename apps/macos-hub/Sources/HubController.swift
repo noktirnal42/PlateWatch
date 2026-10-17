@@ -166,7 +166,12 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let payload = PresenceHeartbeat(sessionID: presenceSessionID,
                                         platform: "macOS-hub",
                                         feedIDs: Array(favorites.watchedIDs),
-                                        activeProcessing: !favorites.watchedIDs.isEmpty)
+                                        activeProcessing: !favorites.watchedIDs.isEmpty,
+                                        stats: PresenceStats(framesAnalyzed: framesAnalyzed,
+                                                              publicFeedFrames: feedFramesAnalyzed,
+                                                              fleetHitsToday: fleetHitsToday,
+                                                              skippedWhileBusy: framesDropped,
+                                                              outboxPending: pendingCount))
         do {
             presenceAggregate = try await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload)
             presenceStatus = "Live"

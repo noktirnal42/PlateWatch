@@ -41,6 +41,15 @@ final class WatchPresenceCoordinator {
                                         feedIDs: [], activeProcessing: false)
         if let aggregate = try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload) {
             WatchComplicationStore.update(activeUsers: aggregate.activeSessions)
+            WatchComplicationStore.updateLiveStats(
+                activeSessions: aggregate.activeSessions,
+                activeProcessors: aggregate.activeProcessors,
+                framesAnalyzed: aggregate.stats?.framesAnalyzed,
+                publicFeedFrames: aggregate.stats?.publicFeedFrames,
+                fleetHitsToday: aggregate.stats?.fleetHitsToday,
+                skippedWhileBusy: aggregate.stats?.skippedWhileBusy,
+                outboxPending: aggregate.stats?.outboxPending,
+                updatedAt: aggregate.generatedAt)
         }
     }
 }

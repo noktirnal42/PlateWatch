@@ -7,13 +7,36 @@ public struct PresenceAggregate: Codable, Sendable, Equatable {
     public var activeProcessors: Int
     public var processorsByFeed: [UUID: Int]
     public var generatedAt: Date
+    /// Optional Hub-only counters. These are aggregate counts, never frame or
+    /// sighting data, and are omitted when no Hub is reporting them.
+    public var stats: PresenceStats?
 
     public init(activeSessions: Int = 0, activeProcessors: Int = 0,
-                processorsByFeed: [UUID: Int] = [:], generatedAt: Date = .now) {
+                processorsByFeed: [UUID: Int] = [:], generatedAt: Date = .now,
+                stats: PresenceStats? = nil) {
         self.activeSessions = activeSessions
         self.activeProcessors = activeProcessors
         self.processorsByFeed = processorsByFeed
         self.generatedAt = generatedAt
+        self.stats = stats
+    }
+}
+
+public struct PresenceStats: Codable, Sendable, Equatable {
+    public var framesAnalyzed: Int
+    public var publicFeedFrames: Int
+    public var fleetHitsToday: Int
+    public var skippedWhileBusy: Int
+    public var outboxPending: Int
+
+    public init(framesAnalyzed: Int = 0, publicFeedFrames: Int = 0,
+                fleetHitsToday: Int = 0, skippedWhileBusy: Int = 0,
+                outboxPending: Int = 0) {
+        self.framesAnalyzed = max(0, framesAnalyzed)
+        self.publicFeedFrames = max(0, publicFeedFrames)
+        self.fleetHitsToday = max(0, fleetHitsToday)
+        self.skippedWhileBusy = max(0, skippedWhileBusy)
+        self.outboxPending = max(0, outboxPending)
     }
 }
 
@@ -22,12 +45,15 @@ public struct PresenceHeartbeat: Codable, Sendable, Equatable {
     public var platform: String
     public var feedIDs: [UUID]
     public var activeProcessing: Bool
+    public var stats: PresenceStats?
 
-    public init(sessionID: String, platform: String, feedIDs: [UUID], activeProcessing: Bool) {
+    public init(sessionID: String, platform: String, feedIDs: [UUID], activeProcessing: Bool,
+                stats: PresenceStats? = nil) {
         self.sessionID = sessionID
         self.platform = platform
         self.feedIDs = feedIDs
         self.activeProcessing = activeProcessing
+        self.stats = stats
     }
 }
 
