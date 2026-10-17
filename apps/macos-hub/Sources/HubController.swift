@@ -729,7 +729,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     func refreshModels() async {
         let box = contextBox, manager = modelManager
         let count = await Task.detached(priority: .utility) {
-            await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
+            await manager.install(tasks: ["vehicle-detection", "vehicle-type-classification", "plate-detection"], into: box)
         }.value
         modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
     }

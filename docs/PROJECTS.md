@@ -184,7 +184,10 @@ tests must stay green before its status advances.
   Hub Live now includes that colour alongside the readable body class in each overlay, while retaining the
   fleet label and score as separate fields (50 Hub tests, four opt-in skips). OCR is now an enrichment
   pass: Vision image-reader failures preserve the frame and generic vehicle geometry instead of dropping
-  the entire analysis (39 VehicleML tests, one local-image opt-in skip).
+  the entire analysis (39 VehicleML tests, one local-image opt-in skip). The optional licensed
+  `vehicle-type-classification` model is now installed by Hub and iOS and applied to up to eight detected
+  crops per frame, filling missing coarse body types without changing fleet gating (41 VehicleML tests,
+  one local-image opt-in skip).
 - **Next:** grow the ground-truth `plate` corpus (USA, licensed, challenging
   low-contrast examples); improve the Vision baseline with a trained OCR model,
   make/model/color classifier (Create ML GUI path); fleet-specific

@@ -157,6 +157,19 @@ public struct PlateAnalysisPipeline: Sendable {
                                         to: &fused)
         var out = baselineFrame
         out.vehicles = fused
+        if context.models["vehicle-type-classification"] != nil {
+            let classifier = VehicleTypeClassifierStage()
+            // Keep public-feed/live latency bounded when a wide camera view
+            // contains many vehicles. The detector's strongest eight boxes
+            // are sufficient for the operator overlay; fleet gating remains
+            // unchanged for every box.
+            for index in out.vehicles.indices.prefix(8) {
+                guard let body = await classifier.classify(frame, box: out.vehicles[index].boundingBox, context: context) else { continue }
+                var attributes = out.vehicles[index].attributes ?? VehicleAttributes()
+                if attributes.bodyType == nil { attributes.bodyType = body }
+                out.vehicles[index].attributes = attributes
+            }
+        }
         for index in out.vehicles.indices where out.vehicles[index].attributes?.color == nil {
             let box = out.vehicles[index].boundingBox
             if let cue = VehicleColorClassifier.classify(frame.pixelBuffer,

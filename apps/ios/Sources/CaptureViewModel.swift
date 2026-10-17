@@ -127,7 +127,7 @@ final class CaptureViewModel: ObservableObject {
         let manager = modelManager
         // Shared with the Hub; a developer-override model in <cache>/Local/<task>.mlmodel loads even offline.
         let count: Int = await Task.detached(priority: .utility) {
-            await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
+            await manager.install(tasks: ["vehicle-detection", "vehicle-type-classification", "plate-detection"], into: box)
         }.value
         modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
     }

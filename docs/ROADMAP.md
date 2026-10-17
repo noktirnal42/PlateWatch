@@ -53,8 +53,9 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 
 ## M2 — Identification depth
 - ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); offline manifest evaluation now reports normalized exact-match and character error rate; plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
-- ◐ Make/model/color classifier — a conservative on-device coarse colour cue now populates generic vehicle
-  attributes without affecting fleet confidence; a licensed trained make/model/colour model remains open
+- ◐ Make/model/color classifier — conservative on-device colour and optional licensed vehicle-type classification
+  now populate generic vehicle attributes without affecting fleet confidence; a trained make/model/colour model
+  remains open
   (`docs/DECISIONS.md`)
 - ◐ Fleet markings parser: Vision text → FoundationModels `@Generable` extraction (agency name, unit #, "POLICE"/"FIRE" class text) — wired into the iOS capture path
 - ◐ Plate-design classifier — conservative standard/exempt/government/official family mapping now lands in PlateKit and is gate-safe; trained plate-crop model and licensed family corpus remain open (`docs/DECISIONS.md`)
