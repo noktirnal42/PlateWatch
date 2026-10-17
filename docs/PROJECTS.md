@@ -102,7 +102,8 @@ tests must stay green before its status advances.
   Local Review preserves intact evidence crops: overlapping vehicles and foreign text no longer
   remove or black out photos (owner clarification, 2026-10-15; 37 Hub tests, four opt-in skips).
   Child-resource/redirect policy relay and bounded preview slots implemented and native NV511 playback verified;
-  164 FeedIngest and 50 Hub tests pass (four Hub opt-in skips). HLS watch slots rotate every minute
+  165 FeedIngest and 50 Hub tests pass (four Hub opt-in skips). The loopback relay now also parses
+  malformed request lines through a bounded 405 path without unsafe token access. HLS watch slots rotate every minute
   with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
   The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
