@@ -118,6 +118,11 @@ final class FeedRunner: ObservableObject {
     private var videoSink: ClosureVideoSink?
     /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
     var activeVideoCount: Int { hlsSources.count }
+    /// Number of watched HLS sources waiting for their turn in the bounded
+    /// rotation. Keeping this separate from `activeVideoCount` makes the
+    /// status row explain why a catalogue can be healthy while most HLS rows
+    /// say "queued".
+    var queuedVideoCount: Int { max(0, eligibleHLSIDs.count - activeVideoCount) }
     private var requestedHLSID: UUID?
     private var hlsRotation: Task<Void, Never>?
     private var hlsRotationOffset = 0
@@ -463,6 +468,11 @@ final class FeedRunner: ObservableObject {
         let locallyBlocked = sourceStates.values.filter { $0 == .blockedByUser }.count
         if locallyBlocked > 0 { parts.append("\(locallyBlocked) blocked locally") }
         if suspended > 0 { parts.append("\(suspended) suspended") }
+        if activeVideoCount > 0 || queuedVideoCount > 0 {
+            let active = activeVideoCount == 1 ? "1 HLS stream active" : "\(activeVideoCount) HLS streams active"
+            let queued = queuedVideoCount == 1 ? "1 queued" : "\(queuedVideoCount) queued"
+            parts.append("\(active); \(queued) rotate every minute")
+        }
         status = parts.isEmpty ? Self.describe(running: 0, awaiting: 0, total: catalogue?.sources.count ?? 0) : parts.joined(separator: "; ")
     }
 
