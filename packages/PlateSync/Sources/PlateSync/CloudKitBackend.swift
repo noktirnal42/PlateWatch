@@ -113,6 +113,45 @@ public struct CloudKitBackend: SyncBackend {
         return record
     }
 
+    /// Publishes one already-reviewed creator submission through the public
+    /// CloudKit boundary. This operation is deliberately separate from
+    /// `submit`: ordinary clients can create only `SightingSubmission`, while
+    /// CloudKit's record ACL must grant `Sighting` writes only to the
+    /// moderator account/tool. A caller without that role receives a clear
+    /// permission error and the private submission is left untouched.
+    @discardableResult
+    public func publish(_ submission: OwnedSubmission) async throws -> SubmissionReceipt {
+        guard let record = Self.publishedRecord(from: submission) else {
+            throw SyncError.serverRejected(reason: "submission is not confirmed fleet evidence")
+        }
+        do {
+            let saved = try await publicDB.save(record)
+            return SubmissionReceipt(
+                sightingID: Self.uuid(fromRecordName: submission.idempotencyKey),
+                moderationState: .fleetConfirmed,
+                serverReceivedAt: saved.modificationDate ?? Date(),
+                idempotencyKey: submission.idempotencyKey,
+                operatorConfirmed: true)
+        } catch let error as CKError {
+            switch error.code {
+            case .permissionFailure, .notAuthenticated:
+                throw SyncError.serverRejected(reason: "CloudKit moderator permission is required to publish Sighting records")
+            case .quotaExceeded, .requestRateLimited:
+                throw SyncError.quotaExceeded
+            case .serverRecordChanged:
+                // A retry after an accepted write is idempotent by record name.
+                return SubmissionReceipt(
+                    sightingID: Self.uuid(fromRecordName: submission.idempotencyKey),
+                    moderationState: .fleetConfirmed,
+                    serverReceivedAt: Date(),
+                    idempotencyKey: submission.idempotencyKey,
+                    operatorConfirmed: true)
+            default:
+                throw SyncError.serverRejected(reason: error.localizedDescription)
+            }
+        }
+    }
+
     // MARK: - SyncBackend
 
     public func submit(_ sighting: SightingSubmissionDTO,

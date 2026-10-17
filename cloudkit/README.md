@@ -32,8 +32,10 @@ world-readable `Sighting` / `Vehicle` / `Agency`. A raw detection — and its pl
 ## Publishing (moderation)
 
 Accepted submissions are copied to `Sighting` by moderator tooling (dashboard
-or a server-to-server key). PlateSync now provides and tests the privacy-safe
-record mapping; the credentialed save/queue worker is still a deployment gate.
+or a server-to-server key). `CloudKitBackend.publish(_:)` performs the guarded
+privacy-safe save with the moderator-only CloudKit ACL and stable idempotency
+record name. The operation is covered at the privacy boundary; a credentialed
+production save and two-account isolation check remain deployment gates.
 Until that worker is enabled, the public feed is empty on CloudKit builds; the
 Vapor reference server's moderator console and exports are the working path
 (see docs/BACKEND.md).

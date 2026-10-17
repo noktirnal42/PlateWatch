@@ -234,8 +234,9 @@ tests must stay green before its status advances.
   handoffs remain recoverable after a large sync backlog.
 - The moderator publication boundary is now a tested `Sighting` record builder:
   it requires confirmation plus fleet evidence and strips creator-only device
-  and review fields. Saving with a moderator credential remains a deployment
-  gate.
+  and review fields. `CloudKitBackend.publish(_:)` now performs the guarded
+  moderator save with idempotent record identity and explicit permission/quota
+  errors; saving with a moderator credential remains a deployment gate.
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
