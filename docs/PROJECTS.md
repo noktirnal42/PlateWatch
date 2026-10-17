@@ -271,6 +271,9 @@ tests must stay green before its status advances.
 - A reference Python edge client now implements the stable REST submission contract for a Raspberry Pi/OAK-class processor.
   It accepts only explicit operator-confirmed fleet observations, rejects exact coordinates and review/raw image bytes,
   uses the same content-addressed idempotency digest as `OutboxDrainer`, and is covered by four standard-library fixture tests.
+- The first Android target now builds a read-only public-sightings client against `/v1/sightings`, with an explicit mirror
+  endpoint, DTO parsing, and an empty-state/error surface. It requests no plates, crops, raw frames, or exact coordinates;
+  ONNX capture inference is deliberately still open pending a licensed model and measured device benchmark.
 - **Next:** credentialed CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
