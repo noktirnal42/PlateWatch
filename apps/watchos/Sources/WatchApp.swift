@@ -11,9 +11,7 @@ struct PlateWatchWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(hits: Binding(
-                get: { delegate.hits.map(\.title) },
-                set: { _ in }), unreadCount: delegate.unreadCount)
+            WatchRootView(delegate: delegate)
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active { WatchPresenceCoordinator.shared.start() }
@@ -26,25 +24,31 @@ struct PlateWatchWatchApp: App {
 /// companion. CKQuerySubscription pushes wake it when a watchlist vehicle is
 /// fleet-confirmed nearby; the extension delegate plays the haptic.
 struct WatchRootView: View {
-    @Binding var hits: [String]
-    let unreadCount: Int
+    @ObservedObject var delegate: WatchExtensionDelegate
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    if hits.isEmpty {
+                    if delegate.hits.isEmpty {
                         Text("No alerts yet")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(hits, id: \.self) { Text($0) }
+                        ForEach(delegate.hits) { hit in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(hit.title)
+                                Text(hit.when, style: .relative)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 } header: {
                     HStack {
                         Text("Recent fleet hits")
                         Spacer()
-                        if unreadCount > 0 {
-                            Text("\(unreadCount) new")
+                        if delegate.unreadCount > 0 {
+                            Text("\(delegate.unreadCount) new")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
                         }

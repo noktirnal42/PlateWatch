@@ -41,6 +41,8 @@ tests must stay green before its status advances.
   entitlement and physical-device push delivery remain external QA gates.
   The phone now mirrors its normalized local watchlist to the companion watch
   through WatchConnectivity; pairing and push delivery remain physical-device gates.
+  The watch root observes its extension delegate directly, so push-delivered hits and unread counts
+  update in the visible Recent fleet hits list as well as the complication.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
