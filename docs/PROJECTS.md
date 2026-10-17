@@ -188,9 +188,11 @@ tests must stay green before its status advances.
   `PlateKit.FleetScoring.vehicleGateScore(gate:vehicle:)` is now used by iOS,
   EvalHarness and Hub. The wire DTO carries optional `userConfirmed`; Hub Review
   can bulk-confirm selected evidence, and explicit unconfirmed payloads remain
-  pending at the reference server boundary.
-- **Next:** add publication receipts and moderator-facing confirmation audit fields;
-  run all package/server compatibility tests whenever this DTO evolves.
+  pending at the reference server boundary. Submission receipts now carry the
+  idempotency key and operator-confirmation state, including idempotent replay;
+  REST intake and moderator decisions append content-free confirmation audit fields.
+- **Next:** continue package/server compatibility tests whenever this DTO evolves;
+  CloudKit production publication and two-account isolation remain WS5 deployment gates.
 
 ---
 
