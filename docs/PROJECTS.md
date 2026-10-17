@@ -74,6 +74,9 @@ tests must stay green before its status advances.
   iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared
   sync boundary; CloudKit directory records are supported, while aggregate report delivery remains a
   deployment/mirror gate until the required public records are present.
+  CloudKit-entitled Hub delivery retains local acknowledgement receipts and
+  identifies CloudKit versus the separate REST moderation queue; a CloudKit
+  moderator inbox/publication path remains the next backend milestone.
   Sustained pilot, unsupported playlist forms and physical QA remain.
 - **Visual polish:** screenshot-checked Dashboard, feed browser and Sandy Live view; native-symbol metrics, dashboard shortcuts, camera/host rows and optional readable overlays. Actual Dashboard capture added to Pages source. Minimum-width feed status clipping fixed; console-only System/Light/Dark controls and ⌘1–⌘8 navigation added. Actual menu/key/overlay-checkbox interactions verified; System appearance and original window size restored.
 - **Court-search results:** each CourtListener/PACER search replaces the Current search view immediately; empty/error responses remain empty and late older responses are ignored. Saved pending and accepted records stay available in separate tabs. Regression coverage includes repeat-search deduplication and stale completions.
