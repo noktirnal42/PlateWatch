@@ -187,7 +187,10 @@ tests must stay green before its status advances.
   the entire analysis (39 VehicleML tests, one local-image opt-in skip). The optional licensed
   `vehicle-type-classification` model is now installed by Hub and iOS and applied to up to eight detected
   crops per frame, filling missing coarse body types without changing fleet gating (41 VehicleML tests,
-  one local-image opt-in skip).
+  one local-image opt-in skip). The model manager now caches and bundles a core registry and installs
+  cached vehicle/plate detectors before attempting the optional classifier, so a registry outage or
+  missing type artifact cannot silently return the Hub to baseline mode (42 VehicleML tests, one
+  local-image opt-in skip).
 - **Next:** grow the ground-truth `plate` corpus (USA, licensed, challenging
   low-contrast examples); improve the Vision baseline with a trained OCR model,
   make/model/color classifier (Create ML GUI path); fleet-specific

@@ -11,7 +11,7 @@ let package = Package(
         .package(path: "../PlateKit"),
     ],
     targets: [
-        .target(name: "VehicleML", dependencies: ["PlateKit"]),
+        .target(name: "VehicleML", dependencies: ["PlateKit"], resources: [.process("Resources")]),
         .testTarget(name: "VehicleMLTests", dependencies: ["VehicleML"]),
     ]
 )

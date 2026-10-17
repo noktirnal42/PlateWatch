@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "name": "plate-detector-createml-v1",
+      "task": "plate-detection",
+      "version": "0.2.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/plate-detector-createml-v1.mlmodel",
+      "sha256": "04114e3fea5d6946bdb0252751bd2ac3fbc015b9fc67d81d291fccafd040c506",
+      "sourceURL": "https://github.com/noktirnal42/PlateWatch/blob/main/models/provenance/plate-detector-createml-v1.md",
+      "license": "PlateWatch (trained by this project); training images CC BY 2.0 (Open Images V7 'Vehicle registration plate' annotations CC BY 4.0)",
+      "inputDescription": "IMAGE 416x416 RGB; plate object detection",
+      "format": "mlmodel",
+      "minimumOS": "17.0"
+    },
+    {
+      "name": "vehicle-detector-yolov8n",
+      "task": "vehicle-detection",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-detector-yolov8n.aar",
+      "sha256": "1a986849cf9ccd5a2b89f6c4005edd281cb76887e229cab4939d032e8bc34594",
+      "sourceURL": "https://github.com/ultralytics/ultralytics",
+      "license": "AGPL-3.0 (compatible with project license)",
+      "inputDescription": "IMAGE 640x640 BGR letterboxed; COCO vehicle detection",
+      "format": "aar",
+      "minimumOS": "17.0"
+    },
+    {
+      "name": "vehicle-type-classifier",
+      "task": "vehicle-type-classification",
+      "version": "0.1.0",
+      "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-type-classifier.aar",
+      "sha256": "6f0aa0e85c247838158c8824de7ef648b003efb1c8e80b84cff293387c8e6b32",
+      "sourceURL": "https://huggingface.co/dima806/vehicle_10_types_image_detection",
+      "license": "Apache-2.0",
+      "inputDescription": "IMAGE 224x224 RGB; coarse vehicle type classification",
+      "format": "aar",
+      "minimumOS": "17.0"
+    }
+  ]
+}

@@ -728,10 +728,19 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// failure leaves baseline Vision active.
     func refreshModels() async {
         let box = contextBox, manager = modelManager
-        let count = await Task.detached(priority: .utility) {
-            await manager.install(tasks: ["vehicle-detection", "vehicle-type-classification", "plate-detection"], into: box)
+        let detectorCount = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
         }.value
-        modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
+        modelStatus = detectorCount == 0 ? "baseline vision" : "CoreML active (\(detectorCount) models)"
+
+        // Vehicle type is display-only and may not have a published artifact.
+        // Install it separately so its network failure cannot delay or replace
+        // the core detectors used for fleet analysis.
+        let typeCount = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-type-classification"], into: box)
+        }.value
+        let total = detectorCount + typeCount
+        modelStatus = total == 0 ? "baseline vision" : "CoreML active (\(total) models)"
     }
 
     func attach(context: ModelContext) {

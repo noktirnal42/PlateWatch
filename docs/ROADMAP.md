@@ -52,7 +52,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ Hub: HLS ingest is production-wired with policy relay, child-playlist handling, bounded cancellation and NV511 fixtures; raw RTSP still needs the separately licensed VLCKit/GStreamer path
 
 ## M2 — Identification depth
-- ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); offline manifest evaluation now reports normalized exact-match and character error rate; plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
+- ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); offline manifest evaluation now reports normalized exact-match and character error rate; bundled/cached registry fallback keeps installed detectors usable offline; plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
 - ◐ Make/model/color classifier — conservative on-device colour and optional licensed vehicle-type classification
   now populate generic vehicle attributes without affecting fleet confidence; a trained make/model/colour model
   remains open
