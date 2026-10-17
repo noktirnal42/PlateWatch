@@ -71,6 +71,8 @@ tests must stay green before its status advances.
   with Live pinned; explicit filter reset/reload restores the complete visible catalogue.
   The feed browser now has a persisted-safe Reset view action that also returns from Favorites/Blocked scope
   to the complete catalogue, preventing cameras from appearing lost after relaunch.
+  When the NV511 key is present, the browser exposes a one-click Refresh NV511 action beside the watch controls;
+  it merges the current keyed catalogue without requiring the operator to open the source menu.
   HLS Live now bounds a selected decoder attempt to 15 seconds and exposes a Retry action that tears down
   the stale player before restarting it; this makes provider segment failures visible and recoverable.
   NV511 refreshes now merge the current keyed catalogue, and a retired HLS route can fall back to its paired

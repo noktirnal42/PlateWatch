@@ -30,6 +30,7 @@ struct FeedsPane: View {
     private var ascending: Bool { browser.ascending }
     private var favoritesFirst: Bool { browser.favoritesFirst }
     private var selected: Set<UUID> { browser.selected }
+    private var importing: Bool { hub.importStatus.hasPrefix("Importing") }
 
     @State private var hosts: [FeedHostSummary] = []
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
@@ -103,6 +104,17 @@ struct FeedsPane: View {
                 Label("\(favorites.watchedIDs.count) watched", systemImage: "eye.fill")
                     .foregroundStyle(.secondary)
                     .help("Cameras selected for background analysis")
+                if SourceCredentials.hasKey("nv511") {
+                    Button(importing ? "Refreshing NV511…" : "Refresh NV511", systemImage: "arrow.clockwise") {
+                        Task {
+                            await hub.importCatalogue(.nevada)
+                            reload()
+                        }
+                    }
+                    .disabled(importing)
+                    .help("Fetch the current keyed NV511 catalogue and merge it with this Mac's saved feeds")
+                    .accessibilityLabel(importing ? "Refreshing Nevada 511 catalogue" : "Refresh Nevada 511 catalogue")
+                }
                 Button("Watch \(favorites.ids.count) favorites") { hub.watchAllFavorites() }
                     .disabled(favorites.ids.isEmpty)
                     .help("Analyse all starred cameras in the background")
