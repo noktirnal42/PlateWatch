@@ -208,3 +208,12 @@ hit or expands recording. Native Live displayed Car and Truck on the Austin 12th
 These are coarse model predictions, not proof of make/model or fleet affiliation.
 45 Hub tests pass (four opt-in skips); the separate Tonopah opt-in run passed. All 37
 VehicleML tests pass with the local-image holdout opt-in skipped.
+
+## Sustained native watch pilot — 2026-10-16/17
+
+The installed Hub remained connected with 19 watched feeds for a 61-second
+native process sample. The app-owned bridge reported 5,345 analyzed frames and
+zero pending outbox rows after the run. Process RSS varied from 368,624 KB to
+461,152 KB and sampled CPU from 19% to 81% while CoreML analysis was active; the
+process stayed alive throughout. This closes a short bounded pilot only.
+Longer thermal, network-loss and multi-hour memory testing remains a release gate.
