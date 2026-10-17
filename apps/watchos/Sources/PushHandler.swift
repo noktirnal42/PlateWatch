@@ -14,6 +14,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
 
     /// Recent watchlist hits, surfaced by the root view.
     @Published private(set) var hits: [WatchHit] = []
+    @Published private(set) var unreadCount = 0
 
     struct WatchHit: Identifiable, Equatable {
         let id = UUID()
@@ -24,6 +25,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
     private let backend = SyncBackends.makeDefault()
 
     func applicationDidFinishLaunching() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         session.delegate = self
@@ -62,6 +64,8 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
             guard !hits.contains(where: { $0.title == title }) else { continue }
             hits.insert(WatchHit(title: title, when: sighting.capturedAt), at: 0)
             if hits.count > 20 { hits.removeLast(hits.count - 20) }
+            unreadCount += 1
+            WatchComplicationStore.update(fleetHits: hits.count)
             hapticAlert(title: title)
         }
     }

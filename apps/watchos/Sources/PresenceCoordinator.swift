@@ -39,6 +39,8 @@ final class WatchPresenceCoordinator {
     private func heartbeat() async {
         let payload = PresenceHeartbeat(sessionID: sessionID, platform: "watchOS",
                                         feedIDs: [], activeProcessing: false)
-        try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload)
+        if let aggregate = try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload) {
+            WatchComplicationStore.update(activeUsers: aggregate.activeSessions)
+        }
     }
 }

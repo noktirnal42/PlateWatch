@@ -13,7 +13,7 @@ struct PlateWatchWatchApp: App {
         WindowGroup {
             WatchRootView(hits: Binding(
                 get: { delegate.hits.map(\.title) },
-                set: { _ in }))
+                set: { _ in }), unreadCount: delegate.unreadCount)
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active { WatchPresenceCoordinator.shared.start() }
@@ -27,16 +27,27 @@ struct PlateWatchWatchApp: App {
 /// fleet-confirmed nearby; the extension delegate plays the haptic.
 struct WatchRootView: View {
     @Binding var hits: [String]
+    let unreadCount: Int
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Recent fleet hits") {
+                Section {
                     if hits.isEmpty {
                         Text("No alerts yet")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(hits, id: \.self) { Text($0) }
+                    }
+                } header: {
+                    HStack {
+                        Text("Recent fleet hits")
+                        Spacer()
+                        if unreadCount > 0 {
+                            Text("\(unreadCount) new")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
                     }
                 }
                 NavigationLink("Quick log") {

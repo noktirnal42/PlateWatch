@@ -66,7 +66,8 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Moderator console (server-rendered `GET /moderator` on the reference server; disabled unless `MODERATOR_TOKEN` is set)
 
 ## M4 — Network & UX
-- ✅ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save, silent-push wake, delta matching and haptic/local alert handling implemented; entitlement and physical-device push QA remain)
+- ✅ CloudKit watchlist subscriptions → watchOS haptic/local alerts (subscription save, silent-push wake, delta matching, wrist haptic, notification permission, and visible unread-hit count)
+- ✅ watchOS complication target (circular, rectangular, and inline families show recent fleet-hit count plus opt-in active-user count; the user count stays `—` until a current presence heartbeat is available)
 - ◐ Heatmap + timeline: k-anonymous aggregate API, REST agency filter, and iOS map/timeline scope picker shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); agency scoping still needs deployed vehicle linking on CloudKit
 - ◐ "Agency report card": server-rendered report page and iOS agency directory/detail surface implemented (fleet size, 30-day sightings, active units, budget link); CloudKit now has an explicit agencyKey join and aggregate query path, pending schema deployment/population
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
@@ -77,7 +78,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ Live operator presence and feed demand counts (P1-9)
   - ✅ Ephemeral TTL heartbeats for opted-in Hub/iOS processing and foreground watch sessions.
   - ✅ Hub dashboard total active sessions/live processors and per-feed active processor counts.
-  - ◐ Privacy-safe opt-out, expiry, outage fallback, and accessibility QA; hosted deployment and physical watch launch remain open.
+  - ◐ Privacy-safe opt-out, expiry, outage fallback, accessibility QA, and hosted deployment remain open; signed physical watch launch is verified.
 
 ## M5 — Beyond Apple
 - ⬜ REST mirror publicly deployed (Oracle Always Free)

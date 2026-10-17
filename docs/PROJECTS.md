@@ -97,8 +97,11 @@ tests must stay green before its status advances.
   2026-10-16 physical QA: signed iOS build installed and launched on iPhone 16 Pro Max;
   portrait and landscape screenshots show the capture UI and all-vehicle class overlays.
   Signed watch companion installed and launched on Apple Watch Series 9; the recent-hits
-  and Quick log surface rendered successfully. Camera permission/real-scene capture and
-  CloudKit push delivery still require an operator field exercise.
+  and Quick log surface rendered successfully. The watch now includes notification
+  permission, visible unread-hit state, and a WidgetKit complication with fleet-hit and
+  opt-in active-user counts. Camera permission/real-scene capture and CloudKit push
+  delivery still require an operator field exercise; the latest watch install was blocked
+  when the USB watch connection dropped and should be retried after reconnecting it.
 
 ## WS3 — Recognition & evaluation
 
