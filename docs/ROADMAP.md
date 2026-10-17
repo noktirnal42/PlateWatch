@@ -91,7 +91,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ REST mirror container is prepared (`server/Dockerfile` + deployment notes); Oracle Always Free deployment remains open
 - ⬜ Reference Python edge agent (Raspberry Pi HQ cam / OAK-4)
 - ⬜ Android client via shared DTO spec + ONNX models
-- ⬜ Web read-only explorer (Lite: exports; Full: mirror API)
+- ✅ Web read-only explorer: public CSV/GeoJSON exports, k-anonymous heatmap page, agency directory/report pages, and read-only mirror API; no write surface is exposed.
 
 ## M6 — Remote camera sources & public feeds (macOS Hub)
 Sources: [CAMERA-SOURCES.md](CAMERA-SOURCES.md). Every source feeds the same

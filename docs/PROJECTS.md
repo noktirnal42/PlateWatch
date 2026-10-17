@@ -240,6 +240,8 @@ tests must stay green before its status advances.
   deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
   The reference server also exposes the separate ephemeral presence endpoint;
   it never writes presence into CloudKit sightings or moderation records.
+  Its public read-only surface now covers CSV/GeoJSON exports, the k-anonymous heatmap page, agency directory/report
+  pages, and the corresponding `/v1` mirror routes; no browser write path is exposed.
   A multi-stage `server/Dockerfile` and deployment notes package the REST mirror with
   Swift 6.2 and bind its health/API surface on `0.0.0.0:8083`; the `linux/arm64` image
   was built successfully as `platewatch-server:qa` on 2026-10-16, and the server suite
