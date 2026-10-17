@@ -58,6 +58,14 @@ public struct CloudKitBackend: SyncBackend {
                            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
+    /// CloudKit submission records use a stable `sighting-<idempotency key>`
+    /// name. Idempotency keys are content-derived and may contain hyphens, so
+    /// remove only the known prefix; splitting on every hyphen would silently
+    /// change the public ID used to reconcile receipts and deltas.
+    static func idempotencyKey(fromRecordName name: String) -> String {
+        name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+    }
+
     // MARK: - Schema mapping (mirrors docs/DATA-MODEL.md)
 
     enum RecordType {
@@ -141,8 +149,7 @@ public struct CloudKitBackend: SyncBackend {
                                                       desiredKeys: desiredKeys, resultsLimit: 200)
         return results.compactMap { _, result in
             guard case .success(let record) = result else { return nil }
-            let name = record.recordID.recordName
-            let key = name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+            let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
             return SubmissionReceipt(
                 sightingID: Self.uuid(fromRecordName: key),
                 moderationState: Sighting.ModerationState(rawValue: record["moderationState"] as? String ?? "pending") ?? .pending,
@@ -172,8 +179,7 @@ public struct CloudKitBackend: SyncBackend {
     /// testable without a live CloudKit account.
     static func ownedSubmission(from record: CKRecord) -> OwnedSubmission? {
         guard let capturedAt = record["capturedAt"] as? Date else { return nil }
-        let name = record.recordID.recordName
-        let key = name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+        let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
         let confidence = (record["fleetConfidence"] as? NSNumber)?.doubleValue ?? 0
         let vehicleClass = record["vehicleClass"] as? String ?? "vehicle"
         let dto = SightingSubmissionDTO(
@@ -240,8 +246,8 @@ public struct CloudKitBackend: SyncBackend {
         for (_, result) in results {
             guard case .success(let record) = result,
                   let capturedAt = record["capturedAt"] as? Date else { continue }
-            let tail = record.recordID.recordName.components(separatedBy: "-").last ?? ""
-            let stableID = Self.uuid(fromRecordName: tail)
+            let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
+            let stableID = Self.uuid(fromRecordName: key)
             items.append(PublicSightingDTO(
                 id: stableID,
                 capturedAt: capturedAt,
