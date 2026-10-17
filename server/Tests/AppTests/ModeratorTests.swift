@@ -96,6 +96,13 @@ final class ModeratorCSRFTests: XCTestCase {
         XCTAssertFalse(first.contains("reviewer"))
     }
 
+    func testSecondReviewPolicyRequiresASecondDistinctReviewer() {
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: false, firstReviewer: nil, reviewer: "a"), .allow)
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: true, firstReviewer: nil, reviewer: "a"), .recordFirst)
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: true, firstReviewer: "a", reviewer: "a"), .rejectSameReviewer)
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: true, firstReviewer: "a", reviewer: "b"), .allow)
+    }
+
     func testEscapeNeutralisesMarkup() {
         let escaped = ModeratorController.escape(#"<script>alert("x") & 'y'</script>"#)
         XCTAssertFalse(escaped.contains("<script>"))

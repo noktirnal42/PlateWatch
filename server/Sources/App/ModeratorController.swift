@@ -29,6 +29,18 @@ struct ModeratorController: RouteCollection {
     private let token: String?
     private let requireSecondReview: Bool
 
+    enum SecondReviewStep: Equatable {
+        case recordFirst
+        case allow
+        case rejectSameReviewer
+    }
+
+    static func secondReviewStep(required: Bool, firstReviewer: String?, reviewer: String) -> SecondReviewStep {
+        guard required else { return .allow }
+        guard let firstReviewer else { return .recordFirst }
+        return firstReviewer == reviewer ? .rejectSameReviewer : .allow
+    }
+
     init(token: String? = nil, requireSecondReview: Bool = false) {
         self.requireSecondReview = requireSecondReview
         // Reject short tokens outright rather than running a weak console.
@@ -82,15 +94,19 @@ struct ModeratorController: RouteCollection {
         guard let row = try await Sighting.find(id, on: req.db) else { throw Abort(.notFound) }
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
             let reviewer = Self.reviewerFingerprint(req)
-            if decision == .approve, requireSecondReview {
-                if let first = row.firstReviewerFingerprint {
-                    guard first != reviewer else { throw Abort(.conflict, reason: "a second reviewer is required") }
-                } else {
+            if decision == .approve {
+                switch Self.secondReviewStep(required: requireSecondReview,
+                                             firstReviewer: row.firstReviewerFingerprint,
+                                             reviewer: reviewer) {
+                case .rejectSameReviewer:
+                    throw Abort(.conflict, reason: "a second reviewer is required")
+                case .recordFirst:
                     row.firstReviewerFingerprint = reviewer
                     try await row.save(on: req.db)
                     await AuditEntry.record("moderation.first_review", target: id.uuidString,
                                             detail: "state=pending; source=api; reviewer=\(reviewer)", on: req.db)
                     return .noContent
+                case .allow: break
                 }
             }
             let previous = row.moderationState
@@ -218,15 +234,19 @@ struct ModeratorController: RouteCollection {
         // Only pending rows are actionable; a double-submit is a no-op.
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
             let reviewer = Self.reviewerFingerprint(req)
-            if decision == .approve, requireSecondReview {
-                if let first = row.firstReviewerFingerprint {
-                    guard first != reviewer else { throw Abort(.conflict, reason: "a second reviewer is required") }
-                } else {
+            if decision == .approve {
+                switch Self.secondReviewStep(required: requireSecondReview,
+                                             firstReviewer: row.firstReviewerFingerprint,
+                                             reviewer: reviewer) {
+                case .rejectSameReviewer:
+                    throw Abort(.conflict, reason: "a second reviewer is required")
+                case .recordFirst:
                     row.firstReviewerFingerprint = reviewer
                     try await row.save(on: req.db)
                     await AuditEntry.record("moderation.first_review", target: id.uuidString,
                                             detail: "state=pending; source=html; reviewer=\(reviewer)", on: req.db)
                     return req.redirect(to: "/moderator", redirectType: .normal)
+                case .allow: break
                 }
             }
             let previous = row.moderationState

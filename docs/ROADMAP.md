@@ -117,9 +117,9 @@ first.
   verbatim, cited, pending-until-accepted; the opt-in CourtListener live smoke test passed on 2026-10-16, while
   PACER still requires the owner's account and remains unexercised
 - 🟡 Cross-reference chain: unit → confirmed link → official → records, location-free, shown in Hub Review — built;
-  operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; second-person
-  moderation and any publication path are not. Moderator audit entries carry a non-reversible reviewer fingerprint,
-  and opt-in `REQUIRE_SECOND_REVIEW=1` now enforces distinct reviewers for approval.
+  operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; opt-in
+  second-person moderation is enforced for both HTML and API paths. Any publication path remains external/deployment-gated.
+  Moderator audit entries carry a non-reversible reviewer fingerprint, and `REQUIRE_SECOND_REVIEW=1` enforces distinct reviewers for approval.
 - ✅ FOIA request tracker (Hub: Requests tab — due dates, appeal text, cited releases)
 - ⬜ Aggregation of existing public-interest publishers (cite-first, no
   re-hosting without attribution)
