@@ -133,7 +133,9 @@ tests must stay green before its status advances.
   permission, visible unread-hit state, and a WidgetKit complication with fleet-hit and
   opt-in active-user counts. Camera permission/real-scene capture and CloudKit push
   delivery still require an operator field exercise. The latest physical install and
-  launch passed after correcting the WidgetKit extension bundle metadata.
+  launch passed after correcting the WidgetKit extension bundle metadata. Watch hit rows
+  and Quick Log now expose spoken labels and hints for VoiceOver; a signed generic watchOS
+  build passed, while a repeat physical install is pending the device tunnel reconnecting.
 
 ## WS3 — Recognition & evaluation
 

@@ -41,6 +41,9 @@ struct WatchRootView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(hit.title)
+                            .accessibilityValue("Received \(hit.when, style: .relative)")
                         }
                     }
                 } header: {
@@ -48,9 +51,10 @@ struct WatchRootView: View {
                         Text("Recent fleet hits")
                         Spacer()
                         if delegate.unreadCount > 0 {
-                            Text("\(delegate.unreadCount) new")
+                        Text("\(delegate.unreadCount) new")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
+                            .accessibilityLabel("\(delegate.unreadCount) unread fleet hits")
                         }
                     }
                 }
@@ -73,6 +77,8 @@ struct QuickLogView: View {
     var body: some View {
         VStack(spacing: 12) {
             TextField("Say or type what you saw…", text: $note)
+                .accessibilityLabel("Field note")
+                .accessibilityHint("Describe a public fleet vehicle or event")
             Button("Log it") { save() }
                 .disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
             if saved {
