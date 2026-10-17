@@ -71,7 +71,9 @@ tests must stay green before its status advances.
   The overlay is now one VoiceOver element with a per-vehicle spoken summary (body class, colour, fleet label
   and confidence where available), plus a stable accessibility identifier for UI audits. The watchlist now
   provides an explicit keyboard-toolbar Done action. The debug capture fixture now renders one fleet SUV
-  plus ordinary sedan and pickup classes, and the targeted UI audit passed 1/1 on the iOS simulator.
+  plus ordinary sedan and pickup classes, and the targeted UI audit passed 1/1 on the connected iPhone 17 Pro
+  simulator (`/tmp/pw-ios-sim-qa`, 6.464 seconds). The physical iPhone and watch are currently reported
+  unavailable by `devicectl`, so this is simulator evidence rather than a new physical-device claim.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.
