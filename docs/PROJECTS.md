@@ -104,8 +104,9 @@ tests must stay green before its status advances.
   a sustained quality/freshness/CPU pilot and broader internal-agent task/attribution evaluation
   in AGENT-INTEGRATION.md. Credentialed source expansion and physical hardware/permission QA remain.
   Current continuation evidence and remaining gates: [repair report](HUB-REPAIR-2026-10-15.md).
-  2026-10-16 physical QA: signed iOS build installed and launched on iPhone 16 Pro Max;
-  portrait and landscape screenshots show the capture UI and all-vehicle class overlays.
+  2026-10-16 physical QA: the newest signed iOS build installed and launched on iPhone 16 Pro Max;
+  portrait and landscape device screenshots show the capture UI with the camera active and all-vehicle
+  class overlays. A real moving-traffic/low-light drive exercise remains open.
   Signed watch companion installed and launched on Apple Watch Series 9; the recent-hits
   and Quick log surface rendered successfully. The watch now includes notification
   permission, visible unread-hit state, and a WidgetKit complication with fleet-hit and
