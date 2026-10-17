@@ -157,6 +157,15 @@ public struct PlateAnalysisPipeline: Sendable {
                                         to: &fused)
         var out = baselineFrame
         out.vehicles = fused
+        for index in out.vehicles.indices where out.vehicles[index].attributes?.color == nil {
+            let box = out.vehicles[index].boundingBox
+            if let cue = VehicleColorClassifier.classify(frame.pixelBuffer,
+                                                          box: (box.x, box.y, box.width, box.height)) {
+                var attributes = out.vehicles[index].attributes ?? VehicleAttributes()
+                attributes.color = cue.color
+                out.vehicles[index].attributes = attributes
+            }
+        }
         return out
     }
 }

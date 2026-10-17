@@ -139,6 +139,9 @@ tests must stay green before its status advances.
   identity remains unconfirmed. Generic car/truck/bus/motorcycle labels are now retained separately
   as body-type attributes for all Live detections, without promoting fleet status (37 VehicleML
   tests, one local-image opt-in skip). See EVALUATION.md; OCR and broader fleet recall remain open.
+  A deterministic coarse RGB crop cue now fills a low-risk vehicle colour attribute for generic detections;
+  it is deliberately excluded from fleet scoring and does not claim make/model recognition (39 VehicleML
+  tests, one local-image opt-in skip).
 - **Next:** grow the ground-truth `plate` corpus (USA, licensed, challenging
   low-contrast examples); improve the Vision baseline with a trained OCR model,
   make/model/color classifier (Create ML GUI path); fleet-specific
