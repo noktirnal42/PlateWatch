@@ -84,6 +84,8 @@ tests must stay green before its status advances.
   approved snapshot view in Live with an explicit status, preserving a usable camera while the provider repairs video.
   The feed browser now exposes an explicit Watch NV511 action for all confirmed Nevada sources; snapshots remain
   host-throttled and HLS stays within the rotating four-stream budget.
+  The Hub status popover repeats that recovery action and shows the confirmed NV511 count, so a relaunch that
+  leaves the catalogue idle can be repaired without navigating away from the dashboard.
   Local evidence has hash-addressed recovery copies, and Live shows generic vehicle classes (including
   readable SUV/van/pickup/sedan/motorbike aliases and classifier confidence when a body label is unavailable).
   iOS now exposes the public agency directory and REST-backed report-card detail flow through the shared

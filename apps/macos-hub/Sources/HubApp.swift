@@ -88,6 +88,20 @@ struct HubStatusView: View {
             row("Outbox", "\(hub.pendingCount) pending")
             row("Snapshot server", hub.snapshotServerStatus)
             FeedStatusRow(runner: hub.feedRunner)
+            if hub.confirmedNV511Count > 0 {
+                HStack {
+                    Label("NV511", systemImage: "road.lanes")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(hub.confirmedNV511Count.formatted()) confirmed")
+                        .font(.caption)
+                    Button("Watch all") { hub.watchAllNV511() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .help("Restore background analysis for all confirmed Nevada 511 cameras")
+                        .accessibilityLabel("Watch all confirmed Nevada 511 feeds")
+                }
+            }
             HStack {
                 Button("Import Austin cameras") { Task { await hub.importAustinCameras() } }
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }
