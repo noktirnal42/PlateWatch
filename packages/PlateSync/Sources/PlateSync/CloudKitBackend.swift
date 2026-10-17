@@ -116,6 +116,27 @@ public struct CloudKitBackend: SyncBackend {
         }
     }
 
+    /// Reconciles creator-readable submissions into a local receipt ledger.
+    /// The returned values deliberately contain acknowledgement metadata only;
+    /// callers must not persist the queried plate or submission fields.
+    public func recoverOwnedSubmissionReceipts() async throws -> [SubmissionReceipt] {
+        let query = CKQuery(recordType: RecordType.submission, predicate: NSPredicate(value: true))
+        let desiredKeys = ["moderationState", "userConfirmed"]
+        let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
+                                                      desiredKeys: desiredKeys, resultsLimit: 200)
+        return results.compactMap { _, result in
+            guard case .success(let record) = result else { return nil }
+            let name = record.recordID.recordName
+            let key = name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+            return SubmissionReceipt(
+                sightingID: Self.uuid(fromRecordName: key),
+                moderationState: Sighting.ModerationState(rawValue: record["moderationState"] as? String ?? "pending") ?? .pending,
+                serverReceivedAt: record.modificationDate ?? record.creationDate ?? Date(),
+                idempotencyKey: key,
+                operatorConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+        }
+    }
+
     /// CKQueryOperation.Cursor only round-trips through keyed archiving;
     /// a `String(describing:)` token cannot be unarchived and would force
     /// every pull back to page one.

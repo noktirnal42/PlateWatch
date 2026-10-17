@@ -554,6 +554,45 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
     }
 
+    /// Reconciles creator-readable CloudKit submissions that were delivered by
+    /// an older Hub before the local receipt ledger existed. No submission
+    /// payload fields are copied back to disk.
+    func recoverDeliveredReceipts() async {
+        guard let modelContext else {
+            lastReceiptSummary = "Local receipt store unavailable"
+            return
+        }
+        guard SyncBackends.cloudKitAvailable() else {
+            lastReceiptSummary = "CloudKit recovery unavailable in this build"
+            return
+        }
+        syncStatus = "Recovering CloudKit delivery history…"
+        do {
+            let recovered = try await CloudKitBackend().recoverOwnedSubmissionReceipts()
+            var inserted = 0
+            for receipt in recovered {
+                let exists = (try? modelContext.fetch(FetchDescriptor<ReceivedSubmissionReceipt>(
+                    predicate: #Predicate { $0.sightingID == receipt.sightingID }
+                )))?.isEmpty == false
+                if !exists {
+                    modelContext.insert(ReceivedSubmissionReceipt(
+                        sightingID: receipt.sightingID,
+                        receivedAt: receipt.serverReceivedAt,
+                        moderationState: receipt.moderationState,
+                        operatorConfirmed: receipt.operatorConfirmed ?? false,
+                        idempotencyKey: receipt.idempotencyKey))
+                    inserted += 1
+                }
+            }
+            try modelContext.save()
+            syncStatus = "CloudKit history reconciled"
+            lastReceiptSummary = "Recovered (inserted) new receipt(s) · (recovered.count) CloudKit submission(s) visible to this iCloud account"
+        } catch {
+            syncStatus = "CloudKit history recovery failed"
+            lastReceiptSummary = "Could not recover CloudKit submissions: \(error.localizedDescription)"
+        }
+    }
+
     func chooseIngestFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
