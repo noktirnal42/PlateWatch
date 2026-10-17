@@ -58,6 +58,8 @@ tests must stay green before its status advances.
   [repair evidence](HUB-REPAIR-2026-10-15.md). Nevada's keyed catalogue now preserves snapshots and HLS
   per view. Real NV511 HLS playback/analysis and all ten existing favorite previews verified.
   HLS decodes on demand for the selected Live camera; ordinary previews use the bounded live decoder.
+  The dashboard now distinguishes live presence from an unavailable presence service and reports that
+  local feed processing continues instead of showing stale active-session counts.
   Review multi-rejection/enlargement and pane persistence repaired; original eight queued records
   preserved (their payloads lacked image bytes before this repair). Snapshot failures, policy failures
   and manual recovery are distinct. OpenCode watch controls reconciled: persisted selective polling,

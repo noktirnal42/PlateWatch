@@ -28,6 +28,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var rtspServerStatus = "Stopped"
     @Published private(set) var rtspStreams: [String: RTSPStreamStatus] = [:]
     @Published private(set) var presenceAggregate = PresenceAggregate()
+    @Published private(set) var presenceStatus = "Off"
 
     private let pipeline = PlateAnalysisPipeline()
     /// Detector models (plate / vehicle) hot-swap in here as they install; empty = baseline Vision.
@@ -140,6 +141,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
 
     private func startPresence() {
         guard presenceEnabled, presenceTask == nil else { return }
+        presenceStatus = "Connecting…"
         presenceTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.publishPresence()
@@ -152,6 +154,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         presenceTask?.cancel()
         presenceTask = nil
         presenceAggregate = PresenceAggregate()
+        presenceStatus = "Off"
         Task { [weak self] in
             guard let self else { return }
             try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).release(sessionID: presenceSessionID)
@@ -166,8 +169,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
                                         activeProcessing: !favorites.watchedIDs.isEmpty)
         do {
             presenceAggregate = try await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload)
+            presenceStatus = "Live"
         } catch {
             // Feed processing remains local when the optional presence service is offline.
+            presenceStatus = "Offline · local processing continues"
         }
     }
 
