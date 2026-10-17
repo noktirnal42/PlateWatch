@@ -32,6 +32,15 @@ final class ReviewFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Waiting to send · 1"].waitForExistence(timeout: 5))
     }
 
+    @MainActor func testCapturePreviewShowsAllVehicleClasses() {
+        let app = preview(tab: 0)
+        let overlay = app.otherElements["vehicle-detections"]
+        XCTAssertTrue(overlay.waitForExistence(timeout: 5))
+        XCTAssertEqual(overlay.value as? String,
+                       "3 vehicles in view; 1 fleet vehicle. Police SUV, white sedan, blue pickup.")
+        capture("ios-capture-vehicle-classes", app)
+    }
+
     @MainActor func testWatchlistValidationAddMuteAndDelete() {
         let app = preview(tab: 2)
         capture("ios-watchlist", app)

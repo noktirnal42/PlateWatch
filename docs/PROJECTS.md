@@ -63,12 +63,13 @@ tests must stay green before its status advances.
   stats section with unavailable counters rendered as `—` while the presence heartbeat is absent.
   iOS Live overlays now use the same neutral-label rules as Hub: unknown vehicles no longer display a
   misleading 0% class score, and a coarse colour cue is shown when available. The simulator UI suite
-  passes all seven review/watchlist tests after this change; the two keyboard-sensitive tests were rerun
+  passes the capture, review, and watchlist fixture tests; the two keyboard-sensitive tests were rerun
   on 2026-10-17 and passed 2/2. Xcode still hangs in post-test cleanup after reporting the successful
   result, so the cleanup symptom is tracked separately from the product test result.
   The overlay is now one VoiceOver element with a per-vehicle spoken summary (body class, colour, fleet label
   and confidence where available), plus a stable accessibility identifier for UI audits. The watchlist now
-  provides an explicit keyboard-toolbar Done action; the non-UI iOS suite passes 7/7.
+  provides an explicit keyboard-toolbar Done action. The debug capture fixture now renders one fleet SUV
+  plus ordinary sedan and pickup classes, and the targeted UI audit passed 1/1 on the iOS simulator.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.

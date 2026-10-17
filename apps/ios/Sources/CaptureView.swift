@@ -23,8 +23,13 @@ struct CaptureView: View {
             Color("LaunchBackground").ignoresSafeArea()
             CameraPreview(session: viewModel.captureSession)
                 .ignoresSafeArea().accessibilityHidden(true)
-            DetectionOverlay(frame: viewModel.latestFrame)
-                .ignoresSafeArea()
+            if PreviewFixtures.isEnabled {
+                PreviewDetectionOverlay()
+                    .ignoresSafeArea()
+            } else {
+                DetectionOverlay(frame: viewModel.latestFrame)
+                    .ignoresSafeArea()
+            }
             if PreviewFixtures.isEnabled || (viewModel.cameraState != .running && viewModel.cameraState != .starting) {
                 ScrollView {
                     CameraUnavailableCard(state: PreviewFixtures.isEnabled ? .unavailable("Preview") : viewModel.cameraState)
@@ -406,6 +411,56 @@ private struct DetectionOverlay: View {
             "Vehicle \(index + 1): \(IOSVehicleOverlayLabel.text(for: vehicle))"
         }
         return "\(vehicles.count) vehicles in view; \(fleetCount) fleet vehicles. " + labels.joined(separator: ". ")
+    }
+}
+
+/// A deterministic, debug-only capture fixture used by the UI audit. It keeps
+/// the overlay reviewable in screenshots and proves that ordinary vehicles
+/// retain body-class labels alongside the fleet bracket treatment.
+private struct PreviewDetectionOverlay: View {
+    private struct Sample: Identifiable {
+        let id: Int
+        let rect: CGRect
+        let label: String
+        let fleet: Bool
+    }
+
+    private let samples = [
+        Sample(id: 1, rect: CGRect(x: 0.08, y: 0.31, width: 0.25, height: 0.23), label: "Police SUV · Patrol", fleet: true),
+        Sample(id: 2, rect: CGRect(x: 0.48, y: 0.42, width: 0.28, height: 0.20), label: "White Sedan · car 74%", fleet: false),
+        Sample(id: 3, rect: CGRect(x: 0.69, y: 0.25, width: 0.22, height: 0.19), label: "Blue Pickup · truck 81%", fleet: false)
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(samples) { sample in
+                let frame = CGRect(x: sample.rect.minX * geo.size.width,
+                                   y: sample.rect.minY * geo.size.height,
+                                   width: sample.rect.width * geo.size.width,
+                                   height: sample.rect.height * geo.size.height)
+                Rectangle()
+                    .stroke(sample.fleet ? PWStyle.fleet : .white.opacity(0.72),
+                            style: StrokeStyle(lineWidth: sample.fleet ? 3 : 1.5,
+                                               dash: sample.fleet ? [] : [5, 4]))
+                    .frame(width: frame.width, height: frame.height)
+                    .position(x: frame.midX, y: frame.midY)
+                Text(sample.label)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .foregroundStyle(.black)
+                    .background(sample.fleet ? PWStyle.fleet : .white.opacity(0.86), in: Capsule())
+                    .position(x: min(max(frame.midX, 70), geo.size.width - 70),
+                              y: max(18, frame.minY + 13))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Vehicle detections")
+        .accessibilityValue("3 vehicles in view; 1 fleet vehicle. Police SUV, white sedan, blue pickup.")
+        .accessibilityIdentifier("vehicle-detections")
     }
 }
 
