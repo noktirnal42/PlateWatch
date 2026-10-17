@@ -82,7 +82,7 @@ struct SightingsListView: View {
                 } header: {
                     Text("Received · \(receipts.count)")
                 } footer: {
-                    Text("Receipts confirm backend acceptance and moderation state. They do not mean the sighting is publicly published. Only a bounded local review crop may remain in this history.")
+                    Text("Receipts confirm backend acceptance. This state refreshes to Fleet confirmed when the public feed returns the same ID; a missing row is not treated as withdrawal. Only a bounded local review crop may remain in this history.")
                 }
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
@@ -108,6 +108,14 @@ struct SightingsListView: View {
         do {
             let delta = try await backend.pullSightings(since: nil)
             publicSightings = Array(delta.sightings.prefix(100))
+            let publishedIDs = ReceiptPublicationMatcher.publishedIDs(from: delta.sightings)
+            var receiptsChanged = false
+            for receipt in receipts where publishedIDs.contains(receipt.sightingID)
+                && receipt.moderationState != .fleetConfirmed {
+                receipt.moderationStateRaw = Sighting.ModerationState.fleetConfirmed.rawValue
+                receiptsChanged = true
+            }
+            if receiptsChanged { try? modelContext.save() }
             backendStatus = "Connected · public feed readable"
         } catch {
             publicSightings = []

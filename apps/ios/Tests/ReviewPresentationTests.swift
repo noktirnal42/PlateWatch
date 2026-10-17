@@ -9,6 +9,13 @@ final class ReviewPresentationTests: XCTestCase {
         XCTAssertTrue(AppSyncConfiguration.makeBackend() is RESTBackend)
         #endif
     }
+    func testReceiptPublicationMatchingUsesStableIDsOnly() {
+        let published = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let other = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let rows = [PublicSightingDTO(id: published, capturedAt: Date(), geohash6: "9q8yyk", fleetConfidence: 0.9)]
+        XCTAssertEqual(ReceiptPublicationMatcher.publishedIDs(from: rows), [published])
+        XCTAssertFalse(ReceiptPublicationMatcher.publishedIDs(from: rows).contains(other))
+    }
     func testAlertMirrorDropsMutedAndDeletedEntries() {
         let first = WatchlistItem(plateText: "GOV1")
         let second = WatchlistItem(plateText: "GOV2")
