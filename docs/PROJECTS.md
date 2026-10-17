@@ -221,12 +221,12 @@ tests must stay green before its status advances.
 - **Owns:** `packages/PlateSync`, `server/`, `cloudkit/`, REST protocol.
 - **Docs:** BACKEND, NEXT-STEPS §1, DECISIONS.
 - **Test:** `swift test --package-path packages/PlateSync` &&
-  `swift test --package-path server` (41 tests, no database needed).
+  `swift test --package-path server` (33 PlateSync + 57 server tests, no database needed).
 - **Status:** 2026-10-15 production schema export confirms deployment and creator-only
   submission roles. Hub capability and read-only connection diagnostics added; REST fallback
   port now matches server 8083. Signed installed Hub account access and native REST moderation
   refresh/reconnect verified; local per-user reference service restored. REST submissions now strip
-  thumbnail bytes and reapply plate/location privacy (19 PlateSync tests, 53 server tests pass).
+  thumbnail bytes and reapply plate/location privacy (33 PlateSync tests, 57 server tests pass).
   Hub automatic queue delivery and CloudKit publication remain
   unfinished; schema deployment alone does not prove either. Receipts now carry optional idempotency and
   operator-confirmation metadata for audit surfaces. Intake and moderator state transitions now append
