@@ -44,6 +44,9 @@ tests must stay green before its status advances.
   through WatchConnectivity; pairing and push delivery remain physical-device gates.
   The watch root observes its extension delegate directly, so push-delivered hits and unread counts
   update in the visible Recent fleet hits list as well as the complication.
+  iOS Live overlays now use the same neutral-label rules as Hub: unknown vehicles no longer display a
+  misleading 0% class score, and a coarse colour cue is shown when available. The simulator UI suite
+  passes all seven review/watchlist tests after this change.
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.

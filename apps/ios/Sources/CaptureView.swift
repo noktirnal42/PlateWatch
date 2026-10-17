@@ -412,9 +412,18 @@ private enum IOSVehicleOverlayLabel {
             default: return nil
             }
         }
+        let color = vehicle.attributes?.color.flatMap { value -> String? in
+            let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { return nil }
+            return cleaned.prefix(1).uppercased() + cleaned.dropFirst().lowercased()
+        }
+        let vehicleLabel = [color, body].compactMap { $0 }.joined(separator: " ")
         guard vehicle.vehicleClass.isFleet else {
+            guard vehicle.classConfidence.isFinite, vehicle.classConfidence > 0 else {
+                return vehicleLabel.isEmpty ? "Vehicle" : vehicleLabel
+            }
             let score = Int(min(1, max(0, vehicle.classConfidence)) * 100)
-            return "\(body ?? "Vehicle") · class \(score)%"
+            return "\(vehicleLabel.isEmpty ? "Vehicle" : vehicleLabel) · class \(score)%"
         }
         let fleet = switch vehicle.vehicleClass {
         case .patrol: "Patrol"
@@ -429,7 +438,8 @@ private enum IOSVehicleOverlayLabel {
         case .highway: "Highway"
         default: "Fleet"
         }
-        return [body, fleet].compactMap { $0 }.joined(separator: " · ")
+        let fleetLabel = [color, body ?? "Vehicle"].compactMap { $0 }.joined(separator: " ")
+        return [fleetLabel, fleet].joined(separator: " · ")
     }
 }
 
