@@ -491,13 +491,18 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 // publishes a snapshot view; use that view as an explicit,
                 // policy-checked fallback rather than leaving Live blank.
                 if previewFailure != nil, let snapshot = pairedSnapshot(for: liveFeed ?? source) {
+                    liveFeedStatus = "HLS unavailable · trying paired snapshot…"
                     do {
                         let data = try await feedRunner.fetchPreview(of: snapshot)
                         guard !Task.isCancelled, liveFeed?.id == source.id else { return }
-                        await analyseFeedFrame(data, from: snapshot)
-                        liveFeedStatus = "HLS unavailable · showing paired snapshot · refreshed at the camera's interval"
+                        let analyzed = await analyseFeedFrame(data, from: snapshot)
+                        if analyzed {
+                            liveFeedStatus = "HLS unavailable · showing paired snapshot · refreshed at the camera's interval"
+                        } else if liveFeedFrame == nil {
+                            liveFeedStatus = "HLS unavailable · paired snapshot could not be analyzed"
+                        }
                     } catch {
-                        liveFeedStatus = "Video unavailable: \(previewFailure ?? error.localizedDescription)"
+                        liveFeedStatus = "HLS unavailable · paired snapshot failed: \(error.localizedDescription)"
                     }
                 }
             }
@@ -586,31 +591,44 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// One frame from a public feed. Everything is decided from *that source*: its catalogued position (identity hint
     /// and the plate-recognition jurisdiction gate), and the frame's real size (analysis tier). The frame lives in
     /// memory only.
-    func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async {
-        // Analysis blocks threads (Vision OCR). With hundreds of cameras, unbounded concurrency starves the whole app
-        // (even unrelated network requests never get scheduled), so at most `maxFeedAnalyses` frames are analysed at once and
-        // the surplus is dropped — a camera is simply looked at again on its next refresh.
-        guard feedAnalysesInFlight < Self.maxFeedAnalyses else {
+    @discardableResult
+    func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async -> Bool {
+        // Analysis blocks threads (Vision OCR). With hundreds of cameras, unbounded concurrency starves the whole app.
+        // Keep one slot reserved for the selected Live source so a full background watch list cannot make the interactive
+        // pane appear hung. Non-Live frames are dropped and retried on their next published interval.
+        let displaysInLive = liveFeed?.id == source.id
+            || (liveFeed.flatMap { pairedSnapshot(for: $0)?.id } == source.id)
+        let backgroundCapacity = max(1, Self.maxFeedAnalyses - 1)
+        let capacity = displaysInLive ? Self.maxFeedAnalyses : backgroundCapacity
+        guard feedAnalysesInFlight < capacity else {
             framesDropped += 1
-            if liveFeed?.id == source.id { liveFeedStatus = "Analysis busy; waiting for the next camera refresh" }
-            return
+            if displaysInLive { liveFeedStatus = "Analysis busy; Live has priority and will retry immediately" }
+            return false
         }
         feedAnalysesInFlight += 1
         defer { feedAnalysesInFlight -= 1 }
         guard let buffer = FileFrameSource.pixelBuffer(from: data) else {
             if liveFeed?.id == source.id { liveFeedStatus = "Image unavailable or unreadable. Use ⦸ to block this camera." }
-            return
+            return false
         }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
-        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
+        let frame: DetectionFrame
+        do {
+            frame = try await pipeline.analyze(.init(pixelBuffer: buffer),
+                                                context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true))
+        } catch {
+            if liveFeed?.id == source.id {
+                liveFeedStatus = "Image received, but local analysis failed: \(error.localizedDescription)"
+            }
+            return false
+        }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         // Permissions can be revoked while Vision is processing a frame.
         guard !favorites.isBlocked(source.id),
               let current = activeFeedSources[source.id],
-              current.mayBeAnalysed else { return }
+              current.mayBeAnalysed else { return false }
         let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
                                        mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
@@ -621,6 +639,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
             liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
             liveFeedStatus = "Background analysis · refreshed at the camera's interval"
         }
+        return true
     }
 
     /// One decoded frame from a continuous video feed (HLS today, RTSP via a
@@ -628,7 +647,14 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// frames — only the transport differs. The decoder taps ~15 fps; the
     /// concurrency cap is what bounds the analysis cost.
     func analyseFeedVideoFrame(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
-        guard feedAnalysesInFlight < Self.maxFeedAnalyses else { framesDropped += 1; return }
+        let displaysInLive = liveFeed?.id == source.id
+        let backgroundCapacity = max(1, Self.maxFeedAnalyses - 1)
+        let capacity = displaysInLive ? Self.maxFeedAnalyses : backgroundCapacity
+        guard feedAnalysesInFlight < capacity else {
+            framesDropped += 1
+            if displaysInLive { liveFeedStatus = "Analysis busy; Live has priority and will retry immediately" }
+            return
+        }
         feedAnalysesInFlight += 1
         defer { feedAnalysesInFlight -= 1 }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))

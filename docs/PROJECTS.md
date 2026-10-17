@@ -92,7 +92,9 @@ tests must stay green before its status advances.
   The feed browser now exposes an explicit Watch NV511 action for all confirmed Nevada sources; snapshots remain
   host-throttled and HLS stays within the rotating four-stream budget.
   Feed status now reports active versus queued HLS rotation explicitly, so queued NV511 cameras are not mistaken
-  for lost feeds while their paired snapshots continue polling.
+  for lost feeds while their paired snapshots continue polling. The latest Live repair reserves one of the two
+  analysis slots for the selected camera, so a full watched catalogue cannot starve Live; HLS failures now report
+  paired-snapshot delivery and local-analysis failures separately.
   The Hub status popover repeats that recovery action and shows the confirmed NV511 count, so a relaunch that
   leaves the catalogue idle can be repaired without navigating away from the dashboard.
   A duplicate Hub-process regression was reproduced during NV511 QA: two schedulers shared the same local store and
