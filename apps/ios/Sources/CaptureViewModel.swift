@@ -125,11 +125,18 @@ final class CaptureViewModel: ObservableObject {
     func refreshModels() async {
         let box = contextBox
         let manager = modelManager
-        // Shared with the Hub; a developer-override model in <cache>/Local/<task>.mlmodel loads even offline.
-        let count: Int = await Task.detached(priority: .utility) {
-            await manager.install(tasks: ["vehicle-detection", "vehicle-type-classification", "plate-detection"], into: box)
+        // Install the core detectors first. Vehicle type is display-only and
+        // may not have a published artifact; its failure must not delay or
+        // clear the vehicle/plate models used by the capture path.
+        let detectorCount: Int = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
         }.value
-        modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
+        modelStatus = detectorCount == 0 ? "baseline vision" : "CoreML active (\(detectorCount) models)"
+        let typeCount: Int = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-type-classification"], into: box)
+        }.value
+        let total = detectorCount + typeCount
+        modelStatus = total == 0 ? "baseline vision" : "CoreML active (\(total) models)"
     }
 
     func attach(context: ModelContext, backend: any SyncBackend) {
