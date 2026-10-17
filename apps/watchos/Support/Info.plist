@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>WKApplication</key>
+	<true/>
 	<key>WKWatchOnly</key>
 	<true/>
 </dict>
