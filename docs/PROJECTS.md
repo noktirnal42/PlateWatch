@@ -141,7 +141,9 @@ tests must stay green before its status advances.
   deployment gate. See [connection QA](BACKEND-QA-2026-10-15.md).
 - CloudKit record-name identity is now deterministic across launches (SHA-256
   UUID derivation); receipt and delta reconciliation no longer depends on Swift's
-  randomized `Hasher` seed.
+  randomized `Hasher` seed. Review now exposes bounded delivery history and a
+  **Recover CloudKit history** action for creator-readable submissions delivered
+  by older Hub builds; it never restores private plate/frame/location payloads.
 - **Next:** CloudKit moderator publication and two-account
   isolation tests. CloudKit/REST two-way mirroring and hosted deployment remain planned.
 
