@@ -164,7 +164,7 @@ release polish. No external image-generator account authorization is needed.
 - **CarPlay:** `CarPlaySceneDelegate` + the `UIApplicationSceneManifest` entry exist but Apple's CarPlay
   entitlement must be requested/granted first; until then gate the scene behind a build setting and verify the
   SwiftUI window scene still works on all OS versions.
-- **CI:** `.github/workflows/ci.yml` should build the iOS app, FoundationModelsParser (has **0 tests**) and
+- **CI:** `.github/workflows/ci.yml` should build the iOS app, FoundationModelsParser (3 package tests; runtime availability remains device-gated) and
   run the eval harness build; verify the matrix matches current targets (QA P2-12). Pages deploys from `main` via
   `.github/workflows/pages.yml`.
 
