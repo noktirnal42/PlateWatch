@@ -87,6 +87,18 @@ single host. "Librarians, not gatekeepers."
 
 ### Reference server operations (`server/`)
 
+The repository includes a reproducible multi-stage image for the REST mirror:
+
+```bash
+docker build -t platewatch-server ./server
+docker run --rm --env DATABASE_URL='postgres://…?sslmode=require' \
+  -p 8083:8083 platewatch-server
+```
+
+The image binds `0.0.0.0:8083` and starts with Vapor's `serve` command. Put it
+behind a TLS reverse proxy and provide a managed Postgres URL before exposing
+it publicly; building the image does not deploy it or enable CloudKit mirroring.
+
 | Setting | Default | Purpose |
 |---|---|---|
 | `PORT` | `8083` | HTTP port (8080 is often taken by a local Apache) |
