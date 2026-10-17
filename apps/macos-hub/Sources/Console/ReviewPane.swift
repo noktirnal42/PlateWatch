@@ -12,6 +12,7 @@ protocol ReviewHubProviding {
     var lastReceiptSummary: String { get }
     func syncPending() async
     func recoverDeliveredReceipts() async
+    func sendCloudKitHistoryToModeration() async
 }
 
 struct ReviewPane: View {
@@ -28,6 +29,7 @@ struct ReviewPane: View {
     @State private var discardError = ""
     @State private var showDeliveryHistory = true
     @State private var recoveringReceipts = false
+    @State private var sendingCloudKit = false
 
     private struct Row: Identifiable {
         let id: PersistentIdentifier
@@ -102,6 +104,15 @@ struct ReviewPane: View {
                 }
                 .disabled(recoveringReceipts)
                 .help("Reconcile creator-readable CloudKit submissions into local delivery history")
+                Button(sendingCloudKit ? "Sending…" : "Send CloudKit to Moderation", systemImage: "arrow.right.circle") {
+                    sendingCloudKit = true
+                    Task {
+                        await hub?.sendCloudKitHistoryToModeration()
+                        sendingCloudKit = false
+                    }
+                }
+                .disabled(sendingCloudKit)
+                .help("Copy creator-owned CloudKit submissions through the redaction gate into the reference moderation queue")
             }
             Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
                 .font(.caption).foregroundStyle(.secondary)

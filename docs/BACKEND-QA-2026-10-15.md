@@ -96,3 +96,10 @@ adds **Review → Recover CloudKit history**, which queries only the current use
 creator-readable submission metadata and rebuilds bounded local receipt rows. It
 does not restore plate text, raw frames, exact coordinates, or submission payloads.
 Use it after installing an entitled build while signed into the same iCloud account.
+
+The same Review pane also offers **Send CloudKit to Moderation**. This is an
+explicit, operator-triggered handoff for the local reference server: it reads
+creator-owned submission fields, reconstructs the moderation DTO without crops or
+exact coordinates, and sends each row through `RESTBackend` so its privacy gate
+and idempotency rules run again. It does not delete or mutate CloudKit records and
+is not automatic two-way mirroring.

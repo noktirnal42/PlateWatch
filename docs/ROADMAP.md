@@ -19,7 +19,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Evaluation corpus + harness (`eval/`), verified on a physical iPhone
 - ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
-- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub client capability/diagnostics and operator-triggered reviewed delivery are wired, while two-account isolation and moderator publish tooling remain (P0-5)
+- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub capability/diagnostics, receipt recovery, and explicit CloudKit→REST moderation handoff are wired. Two-account isolation and server-side moderator publication remain (P0-5)
 - ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
 - ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors, painted icon, privacy-safe backend receipt history, bounded received review crops, local event-clip export, mobile published-fleet sightings, backend connection diagnostics, and all-vehicle class overlays landed (2026-10-16); full field/accessibility audit remains

@@ -17,6 +17,21 @@ import PlateKit
 /// Requires the CloudKit capability + container.
 public struct CloudKitBackend: SyncBackend {
 
+    /// A creator-owned submission reconstructed for an explicit operator
+    /// handoff to the reference moderation queue. This type is intentionally
+    /// not exposed through the normal sync protocol.
+    public struct OwnedSubmission: Sendable {
+        public let dto: SightingSubmissionDTO
+        public let idempotencyKey: String
+        public let receivedAt: Date
+
+        public init(dto: SightingSubmissionDTO, idempotencyKey: String, receivedAt: Date) {
+            self.dto = dto
+            self.idempotencyKey = idempotencyKey
+            self.receivedAt = receivedAt
+        }
+    }
+
     public let container: CKContainer
 
     public init(containerIdentifier: String = "iCloud.org.platewatch.platewatch") {
@@ -134,6 +149,44 @@ public struct CloudKitBackend: SyncBackend {
                 serverReceivedAt: record.modificationDate ?? record.creationDate ?? Date(),
                 idempotencyKey: key,
                 operatorConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+        }
+    }
+
+    /// Reconstructs only the wire fields needed to hand creator-owned rows to
+    /// the reference server. No crop or exact location exists in CloudKit.
+    /// RESTBackend reapplies its redaction gate before persistence.
+    public func recoverOwnedSubmissions() async throws -> [OwnedSubmission] {
+        let query = CKQuery(recordType: RecordType.submission, predicate: NSPredicate(value: true))
+        let desiredKeys = ["capturedAt", "geohash6", "deviceIDHash", "fleetConfidence",
+                           "plateText", "plateRegion", "unitNumber", "vehicleClass",
+                           "agencyName", "moderationState", "userConfirmed"]
+        let (results, _) = try await publicDB.records(matching: query, inZoneWith: nil,
+                                                      desiredKeys: desiredKeys, resultsLimit: 200)
+        return results.compactMap { _, result in
+            guard case .success(let record) = result,
+                  let capturedAt = record["capturedAt"] as? Date else { return nil }
+            let name = record.recordID.recordName
+            let key = name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+            let confidence = (record["fleetConfidence"] as? NSNumber)?.doubleValue ?? 0
+            let vehicleClass = record["vehicleClass"] as? String ?? "vehicle"
+            let dto = SightingSubmissionDTO(
+                capturedAt: capturedAt,
+                geohash6: record["geohash6"] as? String ?? "",
+                deviceIDHash: record["deviceIDHash"] as? String ?? "cloudkit-owner",
+                fleetConfidence: confidence,
+                plate: (record["plateText"] as? String).map {
+                    PlateDTO(text: $0, issuingRegion: record["plateRegion"] as? String,
+                             confidence: confidence)
+                },
+                vehicle: VehicleObservationDTO(vehicleClass: vehicleClass,
+                                               classConfidence: confidence),
+                markings: ((record["agencyName"] as? String) != nil || (record["unitNumber"] as? String) != nil)
+                    ? FleetMarkingsDTO(agencyText: record["agencyName"] as? String,
+                                       unitNumber: record["unitNumber"] as? String)
+                    : nil,
+                userConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+            return OwnedSubmission(dto: dto, idempotencyKey: key,
+                                   receivedAt: record.modificationDate ?? record.creationDate ?? Date())
         }
     }
 

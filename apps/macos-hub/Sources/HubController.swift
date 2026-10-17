@@ -593,6 +593,36 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
     }
 
+    /// Explicitly bridges creator-owned CloudKit submissions into the local
+    /// reference moderation queue. RESTBackend applies its network redaction
+    /// rules again; this is never an automatic mirror.
+    func sendCloudKitHistoryToModeration() async {
+        guard SyncBackends.cloudKitAvailable() else {
+            lastReceiptSummary = "CloudKit handoff unavailable in this build"
+            return
+        }
+        syncStatus = "Sending CloudKit submissions to Moderation…"
+        do {
+            let submissions = try await CloudKitBackend().recoverOwnedSubmissions()
+            let backend = SyncBackends.makeDefault(destination: .referenceServer)
+            var sent = 0
+            var failed = 0
+            for submission in submissions {
+                do {
+                    _ = try await backend.submit(submission.dto, idempotencyKey: submission.idempotencyKey)
+                    sent += 1
+                } catch {
+                    failed += 1
+                }
+            }
+            syncStatus = "CloudKit handoff complete"
+            lastReceiptSummary = "Sent (sent) CloudKit submission(s) to the reference moderation queue · (failed) failed"
+        } catch {
+            syncStatus = "CloudKit handoff failed"
+            lastReceiptSummary = "Could not hand off CloudKit submissions: \(error.localizedDescription)"
+        }
+    }
+
     func chooseIngestFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
