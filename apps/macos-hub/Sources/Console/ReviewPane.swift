@@ -92,38 +92,41 @@ struct ReviewPane: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(selection.isEmpty)
-                Button("Sync pending", systemImage: "arrow.up.circle") {
-                    Task { await hub?.syncPending() }
-                }
-                .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
-                .help("Deliver confirmed, redaction-gated submissions to the configured backend; moderation remains separate")
-                Button(recoveringReceipts ? "Recovering…" : "Recover CloudKit history", systemImage: "arrow.down.circle") {
-                    recoveringReceipts = true
-                    Task {
-                        await hub?.recoverDeliveredReceipts()
-                        recoveringReceipts = false
+                Menu("Backend actions", systemImage: "icloud") {
+                    Button("Sync pending", systemImage: "arrow.up.circle") {
+                        Task { await hub?.syncPending() }
                     }
-                }
-                .disabled(recoveringReceipts)
-                .help("Reconcile creator-readable CloudKit submissions into local delivery history")
-                Button(sendingCloudKit ? "Sending…" : "Send CloudKit to Moderation", systemImage: "arrow.right.circle") {
-                    sendingCloudKit = true
-                    Task {
-                        await hub?.sendCloudKitHistoryToModeration()
-                        sendingCloudKit = false
+                    .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
+                    .help("Deliver confirmed, redaction-gated submissions to the configured backend; moderation remains separate")
+                    Button(recoveringReceipts ? "Recovering…" : "Recover CloudKit history", systemImage: "arrow.down.circle") {
+                        recoveringReceipts = true
+                        Task {
+                            await hub?.recoverDeliveredReceipts()
+                            recoveringReceipts = false
+                        }
                     }
-                }
-                .disabled(sendingCloudKit)
-                .help("Copy creator-owned CloudKit submissions through the redaction gate into the reference moderation queue")
-                Button(publishingCloudKit ? "Publishing…" : "Publish confirmed CloudKit", systemImage: "checkmark.seal") {
-                    publishingCloudKit = true
-                    Task {
-                        await hub?.publishCloudKitHistory()
-                        publishingCloudKit = false
+                    .disabled(recoveringReceipts)
+                    .help("Reconcile creator-readable CloudKit submissions into local delivery history")
+                    Button(sendingCloudKit ? "Sending…" : "Send CloudKit to Moderation", systemImage: "arrow.right.circle") {
+                        sendingCloudKit = true
+                        Task {
+                            await hub?.sendCloudKitHistoryToModeration()
+                            sendingCloudKit = false
+                        }
                     }
+                    .disabled(sendingCloudKit)
+                    .help("Copy creator-owned CloudKit submissions through the redaction gate into the reference moderation queue")
+                    Button(publishingCloudKit ? "Publishing…" : "Publish confirmed CloudKit", systemImage: "checkmark.seal") {
+                        publishingCloudKit = true
+                        Task {
+                            await hub?.publishCloudKitHistory()
+                            publishingCloudKit = false
+                        }
+                    }
+                    .disabled(publishingCloudKit || !SyncBackends.cloudKitAvailable())
+                    .help("Moderator-only: publish confirmed fleet submissions as public Sighting records. This never uploads evidence images.")
                 }
-                .disabled(publishingCloudKit || !SyncBackends.cloudKitAvailable())
-                .help("Moderator-only: publish confirmed fleet submissions as public Sighting records. This never uploads evidence images.")
+                .help("Backend delivery, CloudKit recovery, moderation handoff and moderator publication")
             }
             Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
                 .font(.caption).foregroundStyle(.secondary)
