@@ -632,8 +632,6 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
                                        mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
-        let displaysInLive = liveFeed?.id == source.id
-            || (liveFeed.flatMap { pairedSnapshot(for: $0)?.id } == source.id)
         if displaysInLive,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
             liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())

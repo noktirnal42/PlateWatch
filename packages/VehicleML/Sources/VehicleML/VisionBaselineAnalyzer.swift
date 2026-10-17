@@ -264,9 +264,12 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        var fastHits = try await VisionTextRunner.recognize(
+        // OCR is an enrichment pass. Vision can reject an otherwise valid camera
+        // image (for example CRImageReaderError on an unusual JPEG); that must not
+        // discard the frame or suppress generic vehicle geometry from later stages.
+        var fastHits = (try? await VisionTextRunner.recognize(
             in: pixelBuffer, level: context.thorough ? .accurate : .fast, languageCorrection: false,
-            minimumTextHeight: context.thorough ? Self.thoroughMinimumTextHeight : 0)
+            minimumTextHeight: context.thorough ? Self.thoroughMinimumTextHeight : 0)) ?? []
 
         if context.thorough {
             let tiled = await VisionTextRunner.recognizeTiled(
