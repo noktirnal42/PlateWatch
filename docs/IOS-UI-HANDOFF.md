@@ -40,6 +40,9 @@ use this note for the iOS review surfaces and `EVALUATION.md` for recognition ev
   to the companion watch. The watch consumes only that local list for silent-push
   matching; no frames, locations, credentials or evidence crops cross the link.
   Physical phone/watch pairing and push delivery remain a device QA gate.
+- The public Sightings refresh reconciles returned stable IDs into the local
+  receipt ledger, so a receipt can visibly advance to Fleet confirmed without
+  uploading evidence. A missing row is never inferred to be withdrawn.
 
 ## Reproduce and test
 
