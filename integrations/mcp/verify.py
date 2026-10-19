@@ -14,7 +14,7 @@ async def main():
         async with ClientSession(read, write) as client:
             initialized = await client.initialize()
             tools = await client.list_tools()
-            assert len(tools.tools) == 14
+            assert len(tools.tools) == 18
             resources = await client.list_resources()
             assert any(str(r.uri) == 'platewatch://capabilities' for r in resources.resources)
             async def call(name, arguments=None):
