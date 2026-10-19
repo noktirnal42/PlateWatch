@@ -274,3 +274,77 @@ final class PresenceDTOTests: XCTestCase {
         XCTAssertEqual(decoded, value)
     }
 }
+
+final class WithdrawalAndAlertHistoryTests: XCTestCase {
+    private func dto() -> SightingSubmissionDTO {
+        SightingSubmissionDTO(capturedAt: Date(timeIntervalSince1970: 1_700_000_000), geohash6: "9v6kn7",
+                              deviceIDHash: "dev", fleetConfidence: 0.9,
+                              vehicle: VehicleObservationDTO(vehicleClass: "patrol", classConfidence: 0.8))
+    }
+
+    func testCloudKitHandleIsTheCreatorRecordNameAndRESTNeedsNone() {
+        // A CloudKitBackend cannot be constructed in a unit-test process (CKContainer needs entitlements), so pin the
+        // record-name derivation its handle uses.
+        let handle = CloudKitBackend.submissionRecordName(deviceIDHash: "dev", idempotencyKey: "abc")
+        XCTAssertTrue(handle.hasPrefix("submission-") && handle.hasSuffix("-abc"))
+        let rest = RESTBackend(baseURL: URL(string: "http://127.0.0.1:8083")!)
+        XCTAssertNil(rest.withdrawalHandle(for: dto(), idempotencyKey: "abc"))
+    }
+
+    func testOutcomeMessagesDoNotOverClaim() {
+        XCTAssertTrue(WithdrawalOutcome(kind: .recordDeleted, publicRecordMayRemain: true).message.contains("moderator must still remove"))
+        XCTAssertFalse(WithdrawalOutcome(kind: .recordDeleted, publicRecordMayRemain: false).message.contains("moderator"))
+        XCTAssertTrue(WithdrawalOutcome(kind: .takedownRequested, publicRecordMayRemain: false).message.contains("moderator will review"))
+    }
+
+    func testBackendWithoutWithdrawalSupportThrowsUnsupported() async {
+        struct Minimal: SyncBackend {
+            func submit(_ sighting: SightingSubmissionDTO, idempotencyKey: String) async throws -> SubmissionReceipt { throw SyncError.unsupported }
+            func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta { throw SyncError.unsupported }
+            func vehicles(matchingPlate plateText: String) async throws -> [PublicVehicleDTO] { [] }
+            func agencies() async throws -> [PlateSync.PublicAgencyDTO] { [] }
+            func agencyReport(id: UUID) async throws -> AgencyReportDTO { throw SyncError.unsupported }
+            func ensureWatchlistSubscription() async throws {}
+            func heatmap(geohashPrefix: String?, from: Date, to: Date) async throws -> HeatmapAggregateDTO { throw SyncError.unsupported }
+        }
+        do { _ = try await Minimal().withdraw(handle: nil, sightingID: UUID(), moderationState: .pending); XCTFail() }
+        catch SyncError.unsupported { /* expected */ }
+        catch { XCTFail("\(error)") }
+    }
+
+    @MainActor func testReceiptWithdrawalState() throws {
+        let container = try ModelContainer(for: ReceivedSubmissionReceipt.self,
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let r = ReceivedSubmissionReceipt(sightingID: UUID(), receivedAt: Date(), moderationState: .fleetConfirmed,
+                                          idempotencyKey: "k", withdrawalHandle: "submission-x-k")
+        container.mainContext.insert(r)
+        XCTAssertFalse(r.isWithdrawn); XCTAssertNil(r.withdrawalOutcome)
+        r.markWithdrawn(.init(kind: .recordDeleted, publicRecordMayRemain: true), at: Date(timeIntervalSince1970: 5))
+        XCTAssertTrue(r.isWithdrawn)
+        XCTAssertEqual(r.withdrawalOutcome, .init(kind: .recordDeleted, publicRecordMayRemain: true))
+    }
+
+    func testAlertHistoryOrdersByAlertTimeNotInsertionOrder() {
+        var h = AlertHistory()
+        h.record(.init(alertedAt: Date(timeIntervalSince1970: 200), plate: "NEWER", sightingID: UUID()))
+        h.record(.init(alertedAt: Date(timeIntervalSince1970: 100), plate: "OLDER", sightingID: UUID()))
+        XCTAssertEqual(h.records.map(\.plate), ["NEWER", "OLDER"])
+    }
+
+    func testAlertHistoryIsBoundedDedupedAndPersisted() throws {
+        var h = AlertHistory()
+        let sid = UUID()
+        XCTAssertTrue(h.record(.init(plate: "ABC123", sightingID: sid)))
+        XCTAssertFalse(h.record(.init(plate: "ABC123", sightingID: sid)), "same sighting is not alerted twice")
+        for i in 0..<(AlertHistory.capacity + 20) { h.record(.init(plate: "P\(i)", sightingID: UUID())) }
+        XCTAssertEqual(h.records.count, AlertHistory.capacity)
+        XCTAssertEqual(h.records.first?.plate, "P\(AlertHistory.capacity + 19)", "newest first")
+        let suite = UserDefaults(suiteName: "alert-history-test-\(UUID().uuidString)")!
+        AlertHistoryStore.save(h, suite)
+        XCTAssertEqual(AlertHistoryStore.load(suite).records.map(\.id), h.records.map(\.id), "ISO-8601 storage drops sub-second precision, so compare identity")
+        XCTAssertTrue(AlertHistoryStore.append(.init(plate: "NEW", sightingID: UUID()), suite))
+        XCTAssertEqual(AlertHistoryStore.load(suite).records.first?.plate, "NEW")
+        var cleared = AlertHistoryStore.load(suite); cleared.clear()
+        XCTAssertTrue(cleared.records.isEmpty)
+    }
+}

@@ -82,7 +82,7 @@ struct SightingsListView: View {
                 } header: {
                     Text("Received · \(receipts.count)")
                 } footer: {
-                    Text("Receipts confirm backend acceptance. This state refreshes to Fleet confirmed when the public feed returns the same ID; a missing row is not treated as withdrawal. Only a bounded local review crop may remain in this history.")
+                    Text("Receipts confirm backend acceptance. This state refreshes to Fleet confirmed when the public feed returns the same ID; a missing row is not treated as withdrawal. Open a receipt to withdraw a submission. Only a bounded local review crop may remain in this history.")
                 }
             }
             .safeAreaInset(edge: .top) { PreviewBanner() }
@@ -171,6 +171,11 @@ private struct ReceiptRow: View {
                     .foregroundStyle(PWStyle.fleetText)
                     .accessibilityLabel("Operator confirmed")
             }
+            if receipt.isWithdrawn {
+                Image(systemName: "arrow.uturn.backward.circle")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Withdrawn")
+            }
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
@@ -179,6 +184,35 @@ private struct ReceiptRow: View {
 
 private struct ReceiptDetailView: View {
     let receipt: ReceivedSubmissionReceipt
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.syncBackend) private var backend
+    @State private var confirmingWithdraw = false
+    @State private var withdrawing = false
+    @State private var withdrawError: String?
+
+    private var canWithdraw: Bool {
+        !receipt.isWithdrawn && !PreviewFixtures.isEnabled
+    }
+
+    private func withdraw() async {
+        withdrawing = true
+        defer { withdrawing = false }
+        do {
+            let outcome = try await backend.withdraw(handle: receipt.withdrawalHandle, sightingID: receipt.sightingID,
+                                                     moderationState: receipt.moderationState)
+            receipt.markWithdrawn(outcome)
+            try? modelContext.save()
+            withdrawError = nil
+        } catch SyncError.unsupported {
+            withdrawError = "This submission was delivered before withdrawal was supported, so this device cannot withdraw it. Contact the moderators if it must be removed."
+        } catch SyncError.offline {
+            withdrawError = "You appear to be offline. Try again when you are connected."
+        } catch SyncError.notAuthenticated {
+            withdrawError = "Sign in to iCloud (or check the server) and try again."
+        } catch {
+            withdrawError = "Could not withdraw: \(error.localizedDescription)"
+        }
+    }
 
     var body: some View {
         List {
@@ -211,9 +245,32 @@ private struct ReceiptDetailView: View {
                 }
             }
             Section {
+                if let outcome = receipt.withdrawalOutcome, let at = receipt.withdrawnAt {
+                    Label(outcome.message, systemImage: "arrow.uturn.backward.circle.fill")
+                        .font(.subheadline)
+                    LabeledContent("Withdrawn") { Text(at, format: .dateTime.month().day().hour().minute()) }
+                } else {
+                    Button(role: .destructive) { confirmingWithdraw = true } label: {
+                        if withdrawing { ProgressView() }
+                        else { Label("Withdraw this submission", systemImage: "arrow.uturn.backward.circle") }
+                    }
+                    .disabled(!canWithdraw || withdrawing)
+                    .accessibilityIdentifier("withdraw-submission")
+                }
+                if let withdrawError { Label(withdrawError, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.orange) }
+            } header: { Text("Withdrawal") } footer: {
+                Text("Withdrawing asks the backend to remove what this device sent. It cannot delete a record a moderator already published; you will be told if one may remain.")
+            }
+            Section {
                 Label("Publication still requires moderation and policy checks.", systemImage: "info.circle")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+        }
+        .confirmationDialog("Withdraw this submission?", isPresented: $confirmingWithdraw, titleVisibility: .visible) {
+            Button("Withdraw", role: .destructive) { Task { await withdraw() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The backend will be asked to remove it. This cannot be undone.")
         }
         .safeAreaInset(edge: .top) { PreviewBanner() }
         .navigationTitle("Receipt")
@@ -381,6 +438,12 @@ struct WatchlistView: View {
                 } header: { Text("Add a fleet plate") } footer: {
                     Text("Entries stay on this device and are never published. Private-citizen vehicles are outside PlateWatch’s scope. Notification permission is requested when you add a plate.")
                 }
+                Section {
+                    NavigationLink { AlertHistoryView() } label: {
+                        Label("Alert history", systemImage: "bell.badge")
+                    }
+                    .accessibilityIdentifier("alert-history-link")
+                } footer: { Text("Alerts stay on this device, newest first (up to \(AlertHistory.capacity)).") }
                 Section("Watching · \(items.count)") {
                     if items.isEmpty {
                         Label("No fleet plates on watch yet", systemImage: "eye.slash").foregroundStyle(.secondary)
@@ -448,5 +511,53 @@ struct WatchlistView: View {
             }
             return true
         } catch { modelContext.rollback(); errorText = error.localizedDescription; return false }
+    }
+}
+
+/// Past watchlist alerts, kept after the notification is dismissed. Local only; holds the plate you watched, the unit and the
+/// ~1 km cell — no image, exact location or person.
+struct AlertHistoryView: View {
+    @State private var history = AlertHistoryStore.load()
+    @State private var confirmingClear = false
+
+    var body: some View {
+        List {
+            if history.records.isEmpty {
+                PWEmptyState(title: "No alerts yet",
+                             message: "When a watchlisted public fleet plate is published, the alert is kept here.",
+                             systemImage: "bell")
+                    .listRowBackground(Color.clear).listRowSeparator(.hidden)
+            } else {
+                Section("Newest first") {
+                    ForEach(history.records) { record in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack { PlateBadge(text: record.plate); Spacer()
+                                Text(record.alertedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                                    .font(.caption).foregroundStyle(.secondary) }
+                            HStack(spacing: 12) {
+                                if let unit = record.unitNumber { Label("Unit \(unit)", systemImage: "number") }
+                                if let cell = record.geohash6 { Label(cell, systemImage: "mappin.and.ellipse").monospaced() }
+                            }.font(.caption).foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                    .onDelete { offsets in
+                        for index in offsets.sorted(by: >) { history.remove(history.records[index].id) }
+                        AlertHistoryStore.save(history)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Alert history")
+        .toolbar {
+            if !history.records.isEmpty {
+                Button("Clear", role: .destructive) { confirmingClear = true }
+            }
+        }
+        .confirmationDialog("Clear alert history?", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("Clear all", role: .destructive) { history.clear(); AlertHistoryStore.save(history) }
+            Button("Cancel", role: .cancel) {}
+        }
+        .onAppear { history = AlertHistoryStore.load() }
     }
 }

@@ -80,6 +80,7 @@ tests must stay green before its status advances.
   unavailable by `devicectl`, so this is simulator evidence rather than a new physical-device claim.
   The run emitted one non-fatal SwiftUI/XCTest `Invalid frame dimension (negative or non-finite)` warning
   during the large-text keyboard path; no product assertion failed and the warning remains an explicit QA follow-up.
+- **2026-10-18:** receipt withdrawal (`SyncBackend.withdraw`, CloudKit delete / REST takedown request) and a local watchlist alert history landed (PlateSync 39 tests; simulator-verified, not run against live backends).
 - **Next:** handheld iPhone test (portrait+landscape, dusk, motion/thermal), spoken
   VoiceOver audit, received-history/remote withdrawal, physical watch alerts;
   CarPlay entitlement gate.

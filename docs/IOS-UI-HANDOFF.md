@@ -92,7 +92,11 @@ A screenshot audit does not replace a full spoken VoiceOver pass.
    build the moderator publication tool and prove the receipt→public-feed loop (WS5).
 2. Handheld live-camera tests in portrait/landscape, daylight/dusk/motion, ten-minute
    thermal run and actual VoiceOver use (WS1). iPhone Mirroring cannot do this.
-3. Remote withdrawal/removal flow and alert history are **not implemented**.
+3. Withdrawal and alert history (2026-10-18): the receipt screen has "Withdraw this submission" (CloudKit deletes the creator-owned
+   submission record; the reference server records a takedown request for moderators) and the Watchlist has a local, bounded
+   "Alert history". Verified only in the simulator preview and by PlateSync unit tests — **no live CloudKit/REST withdrawal has been
+   run**, receipts delivered before 2026-10-18 carry no withdrawal handle and cannot be withdrawn from the device, and a record a
+   moderator already published can only be removed by a moderator (the app says so). Previously: not implemented.
    Received-submission receipts and bounded local crop history are now retained;
    they do not constitute a public archive or retract a backend record.
 4. Runtime-configurable mirror settings are still missing. Simulator development

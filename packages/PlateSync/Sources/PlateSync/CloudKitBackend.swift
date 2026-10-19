@@ -172,6 +172,26 @@ public struct CloudKitBackend: SyncBackend {
 
     // MARK: - SyncBackend
 
+    public func withdrawalHandle(for sighting: SightingSubmissionDTO, idempotencyKey: String) -> String? {
+        Self.submissionRecordName(deviceIDHash: sighting.deviceIDHash, idempotencyKey: idempotencyKey)
+    }
+
+    /// Deletes the creator-owned `SightingSubmission` (the schema grants the creator WRITE). A published `Sighting` record
+    /// is owned by the moderator's account and cannot be removed from here, so the outcome flags that it may remain.
+    public func withdraw(handle: String?, sightingID: UUID, moderationState: Sighting.ModerationState) async throws -> WithdrawalOutcome {
+        guard let handle, !handle.isEmpty else { throw SyncError.unsupported }
+        do {
+            _ = try await publicDB.deleteRecord(withID: CKRecord.ID(recordName: handle))
+        } catch let error as CKError where error.code == .unknownItem {
+            // Already gone: the goal state.
+        } catch let error as CKError where error.code == .notAuthenticated {
+            throw SyncError.notAuthenticated
+        } catch let error as CKError where [.networkUnavailable, .networkFailure].contains(error.code) {
+            throw SyncError.offline
+        }
+        return WithdrawalOutcome(kind: .recordDeleted, publicRecordMayRemain: moderationState == .fleetConfirmed)
+    }
+
     public func submit(_ sighting: SightingSubmissionDTO,
                        idempotencyKey: String) async throws -> SubmissionReceipt {
         // Default zone: the public database supports no custom zones.

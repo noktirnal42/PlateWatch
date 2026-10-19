@@ -152,8 +152,8 @@ multitasking are enabled; live-camera layout still needs handheld verification.
 Screenshots on the project site use labeled, synthetic, DEBUG-only preview data;
 they are not recognition or backend-delivery proof.
 
-**Open:** durable received-history, image/clip preview, backend withdrawal/removal,
-alert history, runtime mirror settings, field haptics/thermal/orientation, spoken
+**Open:** durable received-history, image/clip preview, backend withdrawal/removal (built 2026-10-18, not yet run live),
+alert history (built 2026-10-18), runtime mirror settings, field haptics/thermal/orientation, spoken
 VoiceOver and smallest-device/RTL audits. Local clear does not delete remote records.
 The icon is generated and installed; layered/tinted platform variants remain optional
 release polish. No external image-generator account authorization is needed.
