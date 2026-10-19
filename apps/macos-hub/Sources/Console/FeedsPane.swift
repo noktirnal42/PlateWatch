@@ -33,6 +33,24 @@ struct FeedsPane: View {
     private var importing: Bool { hub.importStatus.hasPrefix("Importing") }
 
     @State private var hosts: [FeedHostSummary] = []
+    /// Nearest-Census-place label per camera, computed off the main thread after each reload.
+    @State private var places: [UUID: FeedPlace] = [:]
+    private nonisolated static let placeIndex = FeedPlaceIndex()
+    /// The state a camera is shown under: where it physically is (nearest place) when known, else the catalogue's recorded state.
+    private func displayState(_ s: PublicFeedSource) -> String { places[s.id]?.state ?? s.state ?? "" }
+    private func locationLabel(_ s: PublicFeedSource) -> String {
+        if let p = places[s.id] { return p.label }
+        return s.state ?? "Unknown"
+    }
+    private func providerLabel(_ s: PublicFeedSource) -> String {
+        let host = (s.url.host ?? "").replacingOccurrences(of: ":443", with: "")
+        let who = s.terms.attribution.trimmingCharacters(in: .whitespacesAndNewlines)
+        return who.isEmpty ? host : "\(who) · \(host)"
+    }
+    private var stateOptions: [(code: String, count: Int)] {
+        Dictionary(grouping: catalogue?.sources ?? [], by: displayState).filter { !$0.key.isEmpty }
+            .map { ($0.key, $0.value.count) }.sorted { $0.0 < $1.0 }
+    }
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
     private var totalCount: Int { catalogue?.sources.count ?? 0 }
 
@@ -44,18 +62,31 @@ struct FeedsPane: View {
         if tab == .favorites { list = list.filter { favorites.contains($0.id) } }
         if !hostFilter.isEmpty { list = list.filter { $0.url.host == hostFilter } }
         if let statusFilter { list = list.filter { hub.feedRunner.state(of: $0).kind == statusFilter } }
+        if !browser.stateFilter.isEmpty { list = list.filter { displayState($0) == browser.stateFilter } }
+        switch browser.termsFilter {
+        case .any: break
+        case .analysable: list = list.filter(\.mayBeAnalysed)
+        case .awaiting: list = list.filter { !$0.mayBeAnalysed }
+        }
+        switch browser.kindFilter {
+        case .any: break
+        case .snapshot: list = list.filter { $0.kind == .snapshotJPEG }
+        case .stream: list = list.filter { $0.kind != .snapshotJPEG }
+        }
         let words = query.lowercased().split(separator: " ").map(String.init)
         if !words.isEmpty {
             list = list.filter { s in
-                let hay = "\(s.name) \(s.url.host ?? "") \(s.geohash6) \(s.state ?? "") \(s.terms.attribution)".lowercased()
+                let hay = "\(s.name) \(s.url.host ?? "") \(s.geohash6) \(locationLabel(s)) \(s.state ?? "") \(s.terms.attribution)".lowercased()
                 return words.allSatisfy(hay.contains)
             }
         }
         func key(_ s: PublicFeedSource) -> String {
             switch sortKey {
-            case .state: return (s.state ?? "zz") + " " + s.name.lowercased()
+            case .state: return (displayState(s).isEmpty ? "zz" : displayState(s)) + " " + (places[s.id]?.city.lowercased() ?? "zz") + " " + s.name.lowercased()
+            case .city: return (places[s.id]?.city.lowercased() ?? "zz") + " " + displayState(s) + " " + s.name.lowercased()
             case .name: return s.name.lowercased()
             case .host: return (s.url.host ?? "") + " " + s.name.lowercased()
+            case .provider: return s.terms.attribution.lowercased() + " " + displayState(s) + " " + s.name.lowercased()
             case .location: return s.geohash6 + " " + s.name.lowercased()
             case .status: return runner.state(of: s).kind.rawValue + " " + s.name.lowercased()
             }
@@ -81,6 +112,9 @@ struct FeedsPane: View {
             .onChange(of: hostFilter) { _, _ in refreshRows() }
             .onChange(of: statusFilter) { _, _ in refreshRows() }
             .onChange(of: sortKey) { _, _ in refreshRows() }
+            .onChange(of: browser.stateFilter) { _, _ in refreshRows() }
+            .onChange(of: browser.termsFilter) { _, _ in refreshRows() }
+            .onChange(of: browser.kindFilter) { _, _ in refreshRows() }
             .onChange(of: ascending) { _, _ in refreshRows() }
             .onChange(of: favoritesFirst) { _, _ in refreshRows() }
     }
@@ -227,7 +261,8 @@ struct FeedsPane: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) { searchControl; sourceControl; statusControl }
+            HStack(spacing: 10) { searchControl; stateControl; sourceControl }
+            HStack(spacing: 10) { termsControl; kindControl; statusControl }
             HStack(spacing: 10) {
                 sortControl
                 Spacer()
@@ -257,6 +292,25 @@ struct FeedsPane: View {
             Text("All sources").tag("")
             ForEach(hosts, id: \.host) { Text("\($0.host) (\($0.totalCount))").tag($0.host) }
         }.frame(maxWidth: 260).help("Filter cameras by their image host")
+    }
+
+    private var stateControl: some View {
+        Picker("State", selection: Binding(get: { browser.stateFilter }, set: { browser.stateFilter = $0; browser.save() })) {
+            Text("All states").tag("")
+            ForEach(stateOptions, id: \.code) { Text("\($0.code) (\($0.count.formatted()))").tag($0.code) }
+        }.frame(maxWidth: 170).help("Filter by the state the camera is physically in (nearest Census place), not by its feed's host")
+    }
+
+    private var termsControl: some View {
+        Picker("Terms", selection: Binding(get: { browser.termsFilter }, set: { browser.termsFilter = $0; browser.save() })) {
+            ForEach(FeedBrowserState.TermsFilter.allCases) { Text($0.rawValue).tag($0) }
+        }.frame(maxWidth: 230).help("Show only cameras whose image-host terms a person has confirmed, or only those still waiting")
+    }
+
+    private var kindControl: some View {
+        Picker("Media", selection: Binding(get: { browser.kindFilter }, set: { browser.kindFilter = $0; browser.save() })) {
+            ForEach(FeedBrowserState.KindFilter.allCases) { Text($0.rawValue).tag($0) }
+        }.frame(maxWidth: 190)
     }
 
     private var statusControl: some View {
@@ -296,14 +350,15 @@ struct FeedsPane: View {
                         }
                     }
                 }.width(42)
-                TableColumn("Camera / source") { source in
+                TableColumn("Camera / location / source") { source in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(source.name).lineLimit(1)
-                        Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text(locationLabel(source)).font(.caption.weight(.medium)).lineLimit(1)
+                        Text(providerLabel(source)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
                     .padding(.vertical, 3)
-                    .help("\(source.name)\n\(source.url.host ?? "")\nArea: \(source.geohash6)")
-                }.width(min: 120, ideal: 180, max: 360)
+                    .help("\(source.name)\nNear \(locationLabel(source)) (nearest Census place to the camera's position, not a jurisdiction boundary)\nSource: \(providerLabel(source))\nArea code: \(source.geohash6)")
+                }.width(min: 160, ideal: 230, max: 420)
                 TableColumn("Status") { s in
                     let state = hub.feedRunner.state(of: s)
                     Label(state.text, systemImage: state.icon).foregroundStyle(state.color).lineLimit(1).help(state.text)
@@ -341,6 +396,15 @@ struct FeedsPane: View {
         // Grouping 8,000+ URLs on every frame/status notification starves the main thread.
         hosts = catalogue?.hosts() ?? []
         refreshRows()
+        let sources = catalogue?.sources ?? []
+        let missing = sources.filter { places[$0.id] == nil }
+        if !missing.isEmpty {
+            Task.detached(priority: .utility) {
+                var found: [UUID: FeedPlace] = [:]
+                for s in missing { if let p = Self.placeIndex.place(for: s) { found[s.id] = p } }
+                await MainActor.run { places.merge(found) { _, new in new }; refreshRows() }
+            }
+        }
     }
 }
 

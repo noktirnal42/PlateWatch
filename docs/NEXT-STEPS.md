@@ -302,3 +302,7 @@ moderator-only queue/takedown/audit tools, source-aware analysis and offline hel
 remain unverified; do not mark them complete based on code presence. New host terms and developer credentials are human gates.
 
 The [USA feed audit](research/USA-FEEDS-2026-10-14.md) covers the requested AZ/NV/NM/CO/UT/AL sources, plus Oregon and existing imports.
+
+## 12. Hub feeds — owner requests 2026-10-19
+- **Feed list labels and filters (built 2026-10-19):** each camera shows its nearest Census place ("Spokane, WA", `FeedPlaceIndex`, cited to the Census Gazetteer) plus provider attribution and host, because one provider host (e.g. tripcheck.com) serves cameras in several states. New State, Terms and Media filters and City/Source sort keys. The label is a nearest-place label, not a jurisdiction boundary.
+- **Camera map tab (future, owner idea):** a Hub sidebar tab with every catalogue camera on a map (MapKit, clustering), click a pin to open it in Live (`HubController.openFeedInLive`, same terms/block gates as the list: unconfirmed or blocked cameras show a pin but no Open in Live). Reuses the geohash centre already stored per camera; no new data and nothing leaves the Mac. Not started.
