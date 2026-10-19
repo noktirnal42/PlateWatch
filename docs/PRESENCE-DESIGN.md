@@ -64,3 +64,6 @@ records never mix with sighting records.
 lease is *linkable per iCloud account* though it names no one; rotating the install session id does not change that. Expired leases from
 installs that never return stay in the table until a moderator purges them (a purge command is not built). Verified: unit tests for record
 naming, mapping, expiry and aggregation. **Not verified:** any live CloudKit read/write, the iPhone and watch builds on devices.
+
+### Development schema status — 2026-10-19
+The CloudKit Console (container `iCloud.org.platewatch.platewatch`, **Development**) already had `PresenceLease` with all eleven fields (queryable/sortable indexes on each), and the security roles matched `schema.ckdb` (`_world` read only; `_icloud` and `_creator` listed). Metadata indexes (`recordName`, `createdTimestamp`) show "None" and were left unchanged because queries use `expiresAt`. **Verified live in Development:** the installed Hub (signed, CloudKit-entitled) published a lease and its dashboard showed "Live demand 1 sessions · 1 processors". **Not done:** deploying the schema to Production (owner step), and the iPhone/watch builds have not been run on devices, so the phone-to-Hub count and the watch relay are still unverified.
