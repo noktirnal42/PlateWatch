@@ -8,6 +8,7 @@ DEFINE SCHEMA
 -- (_creator) and moderators (dashboard / server-to-server key) can.
 RECORD TYPE SightingSubmission (
     "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
+    "___createdBy"   REFERENCE QUERYABLE,
     "___recordID"    REFERENCE QUERYABLE,
     capturedAt       TIMESTAMP QUERYABLE SORTABLE,
     geohash6         STRING,

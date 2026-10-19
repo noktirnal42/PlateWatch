@@ -256,7 +256,7 @@ public struct CloudKitBackend: SyncBackend {
         let query = CKQuery(recordType: RecordType.submission, predicate: NSPredicate(value: true))
         let desiredKeys = ["capturedAt", "geohash6", "deviceIDHash", "fleetConfidence",
                            "plateText", "plateRegion", "unitNumber", "vehicleClass",
-                           "agencyName", "moderationState", "userConfirmed"]
+                           "agencyKey", "agencyName", "agencyNeedsReview", "moderationState", "userConfirmed"]
         var submissions: [OwnedSubmission] = []
         var page = try await publicDB.records(matching: query, inZoneWith: nil,
                                                desiredKeys: desiredKeys, resultsLimit: 200)
@@ -294,9 +294,20 @@ public struct CloudKitBackend: SyncBackend {
                 ? FleetMarkingsDTO(agencyText: record["agencyName"] as? String,
                                    unitNumber: record["unitNumber"] as? String)
                 : nil,
-            userConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+            userConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue,
+            identity: ownedIdentity(from: record))
         return OwnedSubmission(dto: dto, idempotencyKey: key,
                                receivedAt: record.modificationDate ?? record.creationDate ?? Date())
+    }
+
+    /// The organisation identity the device uploaded (agency key/name and whether it needed review), so moderators see
+    /// the agency. Carries no plate and no person. A record without a review flag is treated as needing review.
+    static func ownedIdentity(from record: CKRecord) -> VehicleIdentity? {
+        guard let key = record["agencyKey"] as? String, !key.isEmpty else { return nil }
+        let needsReview = (record["agencyNeedsReview"] as? NSNumber)?.boolValue ?? true
+        let agency = AgencyIdentity(name: record["agencyName"] as? String ?? key, service: nil, vehicleClass: .unknown,
+                                    agencyKey: key, confidence: 0, isInferred: false, needsReview: needsReview)
+        return VehicleIdentity(agency: agency)
     }
 
     /// CKQueryOperation.Cursor only round-trips through keyed archiving;

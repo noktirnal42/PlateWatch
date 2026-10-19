@@ -50,6 +50,9 @@ struct ModerationClient: Sendable {
         let geohash6: String
         let unitNumber: String?
         let fleetConfidence: Double
+        /// Present when the server resolved an agency that was not flagged for review.
+        let agencyKey: String?
+        let agencyName: String?
     }
     enum Decision: String, Sendable { case approve, reject }
     enum ClientError: Error, LocalizedError {

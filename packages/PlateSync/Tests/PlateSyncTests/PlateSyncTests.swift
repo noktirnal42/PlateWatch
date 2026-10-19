@@ -180,6 +180,14 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertEqual(recovered?.dto.markings?.unitNumber, "42")
         XCTAssertEqual(recovered?.dto.plate?.text, "1ABC234")
         XCTAssertNil(recovered?.dto.cropJPEGBase64)
+        XCTAssertNil(recovered?.dto.identity, "no agencyKey on the record → no identity is invented")
+        record["agencyKey"] = "US-TX/example/police"
+        let withAgency = CloudKitBackend.ownedSubmission(from: record)
+        XCTAssertEqual(withAgency?.dto.identity?.agency?.agencyKey, "US-TX/example/police")
+        XCTAssertEqual(withAgency?.dto.identity?.agency?.needsReview, true, "missing review flag is treated as needing review")
+        XCTAssertNil(withAgency?.dto.identity?.plate, "the handoff identity never carries a plate")
+        record["agencyNeedsReview"] = 0 as NSNumber
+        XCTAssertEqual(CloudKitBackend.ownedSubmission(from: record)?.dto.identity?.agency?.needsReview, false)
         XCTAssertNil(recovered?.dto.exactLatitude)
         XCTAssertNil(recovered?.dto.exactLongitude)
     }

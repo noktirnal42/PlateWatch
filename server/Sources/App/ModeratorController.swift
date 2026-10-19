@@ -77,7 +77,8 @@ struct ModeratorController: RouteCollection {
             .all()
         return rows.compactMap { row in
             row.id.map { APIQueueItem(id: $0, capturedAt: row.capturedAt, geohash6: row.geohash6,
-                                      unitNumber: row.unitNumber, fleetConfidence: row.fleetConfidence) }
+                                      unitNumber: row.unitNumber, fleetConfidence: row.fleetConfidence,
+                                      agencyKey: APIQueueItem.agencyKey(for: row), agencyName: APIQueueItem.agencyName(for: row)) }
         }
     }
 
@@ -186,6 +187,13 @@ struct ModeratorController: RouteCollection {
         var geohash6: String
         var unitNumber: String?
         var fleetConfidence: Double
+        /// Organisation identity only (never a person or plate); withheld while the identity is flagged for review so a
+        /// marginal read is not shown to moderators as fact. Additive: older clients ignore these fields.
+        var agencyKey: String?
+        var agencyName: String?
+
+        static func agencyKey(for row: Sighting) -> String? { row.agencyNeedsReview == true ? nil : row.agencyKey }
+        static func agencyName(for row: Sighting) -> String? { row.agencyNeedsReview == true ? nil : row.agencyName }
     }
 
     struct APIDecision: Content { var decision: String }

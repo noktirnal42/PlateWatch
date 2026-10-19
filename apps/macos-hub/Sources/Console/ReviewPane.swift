@@ -172,26 +172,39 @@ struct ReviewPane: View {
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
             if !receipts.isEmpty {
-                DisclosureGroup(isExpanded: $showDeliveryHistory) {
-                    Table(receiptRows) {
-                        TableColumn("Received") { row in Text(row.receivedAt, format: .dateTime) }
-                            .width(min: 130, ideal: 160)
-                        TableColumn("Sighting") { row in Text(row.sightingID.uuidString.prefix(8)).monospaced() }
-                            .width(78)
-                        TableColumn("State") { row in Text(row.state) }
-                            .width(88)
-                        TableColumn("Review") { row in Text(row.confirmed ? "Confirmed" : "Unconfirmed") }
-                            .width(100)
-                        TableColumn("Evidence") { row in Text(row.hasEvidence ? "Saved" : "Hash only") }
-                            .width(82)
+                // A plain toggle rather than DisclosureGroup: the expanded DisclosureGroup left the whole Hub window
+                // unrendered once a delivery receipt existed (found 2026-10-18 during the live identity check).
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        showDeliveryHistory.toggle()
+                    } label: {
+                        Label("Delivery history · \(receipts.count)", systemImage: showDeliveryHistory ? "chevron.down" : "chevron.right")
+                            .font(.headline)
                     }
-                    .frame(minHeight: 76, idealHeight: min(CGFloat(receiptRows.count * 30 + 34), 190))
-                    Text("These are local delivery receipts. CloudKit submissions remain private until a moderator publishes them; an empty Moderation pane is expected when delivery used CloudKit.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                } label: {
-                    Label("Delivery history · \(receipts.count)", systemImage: "checkmark.seal")
-                        .font(.headline)
+                    .buttonStyle(.plain)
+                    .accessibilityValue(showDeliveryHistory ? "expanded" : "collapsed")
+                    if showDeliveryHistory {
+                        // A plain bounded grid rather than a nested Table.
+                        ScrollView {
+                            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                                GridRow {
+                                    Text("Received"); Text("Sighting"); Text("State"); Text("Review"); Text("Evidence")
+                                }.font(.caption.bold()).foregroundStyle(.secondary)
+                                ForEach(receiptRows) { row in
+                                    GridRow {
+                                        Text(row.receivedAt, format: .dateTime)
+                                        Text(row.sightingID.uuidString.prefix(8)).monospaced()
+                                        Text(row.state)
+                                        Text(row.confirmed ? "Confirmed" : "Unconfirmed")
+                                        Text(row.hasEvidence ? "Saved" : "Hash only")
+                                    }.font(.callout)
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(height: min(CGFloat(receiptRows.count * 26 + 34), 190))
+                        Text("These are local delivery receipts. CloudKit submissions remain private until a moderator publishes them; an empty Moderation pane is expected when delivery used CloudKit.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
         }.padding()

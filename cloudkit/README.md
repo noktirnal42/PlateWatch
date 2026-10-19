@@ -39,3 +39,10 @@ production save and two-account isolation check remain deployment gates.
 Until that worker is enabled, the public feed is empty on CloudKit builds; the
 Vapor reference server's moderator console and exports are the working path
 (see docs/BACKEND.md).
+
+## Required indexes for the Hub's creator-owned history (2026-10-18)
+
+`SightingSubmission` must declare `"___createdBy" REFERENCE QUERYABLE` (now in `schema.ckdb`). Without it, "Send CloudKit to Moderation"
+and "Recover CloudKit history" fail with `Field 'createdBy' is not marked queryable`. Re-run `cktool validate-schema` / `import-schema`
+against development, test the Hub handoff, then deploy to production. The owner runs this; no token belongs in the repo.
+

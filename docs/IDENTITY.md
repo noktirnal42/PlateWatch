@@ -97,5 +97,12 @@ frames below full resolution are flagged for review and carry no registration; t
 `FeedIdentityTests` (camera position settles Minneapolis MN vs elsewhere, tier rules, identity survives the wire encoding) on top of
 the PlateKit resolver tests. Feed frames have **no phone GPS and no EXIF** — fixed-camera metadata is the only reliable location
 there. A source with no known location falls back to "state unknown — which one?" (and, later, to plate-state evidence).
-Still open: the plate-design classifier for plate state (see "Known gap" above), and a live end-to-end check that a moderator sees
-the agency on a feed-sourced sighting.
+Live check 2026-10-18 (installed signed Hub, Waltham eval photo POSTed to the Hub's local `/snapshot` endpoint, which shares
+`recordFleetHits` with feeds): the Review pane showed the agency from the resolver (`US-MA/unknown/police`, tier full, 70 %). The place
+"Waltham" was **not** resolved in the Hub path although the eval harness resolves it for the same photo — open, not yet traced
+(first suspects: the thorough dark-region naming pass not running with the Hub's analysis context, or the OCR text differing).
+The Moderation pane could not show an agency at that point because the moderator queue API and the CloudKit→moderation handoff
+carried none; both now do (agency key/name only, withheld while flagged for review), covered by server and PlateSync tests. The live
+hand-off was blocked by a CloudKit schema gap (`createdBy` not queryable on `SightingSubmission`); `cloudkit/schema.ckdb` now
+declares it, but the owner must import and deploy the schema before the handoff works. Still open: the place-name gap above and the
+plate-design classifier for plate state (see "Known gap").

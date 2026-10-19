@@ -225,4 +225,15 @@ final class ModeratorAuditAuthTests: XCTestCase {
             XCTAssertEqual(noAuth.status, .unauthorized)
         }
     }
+
+    func testQueueItemShowsAgencyOnlyWhenNotFlaggedForReview() {
+        let row = Sighting()
+        row.agencyKey = "US-MA/waltham/police"; row.agencyName = "Waltham Police Department"
+        XCTAssertEqual(ModeratorController.APIQueueItem.agencyKey(for: row), "US-MA/waltham/police")
+        row.agencyNeedsReview = false
+        XCTAssertEqual(ModeratorController.APIQueueItem.agencyName(for: row), "Waltham Police Department")
+        row.agencyNeedsReview = true
+        XCTAssertNil(ModeratorController.APIQueueItem.agencyKey(for: row))
+        XCTAssertNil(ModeratorController.APIQueueItem.agencyName(for: row))
+    }
 }

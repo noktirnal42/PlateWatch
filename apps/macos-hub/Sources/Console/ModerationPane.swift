@@ -87,6 +87,11 @@ struct ModerationPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(store.queueError == nil ? "\(store.items.count) pending" : "Queue unavailable · \(store.items.count) last loaded").font(.headline)
             Table(store.items, selection: $selection) {
+                TableColumn("Agency") { item in
+                    Text(item.agencyName ?? item.agencyKey ?? "Unresolved").lineLimit(2)
+                        .foregroundStyle(item.agencyKey == nil && item.agencyName == nil ? Color.secondary : Color.primary)
+                        .help(item.agencyKey ?? "No agency, or the identity is flagged for review")
+                }
                 TableColumn("Unit") { Text($0.unitNumber ?? "—") }
                 TableColumn("Area (geohash6)") { Text($0.geohash6).monospaced() }
                 TableColumn("Fleet confidence") { Text($0.fleetConfidence, format: .percent.precision(.fractionLength(0))) }
