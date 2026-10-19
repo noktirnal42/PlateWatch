@@ -15,18 +15,18 @@ struct RecordsFeedsView: View {
     @State private var newGroup = ""
     @State private var busy = false
     @State private var notice = ""
+    @State private var readerNotice = ""
 
     private var library: RSSLibrary { workspace.rss }
     private var items: [RSSItem] { library.visible(feed: feedSelection, filter: filter, query: query) }
     private var selectedItem: RSSItem? { library.items.first { $0.id == itemSelection } }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            sidebar.frame(width: 250)
-            Divider()
-            list.frame(minWidth: 300, idealWidth: 340, maxWidth: 400)
-            Divider()
-            reader.frame(maxWidth: .infinity)
+        // HSplitView gives draggable dividers; each column keeps a usable minimum width.
+        HSplitView {
+            sidebar.frame(minWidth: 180, idealWidth: 250, maxWidth: 420, maxHeight: .infinity)
+            list.frame(minWidth: 260, idealWidth: 340, maxWidth: 640, maxHeight: .infinity)
+            reader.frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -142,7 +142,7 @@ struct RecordsFeedsView: View {
                         }.font(.caption).foregroundStyle(.secondary)
                     }.tag(item.id)
                 }
-                .onChange(of: itemSelection) { _, id in if let id { workspace.rss.setRead(true, itemIDs: [id]) } }
+                .onChange(of: itemSelection) { _, id in readerNotice = ""; if let id { workspace.rss.setRead(true, itemIDs: [id]) } }
             }
         }.padding(.horizontal, 8)
     }
@@ -177,13 +177,13 @@ struct RecordsFeedsView: View {
                     Text("Entry text is the publisher's wording, shown as plain text. It is not verified.").font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button("Save for review", systemImage: "tray.and.arrow.down") {
-                            notice = workspace.saveFeedItemForReview(item) ? "Saved as a pending candidate in Court & lists." : "Already saved."
+                            readerNotice = workspace.saveFeedItemForReview(item) ? "Saved as a pending candidate in Court & lists." : "Already saved."
                         }
                         Button("Draft request from this…", systemImage: "doc.text") { startRequest(from: item, feed: feed) }
                     }
                     Text("Saving creates a pending, cited news candidate. Nothing is accepted, linked to a person or published automatically.")
                         .font(.caption).foregroundStyle(.secondary)
-                    if !notice.isEmpty { Text(notice).font(.caption).foregroundStyle(.secondary) }
+                    if !readerNotice.isEmpty { Text(readerNotice).font(.caption).foregroundStyle(.secondary) }
                 }.padding()
             }
         } else {
@@ -198,6 +198,6 @@ struct RecordsFeedsView: View {
         let r = FOIARequest(agencyName: feed?.title ?? "Agency", stateCode: nil, subject: String(subject.prefix(200)),
                             body: "Source: \(item.link?.absoluteString ?? "feed entry")\nUse the FOIA draft tab to write the request, then paste it here when you file.")
         workspace.tracker.upsert(r)
-        notice = "Added a draft to Requests — set the agency and state there."
+        readerNotice = "Added a draft to Requests — set the agency and state there."
     }
 }
