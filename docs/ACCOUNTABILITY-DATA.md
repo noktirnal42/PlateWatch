@@ -224,3 +224,7 @@ untrusted data; 300 items retained per feed (starred never trimmed). "Save for r
 `RecordCandidate` (kind `news`, citation `newsReport` with the entry URL and excerpt hash) — it is never auto-accepted,
 person-linked or published. No feed is bundled, so no third-party endpoint is contacted until the operator adds one.
 
+Groups and refresh: feeds may carry an operator-chosen group; an optional timer (15 min–4 h, off by default) refreshes
+all feeds sequentially. "Suggested…" lists six feeds that were fetched and parsed on 2026-10-18; they are never followed
+automatically. Publisher attribution is shown with every entry and the original link is always offered.
+

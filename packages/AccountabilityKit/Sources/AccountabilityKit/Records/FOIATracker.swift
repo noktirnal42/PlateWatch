@@ -21,20 +21,29 @@ public enum FOIADeadlines {
     /// Keyed by two-letter state code; "US" is the federal FOIA.
     public static let rules: [String: Rule] = [
         "US": .init(days: 20, businessDays: true, covers: .response, citation: "5 U.S.C. § 552(a)(6)(A)(i)", verified: false),
-        "CA": .init(days: 10, businessDays: false, covers: .response, citation: "Cal. Gov. Code § 7922.535(a)", verified: false, checkedNote: "10 days to determine and give a production estimate, extendable up to 14 days in unusual circumstances. A 2026 bill (AB 1821) would change this to business days — check its status."),
+        "CA": .init(days: 10, businessDays: false, covers: .response, citation: "Cal. Gov. Code § 7922.535(a)", verified: false, checkedNote: "10 days to determine and give a production estimate, extendable up to 14 days in unusual circumstances. AB 1821 was chaptered 2026-09-30 (Ch. 899, Stats. 2026) and replaces these with 10 and 14 business days; the tracker switches for requests filed on or after 2027-01-01 (the default California effective date — confirm against the chaptered text)."),
         "TX": .init(days: 10, businessDays: true, covers: .acknowledgement, citation: "Tex. Gov't Code § 552.221(d)", verified: false, checkedNote: "Within 10 business days the agency must produce the records or certify in writing when it will; \"promptly\" (§ 552.221(a)) can be stricter."),
         "IL": .init(days: 5, businessDays: true, covers: .response, citation: "5 ILCS 140/3(d)", verified: false, checkedNote: "Confirmed in Attorney General binding opinions: comply or deny within 5 business days (one 5-business-day extension for listed reasons); silence is treated as a denial."),
         "MA": .init(days: 10, businessDays: true, covers: .response, citation: "M.G.L. c. 66, § 10(b)", verified: false, checkedNote: "10 business days from the records access officer's receipt; written extension reported up to 15 more business days."),
         "WA": .init(days: 5, businessDays: true, covers: .acknowledgement, citation: "RCW 42.56.520", verified: false, checkedNote: "Within 5 business days: provide the record, acknowledge with a time estimate, or deny. Day of receipt is not counted."),
         "NY": .init(days: 5, businessDays: true, covers: .acknowledgement, citation: "N.Y. Pub. Off. Law § 89(3)(a)", verified: false, checkedNote: "5 business days to make available, deny, or acknowledge with an approximate date. 2025 bills would add a 20-business-day period; not confirmed as law."),
-        "VA": .init(days: 5, businessDays: true, covers: .response, citation: "Va. Code § 2.2-3704(B)", verified: false, checkedNote: "Not confirmed in the 2026-10-15 check (only a school division's policy page was found). Read the statute."),
+        "VA": .init(days: 5, businessDays: true, covers: .response, citation: "Va. Code § 2.2-3704(B)", verified: true, checkedNote: "Statute text read at law.lis.virginia.gov on 2026-10-18: respond promptly and within five working days; if conditions prevent that, a written response within those five days gives the body seven more work days (60 work days for criminal investigative files under § 2.2-3706.1). The tracker uses the five-day window."),
         "CT": .init(days: 4, businessDays: true, covers: .response, citation: "Conn. Gen. Stat. § 1-206(a)", verified: false, checkedNote: "Denial must be in writing within 4 business days; failure is deemed a denial; appeal to the FOI Commission within 30 days."),
         "NH": .init(days: 5, businessDays: true, covers: .response, citation: "RSA 91-A:4, IV", verified: false, checkedNote: "Within 5 business days: make available, deny, or state the time reasonably needed (since 2020)."),
     ]
 
-    public static func rule(forState code: String?) -> Rule? {
+    /// Enacted changes that take effect later: the rule applies to requests filed on/after `effective`.
+    public static let scheduledChanges: [String: (effective: Date, rule: Rule)] = [
+        "CA": (Date(timeIntervalSince1970: 1_798_761_600), // 2027-01-01T00:00:00Z
+               .init(days: 10, businessDays: true, covers: .response, citation: "Cal. Gov. Code § 7922.535(a) as amended by AB 1821 (Stats. 2026, ch. 899)", verified: false,
+                     checkedNote: "10 business days to determine and notify; extension up to 14 business days. Chaptered 2026-09-30 per a secondary tracker — read the chaptered text.")),
+    ]
+
+    public static func rule(forState code: String?, asOf date: Date = Date()) -> Rule? {
         guard let code else { return nil }
-        return rules[code.uppercased()]
+        let key = code.uppercased()
+        if let change = scheduledChanges[key], date >= change.effective { return change.rule }
+        return rules[key]
     }
 
     /// The date `rule` falls due for a request submitted on `start`. Business days skip Saturday and Sunday only.
@@ -110,7 +119,7 @@ public struct FOIARequest: Sendable, Identifiable, Hashable, Codable {
     public mutating func markSubmitted(on date: Date, calendar: Calendar = .gregorianUTC) {
         status = .submitted
         submittedOn = date
-        if !dueDateIsOverride, let rule = FOIADeadlines.rule(forState: stateCode) {
+        if !dueDateIsOverride, let rule = FOIADeadlines.rule(forState: stateCode, asOf: date) {
             dueOn = FOIADeadlines.dueDate(from: date, rule: rule, calendar: calendar)
         }
         events.append(.init(date: date, text: "Submitted"))

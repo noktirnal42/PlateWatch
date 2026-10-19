@@ -120,4 +120,28 @@ final class RSSFeedTests: XCTestCase {
         do { _ = try await RSSFetcher(fetcher: F(status: 404)).fetch(URL(string: "https://x.example/f")!); XCTFail() }
         catch { XCTAssertEqual(error as? RSSFetcher.FetchError, .http(404)) }
     }
+
+    func testGroups() throws {
+        var lib = RSSLibrary()
+        let a = try lib.subscribe(url: URL(string: "https://a.example/feed")!, group: "Courts")
+        let b = try lib.subscribe(url: URL(string: "https://b.example/feed")!)
+        lib.merge(try RSSParser.parse(Data(rss.utf8)), into: a.id)
+        lib.merge(try RSSParser.parse(Data(atom.utf8)), into: b.id)
+        XCTAssertEqual(lib.groups, ["Courts"])
+        XCTAssertEqual(lib.visible(group: "Courts").count, 2)
+        XCTAssertEqual(lib.unreadCount(inGroup: "Courts"), 2)
+        lib.setGroup("  Agencies ", for: b.id)
+        XCTAssertEqual(lib.groups, ["Agencies", "Courts"])
+        lib.markAllRead(inGroup: "Agencies")
+        XCTAssertEqual(lib.unreadCount(), 2, "only the Agencies feed was marked")
+        XCTAssertEqual(lib.visible(group: "Nope").count, 0)
+    }
+
+    func testCatalogueIsHTTPSAndUnique() {
+        XCTAssertFalse(RSSSuggestion.catalogue.isEmpty)
+        XCTAssertTrue(RSSSuggestion.catalogue.allSatisfy { $0.url.scheme == "https" && !$0.publisher.isEmpty && !$0.group.isEmpty })
+        XCTAssertEqual(Set(RSSSuggestion.catalogue.map(\.id)).count, RSSSuggestion.catalogue.count)
+        var lib = RSSLibrary()
+        XCTAssertNoThrow(try lib.subscribe(title: RSSSuggestion.catalogue[0].title, url: RSSSuggestion.catalogue[0].url, group: RSSSuggestion.catalogue[0].group))
+    }
 }

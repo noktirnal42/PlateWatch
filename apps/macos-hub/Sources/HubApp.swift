@@ -54,7 +54,7 @@ struct PlateWatchHubApp: App {
         Window("PlateWatch Hub", id: "console") {
             ConsoleView(hub: hub)
                 .modelContainer(modelContainer)
-                .onAppear { hub.attach(context: modelContainer.mainContext) }
+                .onAppear { hub.attach(context: modelContainer.mainContext); RecordsWorkspace.shared.startAutoRefresh() }
         }
         .defaultSize(width: 1180, height: 740)
         .commands { HubWindowCommands() }

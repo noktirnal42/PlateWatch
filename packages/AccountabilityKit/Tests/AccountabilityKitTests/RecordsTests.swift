@@ -18,7 +18,11 @@ final class FOIATrackerTests: XCTestCase {
         let ca = FOIADeadlines.rule(forState: "CA")!
         XCTAssertEqual(FOIADeadlines.dueDate(from: date(2026, 10, 2), rule: ca, calendar: cal), date(2026, 10, 12))
         XCTAssertNil(FOIADeadlines.rule(forState: "ZZ"))
-        XCTAssertTrue(FOIADeadlines.rules.values.allSatisfy { !$0.verified }, "nothing is claimed verified yet")
+        XCTAssertTrue(FOIADeadlines.rules.values.filter(\.verified).allSatisfy { $0.checkedNote?.contains("read") == true }, "a verified rule says how it was read")
+        XCTAssertEqual(FOIADeadlines.rule(forState: "VA")?.verified, true)
+        // AB 1821: calendar days before 2027-01-01, business days from then on.
+        XCTAssertFalse(FOIADeadlines.rule(forState: "CA", asOf: date(2026, 12, 31))!.businessDays)
+        XCTAssertTrue(FOIADeadlines.rule(forState: "CA", asOf: date(2027, 1, 2))!.businessDays)
     }
 
     func testLifecycleOverdueAndAppeal() throws {

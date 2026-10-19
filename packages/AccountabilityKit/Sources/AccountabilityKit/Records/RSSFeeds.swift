@@ -275,13 +275,40 @@ public struct RSSLibrary: Sendable, Codable, Equatable {
         items.filter { !$0.isRead && (feedID == nil || $0.feedID == feedID) }.count
     }
 
+    /// Distinct non-empty group names, sorted.
+    public var groups: [String] {
+        Array(Set(subscriptions.map(\.group).filter { !$0.isEmpty })).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    public func feedIDs(inGroup group: String) -> Set<UUID> {
+        Set(subscriptions.filter { $0.group == group }.map(\.id))
+    }
+
+    public func unreadCount(inGroup group: String) -> Int {
+        let ids = feedIDs(inGroup: group)
+        return items.filter { !$0.isRead && ids.contains($0.feedID) }.count
+    }
+
+    public mutating func setGroup(_ group: String, for feedID: UUID) {
+        if let i = subscriptions.firstIndex(where: { $0.id == feedID }) {
+            subscriptions[i].group = group.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    public mutating func markAllRead(inGroup group: String) {
+        let ids = feedIDs(inGroup: group)
+        for i in items.indices where ids.contains(items[i].feedID) { items[i].isRead = true }
+    }
+
     public enum Filter: Sendable { case all, unread, starred }
 
     /// Newest first. `query` matches title, summary and author, case- and diacritic-insensitively.
-    public func visible(feed: UUID? = nil, filter: Filter = .all, query: String = "") -> [RSSItem] {
+    public func visible(feed: UUID? = nil, group: String? = nil, filter: Filter = .all, query: String = "") -> [RSSItem] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let groupIDs = group.map { feedIDs(inGroup: $0) }
         return items.filter { item in
             if let feed, item.feedID != feed { return false }
+            if let groupIDs, !groupIDs.contains(item.feedID) { return false }
             switch filter {
             case .all: break
             case .unread: if item.isRead { return false }
@@ -342,4 +369,33 @@ public struct RSSFetcher: Sendable {
         guard status == 200 else { throw FetchError.http(status) }
         return try RSSParser.parse(data)
     }
+}
+
+/// Starting points for the "aggregate existing public-interest publishers" programme (ROADMAP M7): cite-first, no
+/// re-hosting. Only the publisher's own title, link and a short summary are kept locally; the reader always links to
+/// the original. Every URL was fetched and parsed as RSS/Atom when added (`lastChecked`); nothing is followed
+/// automatically — the operator chooses what to follow.
+public struct RSSSuggestion: Sendable, Identifiable, Hashable {
+    public var id: String { url.absoluteString }
+    public let title: String
+    public let publisher: String
+    public let url: URL
+    public let group: String
+    public let about: String
+    public let lastChecked: String
+
+    public static let catalogue: [RSSSuggestion] = [
+        .init(title: "The Marshall Project — recent", publisher: "The Marshall Project", url: URL(string: "https://www.themarshallproject.org/rss/recent.rss")!,
+              group: "Criminal justice news", about: "Nonprofit newsroom covering policing, courts and corrections.", lastChecked: "2026-10-18"),
+        .init(title: "EFF — updates", publisher: "Electronic Frontier Foundation", url: URL(string: "https://www.eff.org/rss/updates.xml")!,
+              group: "Surveillance & ALPR", about: "Digital-rights analysis including ALPR and police-surveillance coverage.", lastChecked: "2026-10-18"),
+        .init(title: "Reporters Committee — news", publisher: "Reporters Committee for Freedom of the Press", url: URL(string: "https://www.rcfp.org/feed/")!,
+              group: "Public records & FOIA", about: "Access, open-records and FOIA litigation news for journalists.", lastChecked: "2026-10-18"),
+        .init(title: "ACLU — news", publisher: "American Civil Liberties Union", url: URL(string: "https://www.aclu.org/rss.xml")!,
+              group: "Surveillance & ALPR", about: "Civil-liberties litigation and reports, including surveillance and records access.", lastChecked: "2026-10-18"),
+        .init(title: "CourtListener — U.S. Supreme Court opinions", publisher: "Free Law Project", url: URL(string: "https://www.courtlistener.com/feed/court/scotus/")!,
+              group: "Courts", about: "Opinions as published by the court, via Free Law Project's open archive.", lastChecked: "2026-10-18"),
+        .init(title: "FBI — top stories", publisher: "Federal Bureau of Investigation", url: URL(string: "https://www.fbi.gov/feeds/fbi-top-stories/rss.xml")!,
+              group: "Agency releases", about: "Official federal law-enforcement announcements (a primary source, not commentary).", lastChecked: "2026-10-18"),
+    ]
 }

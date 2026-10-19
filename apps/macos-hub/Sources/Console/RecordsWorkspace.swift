@@ -49,6 +49,15 @@ final class RecordsWorkspace {
     var budget: PacerBudget { didSet { save(budget, budgetStore) } }
     var rss: RSSLibrary { didSet { save(rss, rssStore) } }
     private(set) var refreshingFeeds: Set<UUID> = []
+    /// Minutes between automatic refreshes of every followed feed; 0 = off. Persisted in UserDefaults.
+    var autoRefreshMinutes: Int = UserDefaults.standard.integer(forKey: "hubRecords_rssAutoRefreshMinutes") {
+        didSet {
+            UserDefaults.standard.set(autoRefreshMinutes, forKey: "hubRecords_rssAutoRefreshMinutes")
+            startAutoRefresh()
+        }
+    }
+    private(set) var lastAutoRefresh: Date?
+    private var autoRefreshTask: Task<Void, Never>?
     var lastError = ""
     private(set) var currentCourtQuery = ""
     private(set) var currentCourtSource = ""
@@ -236,6 +245,22 @@ final class RecordsWorkspace {
         var added = 0
         for sub in rss.subscriptions { added += await refreshFeed(sub.id) }
         return added
+    }
+
+    /// (Re)starts the timer. Safe to call repeatedly; one loop runs at a time and it sleeps between passes.
+    func startAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+        guard autoRefreshMinutes > 0 else { return }
+        let interval = autoRefreshMinutes
+        autoRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(interval * 60))
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshAllFeeds()
+                self.lastAutoRefresh = Date()
+            }
+        }
     }
 
     func subscribeToFeed(urlText: String, title: String = "", group: String = "") async -> Bool {

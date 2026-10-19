@@ -121,8 +121,11 @@ first.
   second-person moderation is enforced for both HTML and API paths. Any publication path remains external/deployment-gated.
   Moderator audit entries carry a non-reversible reviewer fingerprint, and `REQUIRE_SECOND_REVIEW=1` enforces distinct reviewers for approval.
 - ✅ FOIA request tracker (Hub: Requests tab — due dates, appeal text, cited releases)
-- ⬜ Aggregation of existing public-interest publishers (cite-first, no
-  re-hosting without attribution)
+- 🟡 Aggregation of existing public-interest publishers (cite-first, no
+  re-hosting without attribution) — Hub Records → Feeds RSS/Atom reader built (2026-10-18): https-only
+  subscriptions, groups, timed auto-refresh, OPML, a six-feed verified suggestion list, and save-for-review as a
+  pending cited candidate. Still open: Brady/decertification/court-publisher feed coverage beyond the starter list
+  and per-publisher licence notes.
 - ✅ FOIA request generator (`FleetImporters`, M3) — foundation for records
   requests that feed this program
 
