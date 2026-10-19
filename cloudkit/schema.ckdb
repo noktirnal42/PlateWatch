@@ -23,6 +23,7 @@ RECORD TYPE SightingSubmission (
     agencyNeedsReview INT64,
     plateState       STRING,
     moderationState  STRING QUERYABLE,
+    userConfirmed    INT64 QUERYABLE SORTABLE,
     GRANT READ, WRITE TO "_creator",
     GRANT CREATE TO "_icloud"
 );
