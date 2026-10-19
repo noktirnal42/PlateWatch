@@ -94,6 +94,28 @@ public struct PlateAnalysisPipeline: Sendable {
         self.baseline = VisionBaselineAnalyzer(candidateRegions: configuration.candidateRegions)
     }
 
+    /// The baseline's contrast-enhanced re-read (used only to *name* the agency, e.g. dark-on-dark "WALTHAM") lives on
+    /// the baseline's pseudo-vehicles. Detector boxes replace those vehicles, so without this step the lettering that
+    /// names the agency was dropped whenever a vehicle detector was loaded (found 2026-10-18: the Hub resolved
+    /// `US-MA/unknown/police` for the Waltham photo while the detector-free harness resolved Waltham).
+    /// A fused vehicle with fleet evidence gets the lines; when several vehicles have fleet evidence each only gets lines
+    /// near its own box, so one vehicle's lettering cannot name another.
+    static func attachEnhancedText(to fused: inout [VehicleObservation], from baseline: [VehicleObservation]) {
+        let lines = baseline.flatMap(\.enhancedText)
+        guard !lines.isEmpty else { return }
+        let withEvidence = fused.indices.filter { VisionBaselineAnalyzer.hasFleetEvidence(fused[$0]) && fused[$0].enhancedText.isEmpty }
+        for index in withEvidence {
+            if withEvidence.count == 1 {
+                fused[index].enhancedText = lines
+            } else {
+                let box = fused[index].boundingBox
+                let near = NormalizedBox(x: box.x - box.width * 0.5, y: box.y - box.height * 0.5,
+                                         width: box.width * 2, height: box.height * 2)
+                fused[index].enhancedText = lines.filter { near.contains(centerOf: $0.boundingBox) }
+            }
+        }
+    }
+
     /// Analyze one frame. Detector results from installed CoreML models are
     /// fused with baseline text reads when available; missing models degrade
     /// gracefully to the Vision-only baseline.
@@ -139,6 +161,7 @@ public struct PlateAnalysisPipeline: Sendable {
                 fused[index].classConfidence = 0
             }
         }
+        Self.attachEnhancedText(to: &fused, from: baselineFrame.vehicles)
         // Vehicles the detector missed entirely (heavy crops, unusual angles,
         // low light) still exist in the baseline as plate/markings
         // pseudo-vehicles. Keep any whose center no detector box claims, so
@@ -183,7 +206,7 @@ public struct PlateAnalysisPipeline: Sendable {
     }
 }
 
-private extension NormalizedBox {
+extension NormalizedBox {
     func contains(centerOf other: NormalizedBox) -> Bool {
         let cx = other.x + other.width / 2
         let cy = other.y + other.height / 2

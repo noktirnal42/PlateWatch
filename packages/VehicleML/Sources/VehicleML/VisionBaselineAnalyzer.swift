@@ -391,6 +391,13 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
             .map { CGRect(x: $0.box.x, y: 1 - ($0.box.y + $0.box.height), width: $0.box.width, height: $0.box.height) }
     }
 
+    /// Fleet door text, an official plate, or a fleet classifier cue. Evidence only — never a gate input by itself.
+    static func hasFleetEvidence(_ v: VehicleObservation) -> Bool {
+        SceneTextHeuristics.parse(v.sceneText).hasFleetKeyword
+            || v.plates.contains { $0.best?.isOfficialPlate == true }
+            || (v.vehicleClass.isFleet && v.classConfidence > 0)
+    }
+
     /// A vehicle that already has fleet evidence (fleet door text, an official plate, or a fleet
     /// classifier cue) but whose agency place could not be read gets one more look with
     /// contrast-enhanced OCR. The result is stored apart (`enhancedText`) and used only to
@@ -398,11 +405,7 @@ public struct VisionBaselineAnalyzer: AnalysisStage {
     static func nameFleetVehicles(_ vehicles: inout [VehicleObservation], pixelBuffer: CVPixelBuffer, suppressCameraCaptions: Bool = false) async {
         let resolver = IdentityResolver()
         let candidates = vehicles.indices.filter { i in
-            let v = vehicles[i]
-            let fleetEvidence = SceneTextHeuristics.parse(v.sceneText).hasFleetKeyword
-                || v.plates.contains { $0.best?.isOfficialPlate == true }
-                || (v.vehicleClass.isFleet && v.classConfidence > 0)
-            return fleetEvidence && resolver.resolve(vehicle: v).agency?.place == nil
+            hasFleetEvidence(vehicles[i]) && resolver.resolve(vehicle: vehicles[i]).agency?.place == nil
         }
         guard !candidates.isEmpty else { return }
         let hits = await VisionTextRunner.recognizeEnhanced(in: pixelBuffer, minimumTextHeight: thoroughMinimumTextHeight)

@@ -296,6 +296,7 @@ tests must stay green before its status advances.
   client now remembers the mirror URL, distinguishes connecting/connected/unavailable states, and re-enables the same
   Refresh action after a failed request so a transient backend outage is recoverable in place. Offline `assembleDebug`
   passed on 2026-10-17; no Android emulator or physical-device run was available.
+- **2026-10-18 (WS3):** detector fusion no longer drops the enhanced dark-region text that names the agency; Waltham resolves again with the CoreML vehicle detector loaded (eval harness and live Hub). VehicleML 45 tests.
 - **2026-10-18 (live QA):** Review pane window went blank once a delivery receipt existed with the history section expanded (DisclosureGroup); replaced with a plain toggle + grid. Moderator queue API, Hub Moderation pane and the CloudKit handoff now carry agency; `createdBy` index added to schema.ckdb (deployment is the owner's step).
 - **2026-10-18 (WS2/WS6):** IdentityResolver confirmed wired into every Hub ingest path and pinned by Hub tests (docs/IDENTITY.md corrected; the earlier "not wired" note was stale).
 - **2026-10-18:** tombstones, sensitive-vehicle moderation gate and the offline-tested `publish-cloudkit` moderator publisher landed (server 67 tests); a live CloudKit run is still open.

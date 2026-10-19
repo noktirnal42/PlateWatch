@@ -135,3 +135,41 @@ final class EdgePlateRegressionTests: XCTestCase {
         XCTAssertEqual(frame.imageSize.width, 1200) // analysis completed instead of throwing
     }
 }
+
+/// Detector fusion must not drop the contrast-enhanced lines that name the agency.
+final class EnhancedTextFusionTests: XCTestCase {
+    private func line(_ text: String, x: Double, y: Double) -> SceneTextObservation {
+        SceneTextObservation(text: text, boundingBox: .init(x: x, y: y, width: 0.1, height: 0.04), confidence: 0.9)
+    }
+    private func fleetVehicle(x: Double, enhanced: [SceneTextObservation] = []) -> VehicleObservation {
+        var v = VehicleObservation(boundingBox: .init(x: x, y: 0.2, width: 0.3, height: 0.5), vehicleClass: .patrol,
+                                   classConfidence: 0.9, plates: [], sceneText: [line("POLICE", x: x + 0.05, y: 0.4)])
+        v.enhancedText = enhanced
+        return v
+    }
+
+    func testSoleFleetVehicleReceivesTheEnhancedLines() {
+        var fused = [fleetVehicle(x: 0.1)]
+        let baseline = [fleetVehicle(x: 0.12, enhanced: [line("WALTHAM", x: 0.3, y: 0.7)])]
+        PlateAnalysisPipeline.attachEnhancedText(to: &fused, from: baseline)
+        XCTAssertEqual(fused[0].enhancedText.map(\.text), ["WALTHAM"])
+        XCTAssertEqual(IdentityResolver().resolve(vehicle: fused[0]).agency?.place, "Waltham")
+    }
+
+    func testEachOfSeveralFleetVehiclesOnlyGetsLinesNearItself() {
+        var fused = [fleetVehicle(x: 0.0), fleetVehicle(x: 0.7)]
+        let baseline = [fleetVehicle(x: 0.0, enhanced: [line("WALTHAM", x: 0.05, y: 0.45), line("BOSTON", x: 0.75, y: 0.45)])]
+        PlateAnalysisPipeline.attachEnhancedText(to: &fused, from: baseline)
+        XCTAssertEqual(fused[0].enhancedText.map(\.text), ["WALTHAM"])
+        XCTAssertEqual(fused[1].enhancedText.map(\.text), ["BOSTON"])
+    }
+
+    func testNonFleetVehicleNeverReceivesEnhancedLines() {
+        var civilian = VehicleObservation(boundingBox: .init(x: 0.6, y: 0.2, width: 0.3, height: 0.5), vehicleClass: .unknown,
+                                          classConfidence: 0, plates: [], sceneText: [])
+        civilian.enhancedText = []
+        var fused = [civilian]
+        PlateAnalysisPipeline.attachEnhancedText(to: &fused, from: [fleetVehicle(x: 0, enhanced: [line("WALTHAM", x: 0.7, y: 0.4)])])
+        XCTAssertTrue(fused[0].enhancedText.isEmpty)
+    }
+}
