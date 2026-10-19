@@ -36,6 +36,8 @@ func configure(_ app: Application) async throws {
     app.migrations.add(AddSightingFirstReviewer())
     app.migrations.add(CreateAuditLog())
     app.migrations.add(CreateTakedownRequests())
+    app.migrations.add(CreateTombstones())
+    app.migrations.add(AddSightingPublishedAt())
     if app.environment != .testing {
         try await app.autoMigrate()
     }
@@ -51,6 +53,8 @@ func configure(_ app: Application) async throws {
     try app.register(collection: TakedownController())
     try app.register(collection: ModeratorController(token: Environment.get("MODERATOR_TOKEN"),
                                                      requireSecondReview: Environment.get("REQUIRE_SECOND_REVIEW") == "1"))
+
+    app.asyncCommands.use(PublishCloudKitCommand(), as: "publish-cloudkit")
 
     app.get("health") { _ in ["status": "ok"] }
 

@@ -149,3 +149,14 @@ It is not scheduled under `swift test`.
 | CKAsset storage | ≤ 40 KB plate crop per sighting (thumbnails), no raw video |
 | CloudKit transfer | Exponential backoff + delta pulls; watchlists are query subscriptions, not polling |
 | Mirror VM | Fits Oracle Always Free ARM shape; Postgres ≤ 20 GB |
+
+## Publication safeguards and the CloudKit publisher (2026-10-18)
+
+- **Tombstones** (`tombstones` table): when a moderator upholds a takedown (`hide`), SHA-256 digests of the observation's
+  idempotency key and crop hash are stored (never a plate, location or device id). A later submission with either key
+  is refused with `410 Gone`, even after the row was purged by retention.
+- **Sensitive vehicles:** `RedactionGateService.isSensitive` (SWAT/tactical/protective, school bus, ambulance/EMS and similar
+  whole words in markings, class or note) forces `pending` with no exact geo, so a moderator decides.
+- **CloudKit publisher:** `publish-cloudkit` command (see NEXT-STEPS §1b). Rows gain `published_at`; retention does not delete
+  a row until its CloudKit record has been withdrawn.
+

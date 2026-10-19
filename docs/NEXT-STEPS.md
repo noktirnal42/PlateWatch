@@ -28,7 +28,11 @@ sit in the outbox ("Needs attention" pill) and Explore is empty.
 
 **Known risk to verify:** `CKQuery` on `Sighting` filters `moderationState == fleetConfirmed` and sorts by `capturedAt`; both fields must be QUERYABLE/SORTABLE in the deployed schema (they are in the file). A "field not queryable" error means the schema import didn't apply.
 
-### 1b. Build the moderator publish tool  *(not started)*
+### 1b. Build the moderator publish tool  *(built 2026-10-18; live run needs the owner's server-to-server key)*
+
+**Implemented:** `swift run --package-path server App publish-cloudkit [--dry-run]` (`server/Sources/App/CloudKitPublisher.swift`). It plans from the same rules as `Sighting.publicQuery` (fleet-confirmed, aged past the publish delay, not taken down, inside retention), signs Web Services requests with an ECDSA P-256 key (`CK_CONTAINER`, `CK_KEY_ID`, `CK_PRIVATE_KEY_PATH` PEM, optional `CK_ENVIRONMENT`), creates `Sighting` records named by the row UUID (retries are idempotent), withdraws records whose row was taken down or expired, and writes audit entries. Unit-tested offline (planning, field whitelist, signing); **not yet run against CloudKit.**
+
+**Original brief:**
 Accepted `SightingSubmission` records must be copied to world-readable `Sighting` by something that is
 **not** an app client (no CREATE grant for clients). Options: (a) a small Swift CLI/Vapor job using a
 CloudKit **server-to-server key**, reusing `server/Sources/App/ModeratorController.swift` logic and

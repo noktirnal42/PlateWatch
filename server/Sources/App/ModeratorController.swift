@@ -165,6 +165,7 @@ struct ModeratorController: RouteCollection {
             if body.action == "hide", let sid = request.sightingID, let sighting = try await Sighting.find(sid, on: req.db) {
                 sighting.takenDown = true
                 try await sighting.save(on: req.db)
+                try await Tombstone.record(for: sighting, on: req.db)
             }
             request.status = body.action == "hide" ? "hidden" : "dismissed"
             try await request.save(on: req.db)

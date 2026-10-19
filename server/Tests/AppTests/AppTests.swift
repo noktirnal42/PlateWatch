@@ -203,6 +203,16 @@ final class RedactionGateServiceTests: XCTestCase {
         XCTAssertFalse(out.exactGeoAllowed)
     }
 
+    func testSensitiveVehiclesNeverAutoConfirm() {
+        for text in ["SWAT", "County Tactical Unit", "SCHOOL BUS 12", "Ambulance 7", "undercover"] {
+            let out = RedactionGateService.evaluate(dto(fleetConfidence: 0.95, agencyText: text, unitNumber: "4421"))
+            XCTAssertEqual(out.state, .pending, text)
+            XCTAssertFalse(out.exactGeoAllowed, text)
+        }
+        XCTAssertEqual(RedactionGateService.evaluate(dto(fleetConfidence: 0.85, agencyText: "SCHOOLCRAFT POLICE", unitNumber: "9")).state,
+                       .fleetConfirmed, "whole-word match only")
+    }
+
     func testExemptPlatePlusConfidenceConfirmed() {
         let out = RedactionGateService.evaluate(
             dto(fleetConfidence: 0.82, plateDesign: "US-CA-exempt"))

@@ -62,6 +62,12 @@ struct SightingsController: RouteCollection {
             return try await receipt.encodeResponse(status: .ok, for: req)
         }
 
+        // A takedown-withdrawn observation is never re-ingested, even after its row was purged (tombstone).
+        if try await Tombstone.isWithdrawn(idempotencyKey: idem, cropSHA256: dto.cropHashSHA256, on: req.db) {
+            await AuditEntry.record("submission.withdrawn", target: nil, detail: "tombstone", on: req.db)
+            throw Abort(.gone, reason: "this observation was withdrawn by a takedown")
+        }
+
         // Device reputation pre-check.
         if let rep = try await DeviceReputation.query(on: req.db)
             .filter(\.$deviceIDHash == dto.deviceIDHash).first(),
