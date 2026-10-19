@@ -78,6 +78,15 @@ unresolved ("Minneapolis, state unknown — which one?"; MN is offered first). T
 plate-design classifier (MODEL-TRAINING §4c, Create ML Image Classification on plate crops, one
 class per state) — not more OCR. Case is eval id 902 (`eval/user/`, gitignored).
 
+**Status 2026-10-18 — what is blocked, precisely.** Nothing has been trained: `training/plate-state/` does not exist on this
+machine (no images downloaded), so there is no model, no Create ML run and no held-out measurement. The tooling exists
+(`scripts/crawl_commons_plates.py`, CC0/PD/CC BY plus CC BY-SA by the 2026-10-13 owner decision; `scripts/make_classifier_dataset.py`).
+Three things stand between here and a result: (1) the crawl downloads a few thousand Commons files and needs the owner's go-ahead;
+(2) [PLATE-DESIGN-DATASET.md](PLATE-DESIGN-DATASET.md) still lists its licence gate as not cleared — each file's licence must be
+recorded from the manifest the crawler writes; (3) the flat Commons scans will not look like a 12 px banner in a phone photo, so
+the real acceptance test is the Minneapolis crop (eval id 902) and an MN/NC/KS confusion check, not the Create ML test split. Until a
+model passes that, the state stays unresolved and the Hub keeps asking "which one?". No claim is made that the classifier will solve it.
+
 ## Where the location hint comes from (it is a property of the frame's *source*)
 The identity resolver uses a coarse location only to settle ambiguous place names ("Minneapolis" is in MN, NC and KS).
 It must come from where the **frame** was captured, never from the device that happens to be running the analysis:

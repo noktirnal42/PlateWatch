@@ -182,6 +182,8 @@ wire in** until it has rear-view police data. It is not needed for the two refer
 
 ### Plate-state classifier — see the dataset notes in §4c; results appended below when trained.
 
+**2026-10-18:** not started — no crawl has been run and the licence gate in PLATE-DESIGN-DATASET.md is still open. Blockers and the acceptance test (Minneapolis crop, MN/NC/KS confusion) are written up under "Known gap" in IDENTITY.md.
+
 ### Reproducing the fleet crop dataset (one command)
 `scripts/build_fleet_crop_dataset.sh <crawl dir> <out dir> [models dir]` runs the whole recipe from the lessons above: tag with Apple's
 classifier and keep car/truck/bus-like images → cut the main vehicle with the vehicle detector → split **by photographer**
