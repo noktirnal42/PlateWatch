@@ -73,8 +73,12 @@ struct PlateWatchApp: App {
                 }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active && !PreviewFixtures.isEnabled {
+                guard !PreviewFixtures.isEnabled else { return }
+                if phase == .active {
                     Task { await drainOutbox() }
+                    PresenceCoordinator.shared.start()
+                } else if phase == .background {
+                    PresenceCoordinator.shared.stop()
                 }
             }
         }

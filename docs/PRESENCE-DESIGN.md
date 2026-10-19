@@ -38,3 +38,29 @@ Three independent causes, found by running the Hub against a freshly built serve
 2. **The installed local reference server predates presence.** `~/Library/Application Support/PlateWatchServer/bin/App` (built 2026-10-15) answers 404 for `/v1/presence`; presence landed 2026-10-16. A current build (`swift build --package-path server`) serves heartbeat/aggregate/release correctly; with it the Hub reported 1 session, 1 processor and its stats. **Done 2026-10-19 with the owner's approval:** the old binary and `Public/` were backed up to `…/PlateWatchServer/backup-20261019-144453/`, the current debug build was swapped in and the launchd job restarted; the live Hub then reported 1 session, 1 processor and its frame stats from `127.0.0.1:8083`.
 3. **Phones and watches cannot reach `127.0.0.1` on the Mac.** Presence resolves its server through `SyncBackends.mirrorURL()`, whose default is localhost:8083, so counts only ever worked Mac-to-Mac. `mirrorURL()` now honours the saved server address (iOS About → Backend, Hub Settings → "Presence server"), but a shared, reachable server (HTTPS) is still required for cross-device counts. The watch keeps its own defaults domain and has no setting yet. Presence is in-memory on that server and is deliberately not available on CloudKit-only deployments.
 Verified: PlateSync unit test; Hub ↔ temporary server end-to-end (1 session). Not verified: iOS/watch against a shared server.
+
+## Decision 2026-10-19 — presence moves to CloudKit (owner-approved)
+**Why:** the REST presence server listens on one Mac's localhost, so a phone or watch could never reach it; cross-device counts need
+infrastructure every platform already has. CloudKit is that infrastructure (signed Hub and iPhone), so the earlier line "CloudKit is
+not used as a presence database" is **superseded for presence only** — it is still not used for anything else live, and presence
+records never mix with sighting records.
+**Design (supersedes steps 1–2 of "Implementation boundary" above for signed builds):**
+- Record type `PresenceLease` in the *public* database (`cloudkit/schema.ckdb`): `expiresAt`, `platform`, `activeProcessing`, `feedIDs`
+  (≤ 100) and, for the Hub only, five dashboard counters. World-readable, writable only by the creating iCloud user. No names, plates,
+  frames, locations or history are stored.
+- One record per install: `recordName = "lease-" + hash(random install-local session id)`. The raw id is never published and an install
+  overwrites its own record, so the table stays bounded by installs. A lease expires after **120 s** (heartbeats every 45 s); a crashed or
+  killed client vanishes without cleanup. A clean stop deletes the record.
+- Aggregation is client-side (`PresenceAggregator`): unexpired leases → active sessions, processors (`activeProcessing`), per-feed counts,
+  and Hub-only totals. These are **live estimates**: a public database cannot stop a forged lease, so no figure is audited.
+- **Hub** and **iPhone** publish and read through `PresenceServices.makeDefault()` (CloudKit when entitled, the REST server for unsigned
+  development builds). The iPhone publishes only while the opt-in toggle is on and the app is active; it counts as a *processor* only while
+  the camera is scanning. The **watch** publishes nothing: it shows the aggregate the phone reads and relays over WatchConnectivity
+  (`presenceAggregate`, counts only) and shows "—" when that is missing or older than 10 minutes.
+- Clear errors: schema missing → "Offline · CloudKit schema not deployed"; no iCloud → "Offline · iCloud sign-in needed".
+**Owner steps before it works (nothing was deployed by the agent):** import `cloudkit/schema.ckdb` into *development*
+(`xcrun cktool validate-schema` / `import-schema`, see `cloudkit/README.md`), test, then *Deploy Schema Changes…* to production.
+**Known limits:** the public database exposes each record's opaque creator id to readers (the same property the sighting records have), so a
+lease is *linkable per iCloud account* though it names no one; rotating the install session id does not change that. Expired leases from
+installs that never return stay in the table until a moderator purges them (a purge command is not built). Verified: unit tests for record
+naming, mapping, expiry and aggregation. **Not verified:** any live CloudKit read/write, the iPhone and watch builds on devices.

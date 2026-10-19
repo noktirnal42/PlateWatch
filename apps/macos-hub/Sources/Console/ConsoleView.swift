@@ -319,11 +319,11 @@ struct SettingsPane: View {
                 Text("Shares only an anonymous, expiring count of active processing consoles and selected feeds. No plates, frames, names, or history leave this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
                 LabeledContent("Presence status") { Text(hub.presenceStatus).foregroundStyle(hub.presenceStatus == "Live" ? Color.green : Color.secondary) }
-                TextField("Presence server (https://…, blank = this Mac, port 8083)", text: $presenceServer)
+                Text("Signed builds share counts through iCloud (CloudKit public database: anonymous leases that expire after two minutes). Unsigned development builds use the server address below instead.")
+                    .font(.caption).foregroundStyle(.secondary)
+                TextField("Development server (https://…, blank = this Mac, port 8083)", text: $presenceServer)
                     .onSubmit { savePresenceServer() }
                 if !presenceServerMessage.isEmpty { Text(presenceServerMessage).font(.caption).foregroundStyle(.secondary) }
-                Text("Counts only work when every client reaches the same presence server. Phones and watches cannot reach this Mac's localhost, so a shared server address is needed for cross-device counts.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             if ModeratorAccess.enrollmentOffered || moderator {
                 Section("Moderator") {

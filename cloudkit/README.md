@@ -46,3 +46,8 @@ Vapor reference server's moderator console and exports are the working path
 and "Recover CloudKit history" fail with `Field 'createdBy' is not marked queryable`. Re-run `cktool validate-schema` / `import-schema`
 against development, test the Hub handoff, then deploy to production. The owner runs this; no token belongs in the repo.
 
+
+## PresenceLease (added 2026-10-19)
+`schema.ckdb` now also declares `PresenceLease` (anonymous, 120-second live-presence leases; see `docs/PRESENCE-DESIGN.md`). Import it into
+*development* with the same `cktool validate-schema` / `import-schema` commands, verify a Hub heartbeat, then deploy to production. Until it is
+deployed the Hub shows "Offline · CloudKit schema not deployed" and nothing else is affected.

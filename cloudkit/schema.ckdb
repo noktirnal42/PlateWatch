@@ -70,3 +70,23 @@ RECORD TYPE Agency (
     budgetURL        STRING,
     GRANT READ TO "_world"
 );
+
+-- Live presence (docs/PRESENCE-DESIGN.md). One anonymous, short-lived lease per install; recordName is a hash of a
+-- random install-local id. Readable by everyone (aggregates are computed client-side), writable only by the creator.
+-- Leases carry no names, plates, frames or locations; only the Hub fills the counter fields.
+RECORD TYPE PresenceLease (
+    "___createTime"  TIMESTAMP QUERYABLE SORTABLE,
+    "___recordID"    REFERENCE QUERYABLE,
+    expiresAt        TIMESTAMP QUERYABLE SORTABLE,
+    platform         STRING,
+    activeProcessing INT64,
+    feedIDs          LIST<STRING>,
+    framesAnalyzed   INT64,
+    publicFeedFrames INT64,
+    fleetHitsToday   INT64,
+    skippedWhileBusy INT64,
+    outboxPending    INT64,
+    GRANT READ TO "_world",
+    GRANT WRITE TO "_creator",
+    GRANT CREATE TO "_icloud"
+);

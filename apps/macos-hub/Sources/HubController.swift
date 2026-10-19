@@ -157,7 +157,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         presenceStatus = "Off"
         Task { [weak self] in
             guard let self else { return }
-            try? await PresenceClient(baseURL: SyncBackends.mirrorURL()).release(sessionID: presenceSessionID)
+            try? await PresenceServices.makeDefault().release(sessionID: presenceSessionID)
         }
     }
 
@@ -173,11 +173,11 @@ final class HubController: ObservableObject, ReviewHubProviding {
                                                               skippedWhileBusy: framesDropped,
                                                               outboxPending: pendingCount))
         do {
-            presenceAggregate = try await PresenceClient(baseURL: SyncBackends.mirrorURL()).heartbeat(payload)
+            presenceAggregate = try await PresenceServices.makeDefault().heartbeat(payload)
             presenceStatus = "Live"
         } catch {
             // Feed processing remains local when the optional presence service is offline.
-            presenceStatus = "Offline · local processing continues"
+            presenceStatus = (error as? PresenceError)?.statusText ?? "Offline · local processing continues"
         }
     }
 

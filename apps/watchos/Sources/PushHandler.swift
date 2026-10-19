@@ -33,6 +33,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDel
         if let plates = session.applicationContext["watchlistPlates"] as? [String] {
             UserDefaults.standard.set(plates, forKey: "watchlistPlates")
         }
+        WatchPresenceCoordinator.ingest(session.receivedApplicationContext)
     }
 
     nonisolated func session(_ session: WCSession,
@@ -40,6 +41,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDel
                              error: Error?) {}
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        WatchPresenceCoordinator.ingest(applicationContext)
         guard let plates = applicationContext["watchlistPlates"] as? [String] else { return }
         UserDefaults.standard.set(plates, forKey: "watchlistPlates")
     }
