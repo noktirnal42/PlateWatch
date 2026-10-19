@@ -196,7 +196,7 @@ struct FeedsPane: View {
                 .help("Use the eye column or Watch favorites to select cameras for background analysis. This avoids polling thousands of public endpoints at once.")
             }
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
-            if tab != .favorites { controls }
+            controls
             if tab == .favorites { favoritesGrid } else { listAndPreview }
             if tab != .favorites {
                 Text(tab == .blocked
@@ -219,7 +219,7 @@ struct FeedsPane: View {
         .onChange(of: runner.stateRevision) { _, _ in if statusFilter != nil || sortKey == .status { refreshRows() } }
         .onChange(of: tab) { _, _ in refreshRows() }
         .onChange(of: tab) { _, value in
-            if value == .blocked { browser.query = ""; browser.hostFilter = ""; browser.statusFilter = nil; browser.save() }
+            if value == .blocked { browser.clearFilters() }
         }
         .onChange(of: hub.importStatus) { _, _ in reload() }
         .sheet(item: Binding(get: { reviewing.map(HostBox.init) }, set: { reviewing = $0?.host })) { box in
@@ -372,9 +372,15 @@ struct FeedsPane: View {
     }
 
     private var favoritesGrid: some View {
-        let favs = (catalogue?.sources ?? []).filter { favorites.contains($0.id) && !favorites.isBlocked($0.id) }.sorted { $0.name < $1.name }
+        let favs = rows   // already scoped to favorites and run through the search, filters and sort above
         return Group {
-            if favs.isEmpty {
+            if favs.isEmpty && browser.hasActiveFilters && !favorites.ids.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal.decrease.circle").font(.largeTitle).foregroundStyle(.secondary)
+                    Text("No favorites match these filters").font(.headline)
+                    Button("Clear filters") { browser.clearFilters(); reload() }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if favs.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "star").font(.largeTitle).foregroundStyle(.secondary)
                     Text("No favorites yet").font(.headline)

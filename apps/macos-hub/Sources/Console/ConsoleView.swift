@@ -1,5 +1,6 @@
 import AVFoundation
 import FeedIngest
+import PlateSync
 import SwiftUI
 
 /// The Hub's main window: one place to see and control every source, the analysis models, review, and
@@ -276,6 +277,18 @@ struct SettingsPane: View {
     @State private var server = ""
     @State private var token = ""
     @State private var note = ""
+    @State private var presenceServer = SyncSettings.load().mirrorURL ?? ""
+    @State private var presenceServerMessage = ""
+
+    private func savePresenceServer() {
+        do {
+            var settings = SyncSettings.load()
+            settings.mirrorURL = presenceServer
+            try settings.save()
+            presenceServerMessage = "Saved. Presence uses \(SyncBackends.mirrorURL().absoluteString)."
+            hub.refreshPresence()
+        } catch { presenceServerMessage = error.localizedDescription }
+    }
 
     var body: some View {
         Form {
@@ -304,6 +317,12 @@ struct SettingsPane: View {
                 Toggle("Share live processing counts", isOn: Binding(get: { hub.presenceEnabled }, set: { hub.presenceEnabled = $0 }))
                     .onChange(of: hub.presenceEnabled) { _, _ in hub.refreshPresence() }
                 Text("Shares only an anonymous, expiring count of active processing consoles and selected feeds. No plates, frames, names, or history leave this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("Presence status") { Text(hub.presenceStatus).foregroundStyle(hub.presenceStatus == "Live" ? Color.green : Color.secondary) }
+                TextField("Presence server (https://…, blank = this Mac, port 8083)", text: $presenceServer)
+                    .onSubmit { savePresenceServer() }
+                if !presenceServerMessage.isEmpty { Text(presenceServerMessage).font(.caption).foregroundStyle(.secondary) }
+                Text("Counts only work when every client reaches the same presence server. Phones and watches cannot reach this Mac's localhost, so a shared server address is needed for cross-device counts.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if ModeratorAccess.enrollmentOffered || moderator {

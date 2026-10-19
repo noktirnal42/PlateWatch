@@ -51,10 +51,14 @@ public struct PresenceHeartbeat: Codable, Sendable, Equatable {
                 stats: PresenceStats? = nil) {
         self.sessionID = sessionID
         self.platform = platform
-        self.feedIDs = feedIDs
+        // The server keeps at most 100 feed IDs per lease and rejects bodies over Vapor's 16 KB default
+        // (HTTP 413). A Hub watching ~1,300 cameras sent ~50 KB and every heartbeat failed, so cap here, deterministically.
+        self.feedIDs = Array(feedIDs.sorted { $0.uuidString < $1.uuidString }.prefix(Self.maxFeedIDs))
         self.activeProcessing = activeProcessing
         self.stats = stats
     }
+
+    public static let maxFeedIDs = 100
 }
 
 /// REST presence client. The caller owns the opt-in setting and controls when

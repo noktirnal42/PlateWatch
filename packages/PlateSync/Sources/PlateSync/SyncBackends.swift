@@ -42,6 +42,7 @@ public enum SyncBackends {
     /// - Entitled build  → CloudKit public DB (production path)
     /// - Otherwise       → REST to the configurable mirror (dev default:
     ///   localhost:8083 where `server/` runs). Never nil, never crashes.
+    /// Presence, REST and diagnostics all resolve the server through `mirrorURL`, so one saved address serves every feature.
     public static func makeDefault(destination: Destination = .automatic) -> any SyncBackend {
         if destination != .referenceServer && cloudKitAvailable() {
             return CloudKitBackend()
@@ -62,7 +63,7 @@ public enum SyncBackends {
     /// mirror URL → the local reference-server default. Invalid values fall back
     /// safely; plaintext remote servers and embedded credentials are refused.
     public static func mirrorURL(override: String? = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"],
-                                 stored: String? = nil) -> URL {
+                                 stored: String? = SyncSettings.load().mirrorURL) -> URL {
         if let override, let url = validatedMirrorURL(override) { return url }
         if let stored, let url = validatedMirrorURL(stored) { return url }
         return defaultMirrorURL

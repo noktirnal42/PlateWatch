@@ -31,3 +31,10 @@ Implementation boundary:
 
 This is feasible with the current REST boundary. CloudKit remains the
 submission/sighting sync channel; it is not used as a presence database.
+
+## Diagnosis and fixes — 2026-10-19 ("sessions and live processors don't work on any platform")
+Three independent causes, found by running the Hub against a freshly built server:
+1. **Heartbeat rejected with HTTP 413.** The Hub sent every watched feed ID (1,295 → ~50 KB); the server keeps ≤ 100 and Vapor's default body limit is 16 KB. Every heartbeat failed, so the dashboard showed "—". Fixed in `PresenceHeartbeat` (IDs capped at 100, deterministic order, unit-tested to stay under 16 KB) — applies to Hub, iOS and watch.
+2. **The installed local reference server predates presence.** `~/Library/Application Support/PlateWatchServer/bin/App` (built 2026-10-15) answers 404 for `/v1/presence`; presence landed 2026-10-16. A current build (`swift build --package-path server`) serves heartbeat/aggregate/release correctly; with it the Hub reported 1 session, 1 processor and its stats. **Replacing the installed binary is an owner decision and has not been done.**
+3. **Phones and watches cannot reach `127.0.0.1` on the Mac.** Presence resolves its server through `SyncBackends.mirrorURL()`, whose default is localhost:8083, so counts only ever worked Mac-to-Mac. `mirrorURL()` now honours the saved server address (iOS About → Backend, Hub Settings → "Presence server"), but a shared, reachable server (HTTPS) is still required for cross-device counts. The watch keeps its own defaults domain and has no setting yet. Presence is in-memory on that server and is deliberately not available on CloudKit-only deployments.
+Verified: PlateSync unit test; Hub ↔ temporary server end-to-end (1 session). Not verified: iOS/watch against a shared server.

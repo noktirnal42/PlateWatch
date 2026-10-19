@@ -7,12 +7,12 @@ final class BackendSelectionTests: XCTestCase {
     }
 
     func testReferenceServerPortMatchesLocalServer() {
-        XCTAssertEqual(SyncBackends.mirrorURL(override: nil).absoluteString, "http://127.0.0.1:8083")
+        XCTAssertEqual(SyncBackends.mirrorURL(override: nil, stored: nil).absoluteString, "http://127.0.0.1:8083")
     }
 
     func testUnsafeAndMalformedOverridesDoNotCrashOrSendCredentials() {
         for value in ["", "://", "http://example.com", "https://user:secret@example.com", "https://example.com/?token=secret", "file:///tmp/server"] {
-            XCTAssertEqual(SyncBackends.mirrorURL(override: value), SyncBackends.mirrorURL(override: nil))
+            XCTAssertEqual(SyncBackends.mirrorURL(override: value, stored: nil), SyncBackends.mirrorURL(override: nil, stored: nil))
         }
         XCTAssertEqual(SyncBackends.mirrorURL(override: "https://mirror.example.com").host, "mirror.example.com")
         XCTAssertEqual(SyncBackends.mirrorURL(override: "http://localhost:8083").port, 8083)
@@ -39,5 +39,12 @@ final class BackendSelectionTests: XCTestCase {
 
     func testConfiguredReferenceServerBackendIsREST() {
         XCTAssertTrue(SyncBackends.makeConfigured(settings: SyncSettings(destination: .referenceServer, mirrorURL: "https://m.example.org")) is RESTBackend)
+    }
+
+    func testHeartbeatCapsFeedIDsSoLargeHubsFitTheServerBodyLimit() throws {
+        let ids = (0..<1_300).map { _ in UUID() }
+        let beat = PresenceHeartbeat(sessionID: "session-0000000000000001", platform: "macOS-hub", feedIDs: ids, activeProcessing: true)
+        XCTAssertEqual(beat.feedIDs.count, PresenceHeartbeat.maxFeedIDs)
+        XCTAssertLessThan(try JSONEncoder().encode(beat).count, 16 * 1024, "must fit Vapor's default 16 KB request body")
     }
 }
