@@ -51,5 +51,5 @@ read-only and https-only; see ACCOUNTABILITY-DATA.md for the storage and safety 
 
 Due dates come from `FOIADeadlines`. Virginia (Va. Code § 2.2-3704(B)) was read from the statute text on 2026-10-18.
 California's AB 1821 was chaptered 2026-09-30; the table keeps the current 10-calendar-day rule for requests filed
-before 2027-01-01 and switches to 10 business days afterwards. Other states remain marked unverified.
+before 2027-01-01 and switches to 10 business days afterwards. The federal rule and TX, IL, MA, WA, NY, CT and NH were also read from statute text on 2026-10-18 (TX via a republication of the code because the official site is script-rendered). California's statute text could not be retrieved from the sources available and stays unverified. The tracker counts business days as weekdays only; legal holidays are not skipped.
 

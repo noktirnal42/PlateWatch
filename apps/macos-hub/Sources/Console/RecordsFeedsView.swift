@@ -18,6 +18,8 @@ struct RecordsFeedsView: View {
     @State private var notice = ""
     @State private var readerNotice = ""
     @State private var showSuggestions = false
+    /// Collapsed group names, persisted as a JSON array in UserDefaults.
+    @State private var collapsedGroups: Set<String> = Set((UserDefaults.standard.stringArray(forKey: "hubRecords_feedsCollapsedGroups")) ?? [])
     @AppStorage("hubRecords_feedsSidebarWidth") private var sidebarWidth = 260.0
     @AppStorage("hubRecords_feedsListWidth") private var listWidth = 330.0
 
@@ -46,15 +48,26 @@ struct RecordsFeedsView: View {
             List(selection: $scope) {
                 Label("All feeds", systemImage: "tray.2").badge(library.unreadCount()).tag(Scope.all)
                 ForEach(library.groups, id: \.self) { group in
-                    Label(group, systemImage: "folder")
-                        .fontWeight(.semibold)
-                        .badge(library.unreadCount(inGroup: group))
-                        .tag(Scope.group(group))
-                        .contextMenu {
-                            Button("Mark group read") { workspace.rss.markAllRead(inGroup: group) }
-                            Button("Refresh group") { Task { for id in library.feedIDs(inGroup: group) { await workspace.refreshFeed(id) } } }
+                    let collapsed = collapsedGroups.contains(group)
+                    HStack(spacing: 4) {
+                        Button { toggle(group) } label: {
+                            Image(systemName: collapsed ? "chevron.right" : "chevron.down").imageScale(.small).frame(width: 14)
                         }
-                    ForEach(library.subscriptions.filter { $0.group == group }) { feedRow($0).padding(.leading, 14) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(collapsed ? "Expand \(group)" : "Collapse \(group)")
+                        Label(group, systemImage: "folder").fontWeight(.semibold)
+                        Spacer(minLength: 0)
+                    }
+                    .badge(library.unreadCount(inGroup: group))
+                    .tag(Scope.group(group))
+                    .contextMenu {
+                        Button(collapsed ? "Expand" : "Collapse") { toggle(group) }
+                        Button("Mark group read") { workspace.rss.markAllRead(inGroup: group) }
+                        Button("Refresh group") { Task { for id in library.feedIDs(inGroup: group) { await workspace.refreshFeed(id) } } }
+                    }
+                    if !collapsed {
+                        ForEach(library.subscriptions.filter { $0.group == group }) { feedRow($0).padding(.leading, 14) }
+                    }
                 }
                 let ungrouped = library.subscriptions.filter { $0.group.isEmpty }
                 if !ungrouped.isEmpty {
@@ -167,6 +180,11 @@ struct RecordsFeedsView: View {
                 workspace.rss.unsubscribe(sub.id)
             }
         }
+    }
+
+    private func toggle(_ group: String) {
+        if collapsedGroups.contains(group) { collapsedGroups.remove(group) } else { collapsedGroups.insert(group) }
+        UserDefaults.standard.set(Array(collapsedGroups), forKey: "hubRecords_feedsCollapsedGroups")
     }
 
     private func promptGroup(for sub: RSSSubscription) {
