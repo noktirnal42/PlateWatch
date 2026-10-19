@@ -221,6 +221,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         case iowa = "Iowa DOT (about 1,300)"
         case newMexico = "New Mexico — NMRoads (about 185 cameras)"
         case utah = "Utah — UDOT public GIS (about 480 cameras)"
+        case utahAPI = "Utah — UDOT camera API (needs API key)"
         case oregon = "Oregon — TripCheck (about 1,160)"
         var id: String { rawValue }
         var key: String {
@@ -232,6 +233,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
             case .iowa: "iowa"
             case .oregon: "oregon"
             case .utah: "utah"
+            case .utahAPI: "utah-api"
             case .newMexico: "new-mexico"
             }
         }
@@ -282,6 +284,19 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 let (data, response) = try await fetchSigned(request)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
                 result = try AZ511Cameras.sources(fromJSON: data, key: key)
+            case .utahAPI:
+                guard let key = SourceCredentials.key(for: "utah-api"), !key.isEmpty else {
+                    importStatus = "The UDOT camera API needs a key. Add one in Settings › Source API keys — the signup link is next to the key field."
+                    return
+                }
+                var request = URLRequest(url: UDOTCameras.endpoint
+                    .appending(queryItems: [URLQueryItem(name: "key", value: key),
+                                            URLQueryItem(name: "format", value: "json")]))
+                request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 60
+                let (data, response) = try await fetchSigned(request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                result = try UDOTCameras.sources(fromJSON: data, key: key)
             case .nevada:
                 // One catalogue request per import — well inside the 10 calls / 60 s the API allows.
                 guard let key = SourceCredentials.key(for: "nv511"), !key.isEmpty else {

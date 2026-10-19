@@ -40,6 +40,14 @@ public enum AZ511Cameras {
             items = []
         }
 
+        // The published schema nests snapshot URLs under `Views` (shared IBI 511 shape). The flat shape below is kept
+        // for older fixtures and wrapper variants.
+        if items.contains(where: { ($0 as? [String: Any])?["Views"] != nil }) {
+            return try IBI511.sources(fromJSON: JSONSerialization.data(withJSONObject: items), key: key,
+                                      config: .init(state: "AZ", label: "AZ511", attribution: "Arizona 511 / ADOT"),
+                                      endpointURL: endpointURL, refreshInterval: refreshInterval, retrievedAt: retrievedAt)
+        }
+
         var sources: [PublicFeedSource] = []
         var skipped: [SkipReason] = []
         var seen = Set<String>()
