@@ -366,7 +366,9 @@ struct FeedsPane: View {
             }
             .frame(minWidth: 430)
             CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
-                               source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } })
+                               source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } },
+                               location: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } }.map(locationLabel) ?? "",
+                               provider: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } }.map(providerLabel) ?? "")
                 .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
         }
     }
@@ -389,7 +391,7 @@ struct FeedsPane: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
-                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, isActive: isActive, onOpenLive: onOpenLive) }
+                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, location: locationLabel($0), provider: providerLabel($0), isActive: isActive, onOpenLive: onOpenLive) }
                     }.padding(.bottom, 8)
                 }
             }
@@ -436,6 +438,8 @@ struct FavoriteTile: View {
     @ObservedObject var hub: HubController
     @ObservedObject var favorites: FeedFavorites
     let source: PublicFeedSource
+    let location: String
+    let provider: String
     let isActive: Bool
     var onOpenLive: () -> Void
     @State private var image: NSImage?
@@ -451,12 +455,6 @@ struct FavoriteTile: View {
             }.aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 8))
             HStack {
                 Text(source.name).font(.callout.bold()).lineLimit(1)
-                if let state = source.state {
-                    Text(state).font(.caption2.bold())
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
-                        .help("State recorded by the catalogue import")
-                }
                 Spacer()
                 Button { favorites.toggle(source.id) } label: { Image(systemName: "star.fill").foregroundStyle(.yellow) }
                     .buttonStyle(.plain).help("Remove from favorites")
@@ -468,7 +466,9 @@ struct FavoriteTile: View {
                 hub.openFeedInLive(source); onOpenLive()
             }.help("Open this camera's analysed snapshots in Live")
                 .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
-            Text(source.url.host ?? "").font(.caption2).foregroundStyle(.secondary).monospaced()
+            Text(location).font(.caption.weight(.medium)).lineLimit(1)
+                .help("Nearest Census place to the camera's position, not a jurisdiction boundary")
+            Text(provider).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
         }
         .task(id: "\(source.id)-\(isActive)") {
             guard isActive else { image = nil; return }
@@ -496,6 +496,8 @@ struct CameraPreviewPanel: View {
     let isActive: Bool
     var onOpenLive: () -> Void
     let source: PublicFeedSource?
+    var location: String = ""
+    var provider: String = ""
     @State private var image: NSImage?
     @State private var fetchedAt: Date?
     @State private var message = ""
@@ -515,7 +517,8 @@ struct CameraPreviewPanel: View {
                     FeedBlockButton(hub: hub, preferences: favorites, source: source)
                     FeedWatchButton(hub: hub, favorites: favorites, source: source)
                 }
-                Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
+                if !location.isEmpty { Text(location).font(.subheadline.weight(.medium)) }
+                Text(provider.isEmpty ? (source.url.host ?? "") : provider).font(.caption).foregroundStyle(.secondary)
                 Label(source.kind == .hls ? "HLS video · sampled analysis" : "Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: source.kind == .hls ? "video" : "photo")
                     .font(.caption).foregroundStyle(.secondary)
                 ZStack {
