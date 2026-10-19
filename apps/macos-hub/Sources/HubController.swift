@@ -1195,11 +1195,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// all (docs/FEED-SOURCES.md §1-2).
     private func feedIdentity(vehicle: VehicleObservation, markings: FleetMarkings, confidence: Double,
                               tier: AnalysisTier, geohash6: String) -> VehicleIdentity? {
-        guard tier != .appearanceOnly else { return nil }
-        return identityResolver.syncIdentity(vehicle: vehicle, markings: markings, confidence: confidence,
-                                             location: .init(geohash6: geohash6),
-                                             forceReview: !tier.identityMayBeConfirmed)
+        FeedIdentity.resolve(resolver: identityResolver, vehicle: vehicle, markings: markings, confidence: confidence,
+                             tier: tier, geohash6: geohash6)
     }
+
 
     nonisolated private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
         connection.send(content: HTTPResponses.text(status: status, body), completion: .contentProcessed { _ in

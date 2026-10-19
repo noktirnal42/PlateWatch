@@ -89,7 +89,13 @@ It must come from where the **frame** was captured, never from the device that h
 | Public camera feed (511/DOT, transit, port cams) | the camera's catalogued fixed position — `PublicFeedSource.geohash6` is mandatory |
 | Hub (IP cameras, folder drops) | the operator-set `homeGeohash6` for that camera |
 
-Not yet wired: the Hub and feed pipelines do not run `IdentityResolver` at all today (their submissions carry no `identity`),
-so feed frames currently get no benefit. When they do, pass the source's geohash centre as the `LocationHint`. Feed frames
-have **no phone GPS and no EXIF** — fixed-camera metadata is the only reliable location there. A source with no known
-location falls back to "state unknown — which one?" (and, later, to plate-state evidence).
+Wired in the Hub (verified 2026-10-18): every ingest path — folder drops, the local HTTP endpoint, public camera feeds and
+selected Live frames — records fleet hits through `HubController.recordFleetHits`, which calls `FeedIdentity.resolve`
+(`apps/macos-hub/Sources/FeedIdentity.swift`) and puts the result in the submission's `identity`. The location hint is the
+frame source's geohash centre (a feed's catalogued position or the operator-set home bucket for Hub cameras), never this Mac's;
+frames below full resolution are flagged for review and carry no registration; the smallest frames assert no identity. Pinned by
+`FeedIdentityTests` (camera position settles Minneapolis MN vs elsewhere, tier rules, identity survives the wire encoding) on top of
+the PlateKit resolver tests. Feed frames have **no phone GPS and no EXIF** — fixed-camera metadata is the only reliable location
+there. A source with no known location falls back to "state unknown — which one?" (and, later, to plate-state evidence).
+Still open: the plate-design classifier for plate state (see "Known gap" above), and a live end-to-end check that a moderator sees
+the agency on a feed-sourced sighting.
