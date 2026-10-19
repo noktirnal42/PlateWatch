@@ -42,15 +42,17 @@ struct RecordsPane: View {
                 Text("Requests").tag(3)
                 Text("Court & lists").tag(4)
                 Text("People").tag(5)
+                Text("Feeds").tag(6)
                 Text("Directory").tag(1)
                 Text("Programme").tag(2)
-            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 640)
             ZStack {
                 if tab == 0 || visitedTabs.contains(0) { builder.opacity(tab == 0 ? 1 : 0).allowsHitTesting(tab == 0).accessibilityHidden(tab != 0).disabled(tab != 0) }
                 if tab == 1 || visitedTabs.contains(1) { directory.opacity(tab == 1 ? 1 : 0).allowsHitTesting(tab == 1).accessibilityHidden(tab != 1).disabled(tab != 1) }
                 if tab == 3 || visitedTabs.contains(3) { RecordsRequestsView().opacity(tab == 3 ? 1 : 0).allowsHitTesting(tab == 3).accessibilityHidden(tab != 3).disabled(tab != 3) }
                 if tab == 4 || visitedTabs.contains(4) { RecordsCourtListsView().opacity(tab == 4 ? 1 : 0).allowsHitTesting(tab == 4).accessibilityHidden(tab != 4).disabled(tab != 4) }
                 if tab == 5 || visitedTabs.contains(5) { RecordsPeopleView().opacity(tab == 5 ? 1 : 0).allowsHitTesting(tab == 5).accessibilityHidden(tab != 5).disabled(tab != 5) }
+                if tab == 6 || visitedTabs.contains(6) { RecordsFeedsView().opacity(tab == 6 ? 1 : 0).allowsHitTesting(tab == 6).accessibilityHidden(tab != 6).disabled(tab != 6) }
                 if tab == 2 || visitedTabs.contains(2) { programme.opacity(tab == 2 ? 1 : 0).allowsHitTesting(tab == 2).accessibilityHidden(tab != 2).disabled(tab != 2) }
             }
             .onChange(of: tab) { _, value in visitedTabs.insert(value) }
