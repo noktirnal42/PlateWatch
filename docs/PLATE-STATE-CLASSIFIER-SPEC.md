@@ -1,6 +1,6 @@
 # PLATE-STATE-CLASSIFIER-SPEC.md — research, plan and spec for plate-state recognition
 
-Status: **plan only (2026-10-19). Nothing is trained and no images are downloaded.** This extends, and does not replace,
+Status: **plan + first baseline (2026-10-19).** P2 (crawl) and P4 (headless baseline) ran; result is below the acceptance bar — see MODEL-TRAINING §7. No model is registered or wired in. (Original wording: plan only, nothing trained.) This extends, and does not replace,
 [PLATE-DESIGN-DATASET.md](PLATE-DESIGN-DATASET.md) (licensing gate), [MODEL-TRAINING.md](MODEL-TRAINING.md) §4c and the
 "Known gap" in [IDENTITY.md](IDENTITY.md). Research notes are from web searches on 2026-10-19; every licence below must be read
 on the source's own page before any file is used.
