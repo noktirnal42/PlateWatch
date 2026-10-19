@@ -101,6 +101,8 @@ A screenshot audit does not replace a full spoken VoiceOver pass.
    they do not constitute a public archive or retract a backend record.
 4. Runtime-configurable mirror settings are still missing. Simulator development
    can set `PLATEWATCH_MIRROR_URL`; device backend configuration is owned by WS5.
+   **2026-10-19:** About → Backend now saves a destination (Automatic / Self-hosted server) and an https (or localhost http) server address via
+   `PlateSync.SyncSettings`; it applies on next launch. Unit-tested in PlateSync; not yet exercised on a signed device or against a live remote server.
 5. Recognition improvements and the open model-release PR remain WS3. No accuracy
    claim was remeasured by this visual pass, and no weights were committed.
 6. Physical watch push/haptics, CarPlay entitlement, signed release packaging,

@@ -103,15 +103,16 @@ public extension EnvironmentValues {
 /// Keep this app boundary explicit; signed physical-device builds use PlateSync.
 enum AppSyncConfiguration {
     static func makeBackend() -> any SyncBackend {
+        let settings = SyncSettings.load()
         #if targetEnvironment(simulator)
         let configured = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"]
-        let fallback = URL(string: "http://127.0.0.1:8083")!
+        let fallback = SyncBackends.mirrorURL(override: nil, stored: settings.mirrorURL)
         let url = configured.flatMap(URL.init(string:)).flatMap {
             ["http", "https"].contains($0.scheme?.lowercased() ?? "") && $0.host != nil ? $0 : nil
         } ?? fallback
         return RESTBackend(baseURL: url)
         #else
-        return SyncBackends.makeDefault()
+        return SyncBackends.makeConfigured(settings: settings)
         #endif
     }
 }

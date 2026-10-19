@@ -49,15 +49,74 @@ public enum SyncBackends {
         return RESTBackend(baseURL: mirrorURL())
     }
 
-    /// Invalid overrides fall back safely; plaintext remote servers and embedded credentials are refused.
-    public static func mirrorURL(override: String? = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"]) -> URL {
-        if let override, let url = URL(string: override),
-           url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
-           let host = url.host, !host.isEmpty,
-           url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1", "::1"].contains(host)) {
-            return url
+    /// The backend honoring the user's saved in-app choice (`SyncSettings`).
+    /// Read at launch; changing the setting takes effect on the next launch.
+    public static func makeConfigured(settings: SyncSettings = .load()) -> any SyncBackend {
+        if settings.destination != .referenceServer && cloudKitAvailable() {
+            return CloudKitBackend()
         }
-        return URL(string: "http://127.0.0.1:8083")!
+        return RESTBackend(baseURL: mirrorURL(override: nil, stored: settings.mirrorURL))
     }
 
+    /// Resolution order: environment override (developer builds) → saved in-app
+    /// mirror URL → the local reference-server default. Invalid values fall back
+    /// safely; plaintext remote servers and embedded credentials are refused.
+    public static func mirrorURL(override: String? = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"],
+                                 stored: String? = nil) -> URL {
+        if let override, let url = validatedMirrorURL(override) { return url }
+        if let stored, let url = validatedMirrorURL(stored) { return url }
+        return defaultMirrorURL
+    }
+
+    public static let defaultMirrorURL = URL(string: "http://127.0.0.1:8083")!
+
+    /// Returns the URL only when it is safe to send submissions to: https, or http to loopback.
+    public static func validatedMirrorURL(_ text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              let host = url.host, !host.isEmpty,
+              url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1", "::1"].contains(host))
+        else { return nil }
+        return url
+    }
+
+}
+
+/// User-chosen backend settings, persisted in `UserDefaults` (never Keychain: it holds no
+/// secrets — `validatedMirrorURL` refuses embedded credentials and query tokens).
+public struct SyncSettings: Equatable, Sendable {
+    public static let destinationKey = "PlateWatchBackendDestination"
+    public static let mirrorURLKey = "PlateWatchMirrorURL"
+
+    public var destination: SyncBackends.Destination
+    /// Raw text as saved; validated again on every use.
+    public var mirrorURL: String?
+
+    public init(destination: SyncBackends.Destination = .automatic, mirrorURL: String? = nil) {
+        self.destination = destination
+        self.mirrorURL = mirrorURL
+    }
+
+    public static func load(_ defaults: UserDefaults = .standard) -> SyncSettings {
+        SyncSettings(
+            destination: defaults.string(forKey: destinationKey).flatMap(SyncBackends.Destination.init(rawValue:)) ?? .automatic,
+            mirrorURL: defaults.string(forKey: mirrorURLKey))
+    }
+
+    /// Saves valid settings. A blank URL clears the override; an invalid one throws and saves nothing.
+    public func save(_ defaults: UserDefaults = .standard) throws {
+        let trimmed = (mirrorURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, SyncBackends.validatedMirrorURL(trimmed) == nil { throw SyncSettingsError.unsafeMirrorURL }
+        defaults.set(destination.rawValue, forKey: Self.destinationKey)
+        if trimmed.isEmpty { defaults.removeObject(forKey: Self.mirrorURLKey) }
+        else { defaults.set(trimmed, forKey: Self.mirrorURLKey) }
+    }
+}
+
+public enum SyncSettingsError: Error, LocalizedError, Sendable {
+    case unsafeMirrorURL
+    public var errorDescription: String? {
+        "Use an https:// address, or http:// only for this device (localhost). Addresses with a password or query string are refused."
+    }
 }
