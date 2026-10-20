@@ -67,3 +67,6 @@ naming, mapping, expiry and aggregation. **Not verified:** any live CloudKit rea
 
 ### Development schema status — 2026-10-19
 The CloudKit Console (container `iCloud.org.platewatch.platewatch`, **Development**) already had `PresenceLease` with all eleven fields (queryable/sortable indexes on each), and the security roles matched `schema.ckdb` (`_world` read only; `_icloud` and `_creator` listed). Metadata indexes (`recordName`, `createdTimestamp`) show "None" and were left unchanged because queries use `expiresAt`. **Verified live in Development:** the installed Hub (signed, CloudKit-entitled) published a lease and its dashboard showed "Live demand 1 sessions · 1 processors". **Not done:** deploying the schema to Production (owner step), and the iPhone/watch builds have not been run on devices, so the phone-to-Hub count and the watch relay are still unverified.
+
+### Cross-device check — 2026-10-19 17:05
+With the Release iPhone build installed and presence switched on, the Hub dashboard showed **2 sessions · 1 processor** (Hub + iPhone; the phone was not scanning). The watch relay and Production (the schema was only in Development) are still unverified.

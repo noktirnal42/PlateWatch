@@ -116,3 +116,6 @@ The watchlist duplicate-validation UI test asserted a message while the keyboard
 obscure it. It now dismisses the keyboard and waits for the same duplicate warning,
 without changing validation or weakening the assertion. The targeted add/mute/delete
 flow passed on the local iOS 27 iPhone 18 Pro simulator. Full CI remains a separate check.
+
+## Photo-import hang on device — 2026-10-19
+The owner's first test (a Debug build on the iPhone 16 Pro Max) never finished analysing a test photo and the phone got hot; no crash log was produced (device Jetsam logs show PlateWatch at ~440–680 MB, not killed). The Release build finished the same kind of photo in "a few seconds" (owner report). Debug builds of the Swift pipeline are not representative for on-device timing — test with Release. Added regardless: a 120 s limit on photo analysis ("Analysis timed out") and an 8 s limit on the Apple Intelligence markings parse (falls back to the deterministic parse).
