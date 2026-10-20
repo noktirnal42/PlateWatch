@@ -1,6 +1,6 @@
 // Cuts the plate out of every image under <src>/<State>/ with the plate detector so the state classifier learns the
 // plate DESIGN, not the car or scene (docs/PLATE-STATE-CLASSIFIER-SPEC.md §3). If no plate is found but the image
-// is already plate-shaped (aspect 1.6–2.4, e.g. a flat scan) it is kept whole; anything else is skipped.
+// is already plate-shaped (aspect 1.5–2.4, e.g. a flat scan) it is kept whole; anything else is skipped.
 // Usage: swiftc -O scripts/plate_crops.swift -o /tmp/plate_crops && /tmp/plate_crops <src> <out> <plate-detector.mlmodel>
 import Foundation
 import CoreImage
@@ -20,7 +20,6 @@ var manifest: [[String: Any]] = []; var cropped = 0, whole = 0, skipped = 0
 for cls in try! fm.contentsOfDirectory(atPath: src).sorted() {
   var isDir: ObjCBool = false
   guard fm.fileExists(atPath: "\(src)/\(cls)", isDirectory: &isDir), isDir.boolValue else { continue }
-  try? fm.createDirectory(atPath: "\(out)/\(cls)", withIntermediateDirectories: true)
   for f in try! fm.contentsOfDirectory(atPath: "\(src)/\(cls)").sorted() where ["jpg","jpeg","png"].contains((f as NSString).pathExtension.lowercased()) {
     guard let ci = CIImage(contentsOf: URL(fileURLWithPath: "\(src)/\(cls)/\(f)")) else { skipped += 1; continue }
     let req = VNCoreMLRequest(model: vm); req.imageCropAndScaleOption = .scaleFit
@@ -35,9 +34,10 @@ for cls in try! fm.contentsOfDirectory(atPath: src).sorted() {
     let aspect = ci.extent.width / ci.extent.height
     let image: CIImage
     if let rect { image = ci.cropped(to: rect); cropped += 1 }
-    else if (1.6...2.4).contains(aspect) { image = ci; whole += 1 }
+    else if (1.5...2.4).contains(aspect) { image = ci; whole += 1 }
     else { skipped += 1; continue }
     guard let cg = ctx.createCGImage(image, from: image.extent) else { skipped += 1; continue }
+    try? fm.createDirectory(atPath: "\(out)/\(cls)", withIntermediateDirectories: true)
     let name = ((f as NSString).deletingPathExtension) + ".jpg"
     let d = CGImageDestinationCreateWithURL(URL(fileURLWithPath: "\(out)/\(cls)/\(name)") as CFURL, UTType.jpeg.identifier as CFString, 1, nil)!
     CGImageDestinationAddImage(d, cg, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary); CGImageDestinationFinalize(d)
