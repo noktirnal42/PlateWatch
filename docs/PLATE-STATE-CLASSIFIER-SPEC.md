@@ -106,3 +106,6 @@ Licences of converted/pre-trained backbones are recorded in `models/registry.jso
 3. Are state DMV design images acceptable, or only scans/CC sources?
 4. Is a Kaggle account available for reading/downloading the `gpiosenka` set (human credential step), once its licence is read?
 5. Do you want the fleet-confirmation labelling loop (P3) enabled, given it reuses locally confirmed Review crops for *local* training only?
+
+## Status 2026-10-19 (end of day)
+Owner approved sources (b) DMV specimens and (c) local fleet-confirmed crops. (b): no state could be confirmed usable (see PLATE-DESIGN-DATASET.md), nothing downloaded; a permission-request text is drafted there for the owner to send. (c): exporter built (`scripts/export_fleet_plate_crops.py`), 0 qualifying items today. Best baseline remains 72.1 % test on 32 states (MODEL-TRAINING §7), below the acceptance bar.

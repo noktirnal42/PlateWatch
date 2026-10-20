@@ -61,3 +61,13 @@ and read directly before the gate can clear.
 
 The gate already treats a missing design as non-exempt
 (`RedactionGateService`), so nothing breaks while this is pending.
+
+## Review of state DMV specimen images — 2026-10-19 (owner asked to use them "where licence or permission allows")
+Result: **no state is confirmed usable; nothing was downloaded.**
+- No DMV page I could read states a licence for reuse. Virginia's DMV media page (<https://www.dmv.virginia.gov/news/media>) offers three plate images (Standard Passenger, Autumn, Eyes on the Road) "for media use" with no stated terms; "media use" is not a grant for model training, and Virginia's college/organisation plate pages say sponsor-owned designs are copyrighted by the sponsor (state-created scenic plates by the Commonwealth).
+- General position found: a state usually owns the copyright in designs it commissioned or created, designs by outside artists belong to the artist (e.g. California's Arts plate), and a Commons "government work" tag on a *photograph* does not clear the underlying design. So an unlicensed specimen image is a legal risk even if freely downloadable.
+- What would clear a state: a written statement (licence, terms page or email) permitting use of its standard-issue plate image for training a non-commercial open-source classifier; only standard-issue base designs are wanted, not specialty/sponsor plates. Requesting it is an outward-facing message and is the owner's to send. Suggested request text: "PlateWatch is an open-source, non-commercial project that classifies a plate's issuing state from its design. May we use the standard-issue [State] passenger plate image from your website as one training example, with attribution to [Agency]? We will not redistribute the image."
+- Until a state replies in writing, keep using the Commons sources already recorded (CC0 / PD / CC BY / CC BY-SA per file) and synthetic variation of them.
+
+## Local fleet-confirmation set — 2026-10-19
+`scripts/export_fleet_plate_crops.py` exports the operator's own agency-resolved Review crops (label = state of the resolved agency key; local, gitignored, never uploaded). Today it finds **0 usable items** (the Review queue is empty and the Hub's evidence archive holds 2 files), so this source adds no data yet; the 3 photos in `eval/user/` are acceptance cases and must stay out of training.
