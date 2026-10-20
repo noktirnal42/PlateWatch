@@ -71,3 +71,6 @@ Result: **no state is confirmed usable; nothing was downloaded.**
 
 ## Local fleet-confirmation set — 2026-10-19
 `scripts/export_fleet_plate_crops.py` exports the operator's own agency-resolved Review crops (label = state of the resolved agency key; local, gitignored, never uploaded). Today it finds **0 usable items** (the Review queue is empty and the Hub's evidence archive holds 2 files), so this source adds no data yet; the 3 photos in `eval/user/` are acceptance cases and must stay out of training.
+
+## Update 2026-10-19 — counsel's fair-use determination
+The owner reports counsel's advice that reusing images from public/government entities is fair use; see DECISIONS.md (2026-10-19) for the decision and the conditions we keep (training only, no redistribution, robots honoured, manifest per file, standard-issue designs only, removal on objection). The "none confirmed usable" finding above stands as a description of what the *sites themselves state*; the project now proceeds on counsel's determination instead.
