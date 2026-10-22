@@ -96,7 +96,9 @@ struct ConsoleView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(HUDBackdrop())
         }
+        .tint(HubTheme.accent)
         .onChange(of: selection) { _, pane in
             if pane == .feeds { feedsVisited = true }
             if let pane { visited.insert(pane) }
@@ -126,13 +128,18 @@ private struct Stat: View {
     let title: String, value: String
     var icon = "chart.bar"
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon).font(.title3).foregroundStyle(.tint)
-            Text(value).font(.system(.title, design: .rounded).monospacedDigit()).bold()
-            Text(title).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                HUDLabel(title)
+                Spacer(minLength: 4)
+                Image(systemName: icon).font(.system(size: 12)).foregroundStyle(HubTheme.accent.opacity(0.85))
+            }
+            Text(value).font(HubTheme.mono(30, .semibold)).monospacedDigit().foregroundStyle(HubTheme.textPrimary)
+                .shadow(color: HubTheme.accent.opacity(0.35), radius: 8)
+                .minimumScaleFactor(0.6).lineLimit(1)
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+        .padding(14).frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+        .hudPanel()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(value)
@@ -151,9 +158,10 @@ struct DashboardPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Your fleet observatory").font(.largeTitle.bold())
+                    HUDLabel("PlateWatch Hub · situation overview", color: HubTheme.accent)
+                    Text("Your fleet observatory").font(.system(size: 30, weight: .semibold, design: .rounded))
                     Text("On-device analysis · fleet-only evidence · counts for this session")
-                        .foregroundStyle(.secondary)
+                        .font(HubTheme.mono(11)).foregroundStyle(HubTheme.textSecondary)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
                     Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)", icon: "viewfinder")
@@ -169,7 +177,7 @@ struct DashboardPane: View {
                     dashboardAction("Review evidence", icon: "tray.full", pane: "review")
                     dashboardAction("Records & FOIA", icon: "doc.text.magnifyingglass", pane: "records")
                 }.buttonStyle(.bordered)
-                GroupBox("Sources") {
+                hudSection("Sources") {
                     VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Analysis", value: hub.modelStatus)
                         LabeledContent("Delivery", value: hub.syncStatus)
@@ -194,7 +202,7 @@ struct DashboardPane: View {
                         FeedStatusRow(runner: hub.feedRunner)
                     }.padding(4)
                 }
-                GroupBox("Plate reading") {
+                hudSection("Plate reading") {
                     Text(hub.platesAllowed
                          ? "Enabled for this Hub's location."
                          : "Off: no home location set (or none we can place in the US). Set the home location in Settings.")
@@ -202,6 +210,16 @@ struct DashboardPane: View {
                 }
             }.padding(24)
         }
+    }
+
+    /// A titled console panel in place of `GroupBox` (same content, HUD styling).
+    private func hudSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HUDLabel(title)
+            content().font(.callout)
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .hudPanel()
     }
 
     private func dashboardAction(_ title: String, icon: String, pane: String) -> some View {

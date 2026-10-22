@@ -257,6 +257,9 @@ struct LivePane: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(CornerBrackets(length: 26).stroke(HubTheme.accent.opacity(0.85), lineWidth: 1.6).padding(8).allowsHitTesting(false))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(HubTheme.hairline, lineWidth: 1).allowsHitTesting(false))
+                .overlay(alignment: .topLeading) { hudReadout.padding(18).allowsHitTesting(false) }
             Text("In memory only. Overlays show general vehicle classes; fleet labels include a fleet score. Plate text is never shown. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -271,6 +274,27 @@ struct LivePane: View {
         }
         .onChange(of: isActive) { _, active in if !active { live.pause() } }
         .onDisappear { live.stop() }
+    }
+
+    /// Top-left readout on the video: transport state, vehicle count and the age of the analysis the boxes came from.
+    @ViewBuilder private var hudReadout: some View {
+        let streaming = hub.liveFeed.map { $0.kind == .hls && runner.isStreaming($0.id) } ?? false
+        let frame = hub.liveFeedFrame
+        let local = hub.liveFeed == nil && live.running
+        HStack(spacing: 8) {
+            if streaming { HUDStatusChip(text: "Live · HLS", color: HubTheme.live, pulsing: true) }
+            else if local { HUDStatusChip(text: "Live · camera", color: HubTheme.live, pulsing: true) }
+            else if hub.liveFeed != nil, frame != nil { HUDStatusChip(text: "Sampled stills", color: HubTheme.amber) }
+            else if hub.liveFeed != nil { HUDStatusChip(text: "Acquiring", color: HubTheme.amber, pulsing: true) }
+            if let frame, showOverlays {
+                TimelineView(.periodic(from: .now, by: 1)) { tick in
+                    let age = max(0, Int(tick.date.timeIntervalSince(frame.updatedAt)))
+                    Text("VEH \(frame.result.boxes.count) · T-\(age)s")
+                        .font(HubTheme.mono(10, .medium)).tracking(1.1).foregroundStyle(HubTheme.textPrimary)
+                        .padding(.horizontal, 7).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
+                }
+            }
+        }
     }
 
     private func fitted(_ image: CGSize, in box: CGSize) -> CGSize {

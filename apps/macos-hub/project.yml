@@ -61,6 +61,7 @@ targets:
       - Sources/EvidenceCrop.swift
       - Sources/EvidenceArchive.swift
       - Sources/VehicleOverlayLabel.swift
+      - Sources/LiveBoxTracker.swift
       - Sources/FeedRunner.swift
       - Sources/FeedIdentity.swift
       - Sources/HLSPreviewBudget.swift

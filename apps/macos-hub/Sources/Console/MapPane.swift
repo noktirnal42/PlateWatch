@@ -90,6 +90,7 @@ struct MapPane: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(CornerBrackets(length: 10).stroke(HubTheme.accent.opacity(0.8), lineWidth: 1.2).padding(3))
     }
 
     /// "Show on map": select the camera and ask the map to centre and zoom on it (the pin turns amber and is drawn on top).

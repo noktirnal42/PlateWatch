@@ -453,6 +453,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     func openFeedInLive(_ source: PublicFeedSource) {
         guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
         liveFeedFrame = nil
+        liveTracker.reset()
         liveFeedStatus = "Waiting for a frame…"
         liveFeed = source
         syncRunnerWatch()
@@ -462,6 +463,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     func stopLiveFeed() {
         feedRunner.setLiveVideoSource(nil)
         liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
+        liveTracker.reset()
         syncRunnerWatch()
     }
 
@@ -702,7 +704,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
         if displaysInLive,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
-            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
+            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits, tracked: true), updatedAt: Date())
             liveFeedStatus = "Background analysis · refreshed at the camera's interval"
         }
         return true
@@ -737,7 +739,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
         if liveFeed?.id == source.id,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
-            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
+            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits, tracked: true), updatedAt: Date())
             liveFeedStatus = "Live video analysis · sampled from the stream"
         }
     }
@@ -1252,15 +1254,20 @@ final class HubController: ObservableObject, ReviewHubProviding {
         return liveResult(frame, hits: recorded.hits)
     }
 
-    private func liveResult(_ frame: DetectionFrame, hits: Int) -> LiveFrameResult {
-        let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
+    /// Follows boxes across the analysed frames of the feed open in Live (stable ids, smoothed labels). Reset whenever Live changes feed.
+    private var liveTracker = LiveBoxTracker()
+
+    private func liveResult(_ frame: DetectionFrame, hits: Int, tracked: Bool = false) -> LiveFrameResult {
+        let raw = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             let isFleet = gate.verdict(fleetConfidence: confidence) == .persistAndSync
             let label = VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence)
             return .init(id: vehicle.id, rect: vehicle.boundingBox, label: label, isFleet: isFleet,
                          uncertain: !isFleet && label.hasPrefix("Vehicle"))
         }
-        return LiveFrameResult(boxes: boxes, hits: hits)
+        guard tracked else { return LiveFrameResult(boxes: raw, hits: hits) }
+        let smoothed = liveTracker.update(raw.map { .init(rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) })
+        return LiveFrameResult(boxes: smoothed.map { .init(id: $0.id, rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) }, hits: hits)
     }
 
     private func processNewFiles() {
