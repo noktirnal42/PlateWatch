@@ -145,7 +145,10 @@ final class FeedRunner: ObservableObject {
         let pinned = requestedHLSID.flatMap { eligible.contains($0) ? $0 : nil }
         let background = eligible.filter { $0 != pinned }
         var selected = Set(pinned.map { [$0] } ?? [])
-        let slots = min(Self.maxConcurrentHLS - selected.count, background.count)
+        // While the camera on screen is still connecting, background watches wait: they hit the same slow NV511 hosts from the
+        // same address and measurably starve the stream the operator is looking at (2026-10-22). They resume once it streams.
+        let pinnedConnecting = pinned.map { sourceStates[$0] == .videoConnecting } ?? false
+        let slots = !pinnedConnecting ? min(Self.maxConcurrentHLS - selected.count, background.count) : 0
         for index in 0..<slots { selected.insert(background[(hlsRotationOffset + index) % background.count]) }
         return selected
     }
@@ -427,7 +430,9 @@ final class FeedRunner: ObservableObject {
             guard let self, self.generation == run, !self.blockedIDs.contains(id), self.hlsSources[id] != nil else { return }
             switch state {
             case .connecting: self.sourceStates[id] = .videoConnecting
-            case .streaming: self.sourceStates[id] = .polling
+            case .streaming:
+                self.sourceStates[id] = .polling
+                if id == self.requestedHLSID { self.setLiveVideoSource(id) }   // the pinned stream is up: let background watches resume
             case .retrying(let reason):
                 self.sourceStates[id] = .videoUnavailable(reason)
                 if decoder?.isRunning == false { self.hlsSources[id] = nil }

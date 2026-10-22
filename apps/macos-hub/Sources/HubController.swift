@@ -517,6 +517,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
             // one bounded preview immediately and put it through the same
             // on-device analysis path as the continuing HLS sink.
             var previewFailure: String?
+            // The pinned decoder is already connecting to this very stream; a second bounded decode of the same camera only
+            // competes with it on a slow host. Give it a head start and skip the preview if it comes up.
+            for _ in 0..<12 where !feedRunner.isStreaming(source.id) {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+            }
+            if feedRunner.isStreaming(source.id) { return }
             do {
                 let data = try await feedRunner.fetchPreview(of: source)
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
