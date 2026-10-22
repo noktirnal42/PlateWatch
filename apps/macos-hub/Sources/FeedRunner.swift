@@ -100,7 +100,7 @@ final class FeedRunner: ObservableObject {
         case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
         case .imageUnavailable(let reason): return .init(text: reason, icon: "photo.badge.exclamationmark", color: .orange, kind: .frameUnavailable)
-        case .videoConnecting: return .init(text: "Connecting HLS (up to 15s)…", icon: "video", color: .secondary, kind: .checking)
+        case .videoConnecting: return .init(text: "Connecting HLS (NV511 can take 30–60 s)…", icon: "video", color: .secondary, kind: .checking)
         case .videoIdle: return .init(text: watchedIDs.contains(source.id) && explicitWatchSelection ? "HLS queued · rotating" : "HLS ready · watch or open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
         case .suspended: return source.kind == .rtsp
             ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
@@ -552,7 +552,7 @@ final class FeedRunner: ObservableObject {
 
     /// Decode ordinary live HLS without requiring the optional I-frame rendition
     /// needed by AVAssetImageGenerator. The bounded decoder is always released.
-    static func hlsPreviewFrame(source: PublicFeedSource, timeout: TimeInterval = 15, requestPolicy: HLSPolicyRelay.Policy? = nil) async throws -> Data {
+    static func hlsPreviewFrame(source: PublicFeedSource, timeout: TimeInterval = 30, requestPolicy: HLSPolicyRelay.Policy? = nil) async throws -> Data {
         guard source.mayBeAnalysed else { throw PreviewError.notConfirmed }
         guard await previewBudget.acquire() else { throw CancellationError() }
         defer { Task { await Self.previewBudget.release() } }

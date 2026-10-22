@@ -274,8 +274,11 @@ private actor HLSResourceFetcher {
         self.policy = policy
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
-        configuration.timeoutIntervalForRequest = 12
-        configuration.timeoutIntervalForResource = 20
+        // NV511 media hosts routinely need 2–9 s just to accept a connection and sometimes 20+ s for a playlist (measured
+        // 2026-10-21/22 with plain curl). 12 s / 20 s limits turned that into constant -1001 timeouts and dropped streams that
+        // TrafficView (AVPlayer direct, longer defaults) played. Still bounded: a stuck request ends after 30 s (60 s total).
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 60
         configuration.httpAdditionalHeaders = ["User-Agent": "PlateWatchHub/0.1 (+https://github.com/noktirnal42/PlateWatch)"]
         session = URLSession(configuration: configuration, delegate: HLSRedirectPolicy(policy), delegateQueue: nil)
     }
