@@ -118,6 +118,10 @@ final class FeedRunner: ObservableObject {
     private var videoSink: ClosureVideoSink?
     /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
     var activeVideoCount: Int { hlsSources.count }
+    /// The player of a running HLS decoder (the Live-pinned one), for on-screen playback. Nil until the decoder exists.
+    func livePlayer(for id: UUID) -> AVPlayer? { hlsSources[id]?.player }
+    /// True once the decoder reports frames flowing (the Live pane then shows moving video instead of sampled stills).
+    func isStreaming(_ id: UUID) -> Bool { hlsSources[id] != nil && sourceStates[id] == .polling }
     /// Number of watched HLS sources waiting for their turn in the bounded
     /// rotation. Keeping this separate from `activeVideoCount` makes the
     /// status row explain why a catalogue can be healthy while most HLS rows
@@ -414,7 +418,9 @@ final class FeedRunner: ObservableObject {
         // Surface dead provider segments promptly. The Live pane has an
         // explicit retry action, so a short bounded attempt is preferable to
         // leaving a video tile in "Connecting" for half a minute.
-        let decoder = HLSFrameSource(source: source, stallTimeout: 15, requestPolicy: resourcePolicy(for: source))
+        // The camera the operator is watching gets more patience: NV511 hosts often take 10–60 s to answer a playlist request
+        // (measured 2026-10-21: connect ~8 s, first byte ~9 s, or no answer for 60 s), so a 15 s limit made Live look dead.
+        let decoder = HLSFrameSource(source: source, stallTimeout: source.id == requestedHLSID ? 40 : 15, requestPolicy: resourcePolicy(for: source))
         decoder.tapInterval = 1
         decoder.onStateChange = { [weak self, weak decoder] state in
             guard let self, self.generation == run, !self.blockedIDs.contains(id), self.hlsSources[id] != nil else { return }

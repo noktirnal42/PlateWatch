@@ -20,7 +20,7 @@ final class HubAgentBridge {
     var currentPane = "unknown"
     static let navigation = Notification.Name("PlateWatchAgentNavigation")
     static let catalogueChanged = Notification.Name("PlateWatchAgentCatalogueChanged")
-    static let panes = ["dashboard", "live", "feeds", "cameras", "review", "models", "records", "settings"]
+    static let panes = ["dashboard", "live", "feeds", "map", "cameras", "review", "models", "records", "settings"]
     static var discoveryURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PlateWatchHub/AgentBridge/connection.json")

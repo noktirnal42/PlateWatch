@@ -7,7 +7,7 @@ import SwiftUI
 /// (for enrolled moderators only) moderation.
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
+        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", map = "Map", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
         case moderation = "Moderation", settings = "Settings", assistant = "Assistant", research = "NVIDIA research"
         var id: String { rawValue }
         var icon: String {
@@ -16,6 +16,7 @@ struct ConsoleView: View {
             case .live: return "eye"
             case .review: return "tray.full"
             case .feeds: return "antenna.radiowaves.left.and.right"
+            case .map: return "map"
             case .cameras: return "video"
             case .models: return "cpu"
             case .records: return "doc.text.magnifyingglass"
@@ -48,10 +49,15 @@ struct ConsoleView: View {
             ZStack {
                 // Mount on first visit, then retain browser controls and native scroll on navigation.
                 if selection == .feeds || feedsVisited {
-                    FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live })
+                    FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live }, onShowOnMap: { selection = .map })
                         .opacity(selection == .feeds ? 1 : 0)
                         .allowsHitTesting(selection == .feeds)
                         .accessibilityHidden(selection != .feeds).disabled(selection != .feeds)
+                }
+                if selection == .map || visited.contains(.map) {
+                    MapPane(hub: hub, isActive: selection == .map, onOpenLive: { selection = .live })
+                        .opacity(selection == .map ? 1 : 0).allowsHitTesting(selection == .map)
+                        .accessibilityHidden(selection != .map).disabled(selection != .map)
                 }
                 if selection == .live || visited.contains(.live) {
                     LivePane(hub: hub, isActive: selection == .live)
@@ -79,7 +85,7 @@ struct ConsoleView: View {
                 case .dashboard: DashboardPane(hub: hub)
                 case .live: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .review: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
-                case .feeds: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+                case .feeds, .map: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
                 case .records: Color.clear.allowsHitTesting(false).accessibilityHidden(true)

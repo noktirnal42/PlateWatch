@@ -142,7 +142,7 @@ def platewatch_feed_open_live(id: str) -> dict:
 
 
 @server.tool(annotations=WRITE)
-def platewatch_ui_show(pane: Literal['dashboard','live','feeds','cameras','review','models','records','settings']) -> dict:
+def platewatch_ui_show(pane: Literal['dashboard','live','feeds','map','cameras','review','models','records','settings']) -> dict:
     """Navigate the Hub console directly; no accessibility/screen-control helper is needed."""
     return call('ui.show', pane=pane)
 

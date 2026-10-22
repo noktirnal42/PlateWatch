@@ -6,6 +6,7 @@ struct FeedsPane: View {
     let hub: HubController
     let isActive: Bool
     var onOpenLive: () -> Void
+    var onShowOnMap: () -> Void = {}
     @ObservedObject private var favorites: FeedFavorites
     @ObservedObject private var runner: FeedRunner
     @ObservedObject private var browser: FeedBrowserState
@@ -13,10 +14,11 @@ struct FeedsPane: View {
     @State private var termsExpanded = false
     @State private var reviewing: FeedHostSummary?
 
-    init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void) {
+    init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void, onShowOnMap: @escaping () -> Void = {}) {
         self.hub = hub
         self.isActive = isActive
         self.onOpenLive = onOpenLive
+        self.onShowOnMap = onShowOnMap
         _favorites = ObservedObject(wrappedValue: hub.favorites)
         _runner = ObservedObject(wrappedValue: hub.feedRunner)
         _browser = ObservedObject(wrappedValue: hub.feedBrowserState)
@@ -365,7 +367,7 @@ struct FeedsPane: View {
                 }.width(120)
             }
             .frame(minWidth: 430)
-            CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
+            CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive, onShowOnMap: onShowOnMap,
                                source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } },
                                location: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } }.map(locationLabel) ?? "",
                                provider: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } }.map(providerLabel) ?? "")
@@ -495,6 +497,7 @@ struct CameraPreviewPanel: View {
     @ObservedObject var favorites: FeedFavorites
     let isActive: Bool
     var onOpenLive: () -> Void
+    var onShowOnMap: () -> Void = {}
     let source: PublicFeedSource?
     var location: String = ""
     var provider: String = ""
@@ -539,6 +542,8 @@ struct CameraPreviewPanel: View {
                 .modifier(HubPrimaryAction())
                 .help("Show this camera's analysed snapshots and vehicle overlays in Live")
                 .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
+                Button("Show on map", systemImage: "map") { hub.requestMapFocus(source); onShowOnMap() }
+                    .help("Centre, zoom and highlight this camera on the Map (approximate position, ~1 km)")
                 if !source.mayBeAnalysed {
                     Text("Confirm this host's terms (Review terms…) to view and poll its cameras.").font(.caption).foregroundStyle(.orange)
                 }

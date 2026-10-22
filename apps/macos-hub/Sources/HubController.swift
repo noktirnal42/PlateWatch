@@ -435,6 +435,9 @@ final class HubController: ObservableObject, ReviewHubProviding {
             || host == "its.nv.gov" || host.hasSuffix(".its.nv.gov")
     }
 
+    /// A request to centre, zoom and highlight one camera on the Map pane ("Show on map" in Public feeds).
+    @Published private(set) var mapFocus: (id: UUID, token: UUID)?
+    func requestMapFocus(_ source: PublicFeedSource) { mapFocus = (source.id, UUID()) }
     @Published private(set) var liveFeed: PublicFeedSource?
     @Published private(set) var liveFeedFrame: WebFeedFrame?
     @Published private(set) var liveFeedStatus = ""

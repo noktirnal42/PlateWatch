@@ -210,14 +210,14 @@ struct LivePane: View {
                     .help("Show car, truck, bus and motorcycle boxes; fleet labels include a fleet score. Small boxes show their label on hover.")
                 if showOverlays {
                     HStack(spacing: 8) {
-                        Label("Vehicle class", systemImage: "square")
-                            .foregroundStyle(.yellow)
+                        Label("Vehicle", systemImage: "square")
+                            .foregroundStyle(VehicleBoxCanvas.vehicle)
                         Label("Fleet hit", systemImage: "square.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(VehicleBoxCanvas.fleet)
                     }
                     .font(.caption)
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Yellow boxes show vehicle classes. Green boxes show fleet hits.")
+                    .accessibilityLabel("Cyan boxes show vehicles. Green boxes show fleet hits.")
                 }
                 if hub.liveFeed == nil {
                     Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
@@ -225,30 +225,23 @@ struct LivePane: View {
             }
             ZStack {
                 Rectangle().fill(.black.opacity(0.85))
-                if let image = hub.liveFeed == nil ? live.image : hub.liveFeedFrame?.image {
-                    GeometryReader { geo in
-                        let size = fitted(CGSize(width: image.width, height: image.height), in: geo.size)
-                        ZStack(alignment: .topLeading) {
-                            Image(decorative: image, scale: 1).resizable().frame(width: size.width, height: size.height)
-                            ForEach(showOverlays ? (hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? [])) : []) { box in
-                                Rectangle().stroke(box.isFleet ? Color.green : Color.yellow, lineWidth: 2)
-                                    .frame(width: box.rect.width * size.width, height: box.rect.height * size.height)
-                                    .overlay(alignment: .topLeading) {
-                                        if box.rect.width * size.width >= 72 {
-                                            Text(box.label).font(.system(size: 11, weight: .semibold, design: .rounded))
-                                                .fixedSize().padding(.horizontal, 6).padding(.vertical, 3)
-                                                .background(box.isFleet ? Color.green : Color.yellow, in: RoundedRectangle(cornerRadius: 4))
-                                                .foregroundStyle(.black)
-                                                .offset(y: box.rect.y * size.height > 24 ? -24 : 2)
-                                        }
-                                    }
-                                    .help(box.label)
-                                    .accessibilityLabel(box.label)
-                                    .offset(x: box.rect.x * size.width, y: box.rect.y * size.height)
-                            }
+                if let source = hub.liveFeed, source.kind == .hls, runner.isStreaming(source.id), let player = runner.livePlayer(for: source.id) {
+                    // Moving video from the decoder's own player; boxes come from the ~1 fps analysis and fade when stale.
+                    ZStack {
+                        LiveVideoSurface(player: player)
+                        if showOverlays, let frame = hub.liveFeedFrame {
+                            VehicleBoxCanvas(boxes: frame.result.boxes,
+                                             frameSize: CGSize(width: frame.image.width, height: frame.image.height),
+                                             updatedAt: frame.updatedAt)
                         }
-                        .frame(width: size.width, height: size.height)
-                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                    }
+                } else if let image = hub.liveFeed == nil ? live.image : hub.liveFeedFrame?.image {
+                    ZStack {
+                        Image(decorative: image, scale: 1).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if showOverlays {
+                            VehicleBoxCanvas(boxes: hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? []),
+                                             frameSize: CGSize(width: image.width, height: image.height), staleAfter: .infinity)
+                        }
                     }
                 } else {
                     VStack(spacing: 8) {
