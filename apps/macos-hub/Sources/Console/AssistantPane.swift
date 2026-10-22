@@ -38,7 +38,7 @@ struct AssistantPane: View {
                 .accessibilityLabel("Assistant task").disabled(assistant.running)
             HStack {
                 Button("Run task", systemImage: "play.fill") { assistant.start(task: taskText, provider: provider, modelID: modelID, bridge: hub.agentBridge) }
-                    .buttonStyle(.borderedProminent).disabled(assistant.running || taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(HUDProminentButtonStyle()).disabled(assistant.running || taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Button("Stop", systemImage: "stop.fill") { assistant.stop() }.disabled(!assistant.running)
                 Button("Unload local model") { assistant.unload() }.disabled(assistant.running)
                 if assistant.running { ProgressView().controlSize(.small).accessibilityLabel("Model is working") }

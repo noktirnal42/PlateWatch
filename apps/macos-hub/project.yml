@@ -70,6 +70,7 @@ targets:
       - Sources/Console/ModerationStore.swift
       - Sources/Console/RecordsWorkspace.swift
       - Sources/Console/ReviewPane.swift
+      - Sources/Console/HubTheme.swift
       - Sources/Console/ReviewQueue.swift
     settings:
       base:

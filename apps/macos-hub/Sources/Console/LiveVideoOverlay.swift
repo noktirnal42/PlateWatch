@@ -46,8 +46,9 @@ struct VehicleBoxCanvas: View {
     var staleAfter: TimeInterval = 4
     var updatedAt: Date = .now
 
-    static let vehicle = Color(red: 0x4F / 255, green: 0xD1 / 255, blue: 0xE0 / 255)
-    static let fleet = Color(red: 0x2B / 255, green: 0xD9 / 255, blue: 0x8A / 255)
+    /// Vehicles use the console's phosphor colour; fleet hits use its contrast colour (amber on green, green on amber).
+    static var vehicle: Color { HubTheme.accent }
+    static var fleet: Color { HubTheme.hot }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in

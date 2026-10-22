@@ -5,6 +5,14 @@ import SwiftUI
 /// amber for "waiting", red for faults, monospaced readouts and thin corner brackets that echo the target boxes on video.
 /// Pattern and palette follow TrafficView's DESIGN.md (re-implemented). Everything has a light-mode value, respects Reduce
 /// Motion / Increase Contrast through the system, and carries no information by colour alone.
+enum Phosphor: String, CaseIterable, Identifiable {
+    case green, amber
+    var id: String { rawValue }
+    var title: String { self == .green ? "Green" : "Amber" }
+    static let defaultsKey = "hubPhosphor"
+    static var current: Phosphor { Phosphor(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .green }
+}
+
 enum HubTheme {
     static let base = adaptive(dark: 0x090C10, light: 0xF4F6F8)
     static let raised = adaptive(dark: 0x0E131A, light: 0xFFFFFF)
@@ -12,11 +20,27 @@ enum HubTheme {
     static let hairline = adaptive(dark: 0x1E2A35, light: 0xD5DCE3)
     static let textPrimary = adaptive(dark: 0xE8EDF2, light: 0x11161C)
     static let textSecondary = adaptive(dark: 0x9AA7B4, light: 0x4B5865)
-    static let textTertiary = adaptive(dark: 0x64727F, light: 0x6A7783)
-    static let accent = adaptive(dark: 0x4FD1E0, light: 0x0B7C8A)
-    static let live = adaptive(dark: 0x2BD98A, light: 0x128A55)
-    static let amber = adaptive(dark: 0xF5B83D, light: 0xA86B00)
+    static let textTertiary = adaptive(dark: 0x7F8D9A, light: 0x6A7783)
+    /// The "phosphor" colour of the console: classic green by default, amber on request (Settings → Appearance).
+    /// Resolved each time the colour is drawn, so a rebuild (`ConsoleView` re-ids itself on change) picks up a switch.
+    static let accent = phosphorColor(green: (dark: 0x3DFF86, light: 0x0B7A3B), amber: (dark: 0xFFB000, light: 0x9A6200))
+    /// Target-acquired colour for fleet hits: contrasts with the phosphor (amber on green, green on amber).
+    static let hot = phosphorColor(green: (dark: 0xFFB000, light: 0x9A6200), amber: (dark: 0x3DFF86, light: 0x0B7A3B))
+    /// "Healthy / live" reads as the phosphor itself.
+    static var live: Color { accent }
+    /// "Waiting / connecting": amber on green, pale ice on amber.
+    static let amber = phosphorColor(green: (dark: 0xFFB000, light: 0x9A6200), amber: (dark: 0xBFE9FF, light: 0x1F62C4))
     static let alert = adaptive(dark: 0xFF5C5C, light: 0xC62828)
+
+    static func phosphorColor(green: (dark: UInt32, light: UInt32), amber: (dark: UInt32, light: UInt32)) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let pair = Phosphor.current == .amber ? amber : green
+            let hex = isDark ? pair.dark : pair.light
+            return NSColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                           blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+        })
+    }
 
     static func adaptive(dark: UInt32, light: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -111,5 +135,76 @@ struct HUDBackdrop: View {
             RadialGradient(colors: [HubTheme.accent.opacity(0.07), .clear], center: .topLeading, startRadius: 0, endRadius: 520)
         }
         .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+
+/// Replaces `GroupBox` everywhere under it: spaced overline title in a HUD panel.
+struct HUDGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            configuration.label.font(HubTheme.mono(10, .medium)).textCase(.uppercase).tracking(1.6).foregroundStyle(HubTheme.textTertiary)
+            configuration.content
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .hudPanel()
+    }
+}
+
+/// Default button look: dark glass, phosphor outline and label, brightens on hover, dims when disabled.
+struct HUDButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    @State private var hover = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(enabled ? HubTheme.accent : HubTheme.textTertiary)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(HubTheme.accent.opacity(configuration.isPressed ? 0.28 : (hover && enabled ? 0.16 : 0.07))))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(HubTheme.accent.opacity(enabled ? 0.55 : 0.2), lineWidth: 0.8))
+            .onHover { hover = $0 }
+    }
+}
+
+/// Sidebar row: phosphor bar and tint on the selected pane, monospaced small caps feel without losing legibility.
+struct HUDSidebarRow: View {
+    let title: String
+    let icon: String
+    let selected: Bool
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon).font(.system(size: 13)).frame(width: 18)
+                .foregroundStyle(selected ? HubTheme.accent : HubTheme.textSecondary)
+            Text(title).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? HubTheme.textPrimary : HubTheme.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6).padding(.horizontal, 10)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? HubTheme.accent.opacity(0.13) : .clear))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1).fill(selected ? HubTheme.accent : .clear).frame(width: 2.5, height: 16)
+                .shadow(color: HubTheme.accent.opacity(selected ? 0.7 : 0), radius: 4)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+    }
+}
+
+
+/// Primary action: solid phosphor fill with dark label (default-action emphasis).
+struct HUDProminentButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.colorScheme) private var scheme
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle((scheme == .dark ? Color.black : Color.white).opacity(enabled ? 0.92 : 0.6))
+            .padding(.horizontal, 12).padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(HubTheme.accent.opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.35)))
+            .shadow(color: HubTheme.accent.opacity(enabled ? 0.35 : 0), radius: 6)
     }
 }

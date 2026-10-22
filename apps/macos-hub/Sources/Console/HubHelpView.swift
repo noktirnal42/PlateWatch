@@ -43,7 +43,6 @@ struct HubHelpView: View {
 /// Use native glass for the primary destination action; retain a standard control on older macOS.
 struct HubPrimaryAction: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) { content.buttonStyle(.glassProminent) }
-        else { content.buttonStyle(.borderedProminent) }
+        content.buttonStyle(HUDProminentButtonStyle())
     }
 }

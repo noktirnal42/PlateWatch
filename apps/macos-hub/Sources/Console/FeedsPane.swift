@@ -172,7 +172,7 @@ struct FeedsPane: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Show all feeds") { browser.resetView(); reload() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(HUDProminentButtonStyle())
                         .controlSize(.small)
                         .accessibilityHint("Clears the persisted Favorites scope and all feed filters")
                 }

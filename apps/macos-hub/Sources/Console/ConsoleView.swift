@@ -34,6 +34,7 @@ struct ConsoleView: View {
     @State private var feedsVisited = false
     @State private var visited: Set<Pane> = []
     @AppStorage("hubAppearance") private var appearance = "system"
+    @AppStorage(Phosphor.defaultsKey) private var phosphor = Phosphor.green.rawValue
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
 
@@ -41,10 +42,18 @@ struct ConsoleView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(panes, selection: $selection) { pane in
-                Label(pane.rawValue, systemImage: pane.icon).tag(pane)
+            VStack(alignment: .leading, spacing: 2) {
+                HUDLabel("PlateWatch Hub", color: HubTheme.accent).padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
+                ForEach(panes) { pane in
+                    Button { selection = pane } label: { HUDSidebarRow(title: pane.rawValue, icon: pane.icon, selected: selection == pane) }
+                        .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 200)
+            .padding(.horizontal, 6).padding(.vertical, 8)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(HubTheme.inset.opacity(0.9))
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } detail: {
             ZStack {
                 // Mount on first visit, then retain browser controls and native scroll on navigation.
@@ -99,6 +108,10 @@ struct ConsoleView: View {
             .background(HUDBackdrop())
         }
         .tint(HubTheme.accent)
+        .buttonStyle(HUDButtonStyle())
+        .groupBoxStyle(HUDGroupBoxStyle())
+        .scrollContentBackground(.hidden)
+        .id(phosphor)
         .onChange(of: selection) { _, pane in
             if pane == .feeds { feedsVisited = true }
             if let pane { visited.insert(pane) }
@@ -176,7 +189,7 @@ struct DashboardPane: View {
                     dashboardAction("Browse cameras", icon: "antenna.radiowaves.left.and.right", pane: "feeds")
                     dashboardAction("Review evidence", icon: "tray.full", pane: "review")
                     dashboardAction("Records & FOIA", icon: "doc.text.magnifyingglass", pane: "records")
-                }.buttonStyle(.bordered)
+                }.buttonStyle(HUDButtonStyle())
                 hudSection("Sources") {
                     VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Analysis", value: hub.modelStatus)
@@ -298,6 +311,7 @@ struct SettingsPane: View {
     @AppStorage("hubGeohash6") private var geohash = ""
     @AppStorage("hubSnapshotPort") private var port = 8088
     @AppStorage("hubAppearance") private var appearance = "system"
+    @AppStorage(Phosphor.defaultsKey) private var phosphor = Phosphor.green.rawValue
     @State private var server = ""
     @State private var token = ""
     @State private var note = ""
@@ -319,6 +333,11 @@ struct SettingsPane: View {
             BackendConnectionSection()
             NIMSettingsSection()
             Section("Appearance") {
+                Picker("Phosphor", selection: $phosphor) {
+                    ForEach(Phosphor.allCases) { Text($0.title).tag($0.rawValue) }
+                }.pickerStyle(.segmented)
+                Text("The console's glow colour: classic green, or amber. Fleet hits on video use the other colour so they stand out.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Color scheme", selection: $appearance) {
                     Text("System").tag("system")
                     Text("Light").tag("light")

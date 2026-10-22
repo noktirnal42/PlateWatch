@@ -81,7 +81,7 @@ struct MapPane: View {
             }
             HStack {
                 Button("Open in Live", systemImage: "play.rectangle.fill") { hub.openFeedInLive(source); onOpenLive() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(HUDProminentButtonStyle())
                     .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
                 Button { favorites.toggle(source.id) } label: {
                     Image(systemName: favorites.contains(source.id) ? "star.fill" : "star").foregroundStyle(favorites.contains(source.id) ? Color.yellow : Color.secondary)
@@ -191,6 +191,13 @@ struct CameraMapRepresentable: NSViewRepresentable {
         init(onSelect: @escaping (UUID) -> Void) { self.onSelect = onSelect }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is MKClusterAnnotation {
+                let cluster = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
+                cluster.markerTintColor = NSColor(HubTheme.accent)
+                cluster.glyphTintColor = .black
+                cluster.displayPriority = .defaultHigh
+                return cluster
+            }
             guard let pin = annotation as? CameraPin else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: pin) as? MKMarkerAnnotationView
                 ?? MKMarkerAnnotationView(annotation: pin, reuseIdentifier: "pin")
@@ -206,8 +213,8 @@ struct CameraMapRepresentable: NSViewRepresentable {
         func style(_ view: MKMarkerAnnotationView, pin: CameraPin) {
             let selected = pin.sourceID == selectedID
             view.markerTintColor = (selected || favorites.contains(pin.sourceID))
-                ? NSColor(srgbRed: 0xF5 / 255, green: 0xB8 / 255, blue: 0x3D / 255, alpha: 1)
-                : (pin.confirmed ? NSColor(srgbRed: 0x4F / 255, green: 0xD1 / 255, blue: 0xE0 / 255, alpha: 1) : .systemGray)
+                ? NSColor(HubTheme.hot)
+                : (pin.confirmed ? NSColor(HubTheme.accent) : .systemGray)
             view.zPriority = selected ? .max : .defaultUnselected
             view.displayPriority = selected ? .required : .defaultHigh
             view.clusteringIdentifier = selected ? nil : "camera"

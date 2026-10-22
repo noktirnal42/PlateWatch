@@ -284,7 +284,7 @@ struct RecordsPane: View {
                                 }
                                 Spacer()
                                 Button("Open") { NSWorkspace.shared.open(source.url) }
-                                    .buttonStyle(.bordered)
+                                    .buttonStyle(HUDButtonStyle())
                             }
                         }
                     }

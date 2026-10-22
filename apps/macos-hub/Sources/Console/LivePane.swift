@@ -250,7 +250,7 @@ struct LivePane: View {
                             .multilineTextAlignment(.center)
                         if let source = hub.liveFeed, source.kind == .hls {
                             Button("Retry HLS") { hub.retryLiveFeed() }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(HUDButtonStyle())
                                 .accessibilityHint("Restarts the bounded HLS connection attempt")
                         }
                     }

@@ -90,7 +90,7 @@ struct ReviewPane: View {
                     do { try ReviewQueue.reject(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
                     catch { discardError = "Could not reject selected items: \(error.localizedDescription)" }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(HUDButtonStyle())
                 .disabled(selection.isEmpty)
                 Menu("Backend actions", systemImage: "icloud") {
                     Button("Sync pending", systemImage: "arrow.up.circle") {
