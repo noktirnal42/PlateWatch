@@ -122,6 +122,18 @@ public struct PlateAnalysisPipeline: Sendable {
     public func analyze(_ frame: FramePacketLike,
                         context: AnalysisContext) async throws -> DetectionFrame {
 
+        if context.boxesOnly, context.models["vehicle-detection"] != nil,
+           let detected = try? await CoreMLDetectorStage(task: "vehicle-detection").process(frame, context: context),
+           !detected.observations.isEmpty {
+            var quick = DetectionFrame(timestamp: context.timestamp,
+                                       imageSize: CGSize(width: CVPixelBufferGetWidth(frame.pixelBuffer), height: CVPixelBufferGetHeight(frame.pixelBuffer)),
+                                       vehicles: detected.observations.map {
+                                           CoreMLDetectorStage.observation(label: $0.label, confidence: $0.confidence, box: $0.box)
+                                       })
+            await Self.addTypeAndColor(to: &quick, frame: frame, context: context)
+            return quick
+        }
+
         var vehicleObservations: [VehicleObservation] = []
         if context.models["vehicle-detection"] != nil {
             let stage = CameraDetailDetectorStage()
@@ -180,6 +192,14 @@ public struct PlateAnalysisPipeline: Sendable {
                                         to: &fused)
         var out = baselineFrame
         out.vehicles = fused
+        await Self.addTypeAndColor(to: &out, frame: frame, context: context)
+        return out
+    }
+}
+
+extension PlateAnalysisPipeline {
+    /// Display-only attributes: body type from the optional classifier (strongest eight boxes) and a cheap colour cue.
+    static func addTypeAndColor(to out: inout DetectionFrame, frame: FramePacketLike, context: AnalysisContext) async {
         if context.models["vehicle-type-classification"] != nil {
             let classifier = VehicleTypeClassifierStage()
             // Keep public-feed/live latency bounded when a wide camera view
@@ -202,7 +222,6 @@ public struct PlateAnalysisPipeline: Sendable {
                 out.vehicles[index].attributes = attributes
             }
         }
-        return out
     }
 }
 

@@ -716,6 +716,55 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// concurrency cap is what bounds the analysis cost.
     func analyseFeedVideoFrame(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
         let displaysInLive = liveFeed?.id == source.id
+        // Moving video on screen: draw boxes from a fast detector-only pass every frame (~4 fps) and run the full
+        // fleet-scoring pass in the background about once a second. Only the full pass can score or record a hit.
+        if displaysInLive {
+            let due = Date().timeIntervalSince(lastLiveThorough) >= 1.2 && !liveThoroughInFlight
+            if due {
+                liveThoroughInFlight = true
+                lastLiveThorough = Date()
+                Task { @MainActor [weak self] in
+                    let started = ContinuousClock.now
+                    await self?.analyseFeedVideoFrameFully(buffer, from: source)
+                    self?.liveFullMillis = Int(started.duration(to: .now) / .milliseconds(1))
+                    self?.liveThoroughInFlight = false
+                }
+            } else {
+                await quickLiveBoxes(buffer, from: source)
+            }
+            return
+        }
+        await analyseFeedVideoFrameFully(buffer, from: source)
+    }
+
+    /// Latest durations (ms) of the fast box pass and the full pass for the stream on screen; shown in the Live HUD.
+    @Published private(set) var liveQuickMillis: Int?
+    @Published private(set) var liveFullMillis: Int?
+    private var lastLiveThorough = Date.distantPast
+    private var liveThoroughInFlight = false
+    private var liveQuickInFlight = false
+    private static let liveCIContext = CIContext(options: [.cacheIntermediates: false])
+
+    /// Detector-only boxes for the stream on screen. Display only: no OCR, no plate work, never scored, never recorded.
+    private func quickLiveBoxes(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        guard !liveQuickInFlight, !favorites.isBlocked(source.id), activeFeedSources[source.id]?.mayBeAnalysed == true else { return }
+        liveQuickInFlight = true
+        defer { liveQuickInFlight = false }
+        var context = frameContext(contextBox, for: buffer, readPlates: false, publicFeed: true)
+        context.boxesOnly = true
+        context.thorough = false
+        let started = ContinuousClock.now
+        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer), context: context),
+              liveFeed?.id == source.id else { return }
+        liveQuickMillis = Int(started.duration(to: .now) / .milliseconds(1))
+        let ci = CIImage(cvPixelBuffer: buffer)
+        guard let image = Self.liveCIContext.createCGImage(ci, from: ci.extent) else { return }
+        liveFeedFrame = .init(image: image, result: liveResult(frame, hits: liveFeedFrame?.result.hits ?? 0, tracked: true, authoritative: false),
+                              updatedAt: Date())
+    }
+
+    func analyseFeedVideoFrameFully(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        let displaysInLive = liveFeed?.id == source.id
         let backgroundCapacity = max(1, Self.maxFeedAnalyses - 1)
         let capacity = displaysInLive ? Self.maxFeedAnalyses : backgroundCapacity
         guard feedAnalysesInFlight < capacity else {
@@ -740,7 +789,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         if liveFeed?.id == source.id,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
             liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits, tracked: true), updatedAt: Date())
-            liveFeedStatus = "Live video analysis · sampled from the stream"
+            liveFeedStatus = "Live video · boxes ~4/s, fleet scoring ~1/s"
         }
     }
 
@@ -1257,7 +1306,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// Follows boxes across the analysed frames of the feed open in Live (stable ids, smoothed labels). Reset whenever Live changes feed.
     private var liveTracker = LiveBoxTracker()
 
-    private func liveResult(_ frame: DetectionFrame, hits: Int, tracked: Bool = false) -> LiveFrameResult {
+    private func liveResult(_ frame: DetectionFrame, hits: Int, tracked: Bool = false, authoritative: Bool = true) -> LiveFrameResult {
         let raw = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             let isFleet = gate.verdict(fleetConfidence: confidence) == .persistAndSync
@@ -1266,7 +1315,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
                          uncertain: !isFleet && label.hasPrefix("Vehicle"))
         }
         guard tracked else { return LiveFrameResult(boxes: raw, hits: hits) }
-        let smoothed = liveTracker.update(raw.map { .init(rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) })
+        let smoothed = liveTracker.update(authoritative: authoritative, raw.map { .init(rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) })
         return LiveFrameResult(boxes: smoothed.map { .init(id: $0.id, rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) }, hits: hits)
     }
 

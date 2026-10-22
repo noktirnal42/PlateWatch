@@ -289,8 +289,13 @@ struct LivePane: View {
             if let frame, showOverlays {
                 TimelineView(.periodic(from: .now, by: 1)) { tick in
                     let age = max(0, Int(tick.date.timeIntervalSince(frame.updatedAt)))
-                    Text("VEH \(frame.result.boxes.count) · T-\(age)s")
-                        .font(HubTheme.mono(10, .medium)).tracking(1.1).foregroundStyle(HubTheme.textPrimary)
+                    Text(streaming && age > 6 ? "NO NEW FRAMES · \(age)s" : "VEH \(frame.result.boxes.count) · T-\(age)s")
+                        .font(HubTheme.mono(10, .medium)).tracking(1.1).foregroundStyle(streaming && age > 6 ? HubTheme.amber : HubTheme.textPrimary)
+                        .padding(.horizontal, 7).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
+                }
+                if let quick = hub.liveQuickMillis, streaming {
+                    Text("BOX \(quick)ms · FULL \(hub.liveFullMillis.map { "\($0)ms" } ?? "—")")
+                        .font(HubTheme.mono(10, .medium)).tracking(1.0).foregroundStyle(HubTheme.textSecondary)
                         .padding(.horizontal, 7).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
                 }
             }

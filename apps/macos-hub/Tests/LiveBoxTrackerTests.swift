@@ -51,4 +51,16 @@ final class LiveBoxTrackerTests: XCTestCase {
         let flicker = tracker.update([det(0.3, "Vehicle · class 30%", uncertain: true)])
         XCTAssertFalse(flicker[0].uncertain, "after several 'Blue Car' frames one unknown frame does not turn the box dashed")
     }
+
+    func testFastFramesMoveBoxesButKeepTheLastFullFrameVerdict() {
+        var tracker = LiveBoxTracker()
+        _ = tracker.update(authoritative: true, [det(0.30, "White Car · Patrol · fleet 91%", fleet: true)])
+        let fast = tracker.update(authoritative: false, [det(0.33, "Vehicle · class 30%", uncertain: true)])
+        XCTAssertEqual(fast[0].label, "White Car · Patrol · fleet 91%")
+        XCTAssertTrue(fast[0].isFleet)
+        XCTAssertEqual(fast[0].rect.x, 0.33, accuracy: 1e-9, "the box follows the vehicle")
+        let fresh = tracker.update(authoritative: false, [det(0.70, "Vehicle · class 30%", uncertain: true)])
+        XCTAssertFalse(fresh[0].isFleet, "a newly seen box starts as an ordinary vehicle until a full frame scores it")
+        XCTAssertTrue(fresh[0].uncertain)
+    }
 }

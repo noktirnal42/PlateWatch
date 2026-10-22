@@ -30,6 +30,7 @@ struct LiveBoxTracker {
     private struct Track {
         var id = UUID()
         var rect: NormalizedBox
+        var shown: (label: String, isFleet: Bool, uncertain: Bool)?
         var votes: [String] = []
         var hits = 1
         var misses = 0
@@ -38,7 +39,10 @@ struct LiveBoxTracker {
 
     mutating func reset() { tracks = [] }
 
-    mutating func update(_ detections: [Detection]) -> [Tracked] {
+    /// `authoritative` is true for full-analysis frames (their labels and fleet verdicts are shown and recorded as the track's
+    /// state). A fast, detector-only frame (`false`) moves matched boxes but keeps what the last full frame said about them;
+    /// only boxes it newly discovers show its generic label until the next full frame.
+    mutating func update(authoritative: Bool = true, _ detections: [Detection]) -> [Tracked] {
         var candidates: [(iou: Double, track: Int, detection: Int)] = []
         for (t, track) in tracks.enumerated() {
             for (d, detection) in detections.enumerated() {
@@ -65,13 +69,20 @@ struct LiveBoxTracker {
             } else {
                 tracks.append(Track(rect: detection.rect)); t = tracks.count - 1
             }
+            if !authoritative, trackFor[d] != nil, let shown = tracks[t].shown {
+                out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: shown.label, isFleet: shown.isFleet,
+                                   uncertain: shown.uncertain, hits: tracks[t].hits))
+                continue
+            }
             let parts = detection.label.components(separatedBy: " · ")
             tracks[t].votes.append(parts.first ?? detection.label)
             if tracks[t].votes.count > Self.voteWindow { tracks[t].votes.removeFirst(tracks[t].votes.count - Self.voteWindow) }
             let base = Self.winner(tracks[t].votes)
             let label = ([base] + parts.dropFirst()).joined(separator: " · ")
+            let uncertain = detection.uncertain && base.hasPrefix("Vehicle")
+            if authoritative || tracks[t].shown == nil { tracks[t].shown = (label, detection.isFleet, uncertain) }
             out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: label, isFleet: detection.isFleet,
-                               uncertain: detection.uncertain && base.hasPrefix("Vehicle"), hits: tracks[t].hits))
+                               uncertain: uncertain, hits: tracks[t].hits))
         }
         tracks.removeAll { $0.misses > Self.maxMisses }
         return out
