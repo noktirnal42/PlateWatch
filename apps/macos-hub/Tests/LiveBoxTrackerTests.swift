@@ -14,6 +14,14 @@ final class LiveBoxTrackerTests: XCTestCase {
         XCTAssertEqual(second[0].hits, 2)
     }
 
+    func testVelocityFollowsTheBoxAndIsZeroOnFirstSight() {
+        var tracker = LiveBoxTracker()
+        let first = tracker.update(now: 10, [det(0.30, "Blue Car")])
+        XCTAssertEqual(first[0].velocity.x, 0)
+        let second = tracker.update(now: 10.25, [det(0.35, "Blue Car")])
+        XCTAssertEqual(second[0].velocity.x, 0.1, accuracy: 0.001)   // 0.05 over 0.25 s, halved by smoothing from 0 → 0.1
+    }
+
     func testLabelFlickerIsSmoothedButTheLatestScoreIsShown() {
         var tracker = LiveBoxTracker()
         var shown = ""

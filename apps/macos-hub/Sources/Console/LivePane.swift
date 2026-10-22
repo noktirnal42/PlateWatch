@@ -232,7 +232,7 @@ struct LivePane: View {
                         if showOverlays, let frame = hub.liveFeedFrame {
                             VehicleBoxCanvas(boxes: frame.result.boxes,
                                              frameSize: CGSize(width: frame.image.width, height: frame.image.height),
-                                             updatedAt: frame.updatedAt)
+                                             updatedAt: frame.updatedAt, glide: true)
                         }
                     }
                 } else if let image = hub.liveFeed == nil ? live.image : hub.liveFeedFrame?.image {

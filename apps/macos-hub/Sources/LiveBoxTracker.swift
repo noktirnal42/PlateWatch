@@ -21,6 +21,8 @@ struct LiveBoxTracker {
         var uncertain: Bool
         /// Frames this vehicle has been followed (1 on first sight).
         var hits: Int
+        /// Smoothed motion of the box origin in frame fractions per second, used only to glide the box between analysed frames.
+        var velocity: (x: Double, y: Double)
     }
 
     static let matchIoU = 0.3
@@ -34,6 +36,8 @@ struct LiveBoxTracker {
         var votes: [String] = []
         var hits = 1
         var misses = 0
+        var seenAt: TimeInterval = 0
+        var velocity: (x: Double, y: Double) = (0, 0)
     }
     private var tracks: [Track] = []
 
@@ -42,7 +46,7 @@ struct LiveBoxTracker {
     /// `authoritative` is true for full-analysis frames (their labels and fleet verdicts are shown and recorded as the track's
     /// state). A fast, detector-only frame (`false`) moves matched boxes but keeps what the last full frame said about them;
     /// only boxes it newly discovers show its generic label until the next full frame.
-    mutating func update(authoritative: Bool = true, _ detections: [Detection]) -> [Tracked] {
+    mutating func update(authoritative: Bool = true, now: TimeInterval = ProcessInfo.processInfo.systemUptime, _ detections: [Detection]) -> [Tracked] {
         var candidates: [(iou: Double, track: Int, detection: Int)] = []
         for (t, track) in tracks.enumerated() {
             for (d, detection) in detections.enumerated() {
@@ -63,15 +67,21 @@ struct LiveBoxTracker {
             let t: Int
             if let matched = trackFor[d] {
                 t = matched
+                let dt = now - tracks[t].seenAt
+                if dt > 0.02, dt < 1.5 {
+                    let vx = (detection.rect.x - tracks[t].rect.x) / dt, vy = (detection.rect.y - tracks[t].rect.y) / dt
+                    tracks[t].velocity = (0.5 * tracks[t].velocity.x + 0.5 * vx, 0.5 * tracks[t].velocity.y + 0.5 * vy)
+                }
                 tracks[t].rect = detection.rect
+                tracks[t].seenAt = now
                 tracks[t].misses = 0
                 tracks[t].hits += 1
             } else {
-                tracks.append(Track(rect: detection.rect)); t = tracks.count - 1
+                tracks.append(Track(rect: detection.rect, seenAt: now)); t = tracks.count - 1
             }
             if !authoritative, trackFor[d] != nil, let shown = tracks[t].shown {
                 out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: shown.label, isFleet: shown.isFleet,
-                                   uncertain: shown.uncertain, hits: tracks[t].hits))
+                                   uncertain: shown.uncertain, hits: tracks[t].hits, velocity: tracks[t].velocity))
                 continue
             }
             let parts = detection.label.components(separatedBy: " · ")
@@ -82,7 +92,7 @@ struct LiveBoxTracker {
             let uncertain = detection.uncertain && base.hasPrefix("Vehicle")
             if authoritative || tracks[t].shown == nil { tracks[t].shown = (label, detection.isFleet, uncertain) }
             out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: label, isFleet: detection.isFleet,
-                               uncertain: uncertain, hits: tracks[t].hits))
+                               uncertain: uncertain, hits: tracks[t].hits, velocity: tracks[t].velocity))
         }
         tracks.removeAll { $0.misses > Self.maxMisses }
         return out

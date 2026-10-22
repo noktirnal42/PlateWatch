@@ -45,19 +45,26 @@ struct VehicleBoxCanvas: View {
     /// Fade the boxes out when the analysis they came from is older than this (they would no longer sit on the vehicles).
     var staleAfter: TimeInterval = 4
     var updatedAt: Date = .now
+    /// Extrapolate box positions between analysed frames (moving live video only).
+    var glide = false
+    static let maxGlide: TimeInterval = 0.35
 
     /// Vehicles use the console's phosphor colour; fleet hits use its contrast colour (amber on green, green on amber).
     static var vehicle: Color { HubTheme.accent }
     static var fleet: Color { HubTheme.hot }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+        TimelineView(.animation(minimumInterval: glide ? 1.0 / 30 : 1)) { timeline in
             let age = timeline.date.timeIntervalSince(updatedAt)
+            // Boxes are measured ~4x/s; carry each along its tracked velocity until the next measurement. Capped so a stalled
+            // stream's boxes never wander far from where the vehicle last was.
+            let lead = glide ? min(max(age, 0), Self.maxGlide) : 0
             Canvas { context, size in
                 guard frameSize.width > 0, frameSize.height > 0 else { return }
                 let video = Self.aspectFit(content: frameSize, in: size)
                 for box in boxes {
-                    let rect = CGRect(x: video.minX + box.rect.x * video.width, y: video.minY + box.rect.y * video.height,
+                    let rect = CGRect(x: video.minX + (box.rect.x + box.vx * lead) * video.width,
+                                      y: video.minY + (box.rect.y + box.vy * lead) * video.height,
                                       width: box.rect.width * video.width, height: box.rect.height * video.height)
                     Self.draw(box, in: rect, video: video, context: &context)
                 }

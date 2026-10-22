@@ -1323,7 +1323,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
         guard tracked else { return LiveFrameResult(boxes: raw, hits: hits) }
         let smoothed = liveTracker.update(authoritative: authoritative, raw.map { .init(rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) })
-        return LiveFrameResult(boxes: smoothed.map { .init(id: $0.id, rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) }, hits: hits)
+        return LiveFrameResult(boxes: smoothed.map { .init(id: $0.id, rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain, vx: $0.velocity.x, vy: $0.velocity.y) }, hits: hits)
     }
 
     private func processNewFiles() {
@@ -1366,6 +1366,8 @@ struct LiveFrameResult: Sendable {
         let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool
         /// The type of vehicle is not known (label is just "Vehicle"); drawn with a dashed stroke, never colour alone.
         var uncertain = false
+        /// Origin velocity (frame fractions / s) from the tracker; lets the overlay glide between analysed frames.
+        var vx = 0.0, vy = 0.0
     }
     var boxes: [Box]
     var hits: Int
