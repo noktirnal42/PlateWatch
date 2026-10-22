@@ -723,7 +723,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// concurrency cap is what bounds the analysis cost.
     func analyseFeedVideoFrame(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
         let displaysInLive = liveFeed?.id == source.id
-        // Moving video on screen: draw boxes from a fast detector-only pass every frame (~4 fps) and run the full
+        // Moving video on screen: draw boxes from a fast detector-only pass every frame (~10 fps) and run the full
         // fleet-scoring pass in the background about once a second. Only the full pass can score or record a hit.
         if displaysInLive {
             let due = Date().timeIntervalSince(lastLiveThorough) >= 1.2 && !liveThoroughInFlight
@@ -796,7 +796,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         if liveFeed?.id == source.id,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
             liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits, tracked: true), updatedAt: Date())
-            liveFeedStatus = "Live video · boxes ~4/s, fleet scoring ~1/s"
+            liveFeedStatus = "Live video · boxes ~10/s, fleet scoring ~1/s"
         }
     }
 

@@ -49,7 +49,7 @@ struct VehicleBoxCanvas: View {
     var glide = false
     static let maxGlide: TimeInterval = 0.5
     /// Time between a frame being captured and its boxes appearing (tap interval + analysis); the picture has moved on by then.
-    static let captureLatency: TimeInterval = 0.12
+    static let captureLatency: TimeInterval = 0.07
 
     /// Vehicles use the console's phosphor colour; fleet hits use its contrast colour (amber on green, green on amber).
     static var vehicle: Color { HubTheme.accent }
