@@ -72,13 +72,16 @@ struct CornerBrackets: Shape {
 struct HUDPanel: ViewModifier {
     var accent: Color = HubTheme.accent
     var cornerRadius: CGFloat = 10
+    @Environment(\.colorSchemeContrast) private var contrast
     func body(content: Content) -> some View {
+        let more = contrast == .increased
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(LinearGradient(colors: [HubTheme.raised, HubTheme.raised.opacity(0.82)], startPoint: .top, endPoint: .bottom)))
-            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).stroke(HubTheme.hairline, lineWidth: 1))
-            .overlay(CornerBrackets(length: 9).stroke(accent.opacity(0.75), lineWidth: 1.2).padding(3))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(more ? HubTheme.textSecondary : HubTheme.hairline, lineWidth: more ? 1.5 : 1))
+            .overlay(CornerBrackets(length: 9).stroke(accent.opacity(more ? 1 : 0.75), lineWidth: more ? 2 : 1.2).padding(3))
     }
 }
 
@@ -90,9 +93,11 @@ extension View {
 struct HUDLabel: View {
     let text: String
     var color: Color = HubTheme.textTertiary
+    @Environment(\.colorSchemeContrast) private var contrast
     init(_ text: String, color: Color = HubTheme.textTertiary) { self.text = text; self.color = color }
     var body: some View {
-        Text(text.uppercased()).font(HubTheme.mono(10, .medium)).tracking(1.6).foregroundStyle(color)
+        Text(text.uppercased()).font(HubTheme.mono(10, contrast == .increased ? .bold : .medium)).tracking(1.6)
+            .foregroundStyle(contrast == .increased && color == HubTheme.textTertiary ? HubTheme.textPrimary : color)
     }
 }
 
@@ -102,6 +107,7 @@ struct HUDStatusChip: View {
     let color: Color
     var pulsing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var on = false
     var body: some View {
         HStack(spacing: 6) {
@@ -112,7 +118,7 @@ struct HUDStatusChip: View {
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Capsule().fill(Color.black.opacity(0.35)))
-        .overlay(Capsule().stroke(color.opacity(0.55), lineWidth: 0.8))
+        .overlay(Capsule().stroke(color.opacity(contrast == .increased ? 1 : 0.55), lineWidth: contrast == .increased ? 1.4 : 0.8))
         .onAppear { on = true }
         .accessibilityElement(children: .ignore).accessibilityLabel(text)
     }
@@ -120,9 +126,18 @@ struct HUDStatusChip: View {
 
 /// A faint coordinate grid for pane backgrounds. Static; costs one Canvas draw.
 struct HUDBackdrop: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     var body: some View {
         ZStack {
             HubTheme.base
+            if contrast != .increased { grid }
+            if contrast != .increased { RadialGradient(colors: [HubTheme.accent.opacity(0.07), .clear], center: .topLeading, startRadius: 0, endRadius: 520) }
+        }
+        .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
+    }
+
+    private var grid: some View {
+        ZStack {
             Canvas { context, size in
                 let step: CGFloat = 40
                 var path = Path()
@@ -132,9 +147,7 @@ struct HUDBackdrop: View {
                 while y <= size.height { path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)); y += step }
                 context.stroke(path, with: .color(HubTheme.accent.opacity(0.045)), lineWidth: 0.5)
             }
-            RadialGradient(colors: [HubTheme.accent.opacity(0.07), .clear], center: .topLeading, startRadius: 0, endRadius: 520)
         }
-        .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -154,6 +167,7 @@ struct HUDGroupBoxStyle: GroupBoxStyle {
 /// Default button look: dark glass, phosphor outline and label, brightens on hover, dims when disabled.
 struct HUDButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var hover = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -163,13 +177,14 @@ struct HUDButtonStyle: ButtonStyle {
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(HubTheme.accent.opacity(configuration.isPressed ? 0.28 : (hover && enabled ? 0.16 : 0.07))))
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(HubTheme.accent.opacity(enabled ? 0.55 : 0.2), lineWidth: 0.8))
+                .stroke(HubTheme.accent.opacity(enabled ? (contrast == .increased ? 1 : 0.55) : 0.35), lineWidth: contrast == .increased ? 1.5 : 0.8))
             .onHover { hover = $0 }
     }
 }
 
 /// Sidebar row: phosphor bar and tint on the selected pane, monospaced small caps feel without losing legibility.
 struct HUDSidebarRow: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let title: String
     let icon: String
     let selected: Bool
@@ -178,11 +193,11 @@ struct HUDSidebarRow: View {
             Image(systemName: icon).font(.system(size: 13)).frame(width: 18)
                 .foregroundStyle(selected ? HubTheme.accent : HubTheme.textSecondary)
             Text(title).font(.system(size: 13, weight: selected ? .semibold : .regular))
-                .foregroundStyle(selected ? HubTheme.textPrimary : HubTheme.textSecondary)
+                .foregroundStyle(selected || contrast == .increased ? HubTheme.textPrimary : HubTheme.textSecondary)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 6).padding(.horizontal, 10)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? HubTheme.accent.opacity(0.13) : .clear))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(selected ? HubTheme.accent.opacity(contrast == .increased ? 0.28 : 0.13) : .clear))
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 1).fill(selected ? HubTheme.accent : .clear).frame(width: 2.5, height: 16)
                 .shadow(color: HubTheme.accent.opacity(selected ? 0.7 : 0), radius: 4)
@@ -207,4 +222,26 @@ struct HUDProminentButtonStyle: ButtonStyle {
                 .fill(HubTheme.accent.opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.35)))
             .shadow(color: HubTheme.accent.opacity(enabled ? 0.35 : 0), radius: 6)
     }
+}
+
+
+/// The Hub's chrome in one modifier: phosphor tint, HUD buttons and group boxes, hidden scroll backgrounds and (optionally) the
+/// grid backdrop. Applied to the console, the menu-bar popover, sheets and the secondary windows so they all match and all follow
+/// the Phosphor setting.
+struct HubChrome: ViewModifier {
+    var backdrop = true
+    @AppStorage(Phosphor.defaultsKey) private var phosphor = Phosphor.green.rawValue
+    func body(content: Content) -> some View {
+        content
+            .tint(HubTheme.accent)
+            .buttonStyle(HUDButtonStyle())
+            .groupBoxStyle(HUDGroupBoxStyle())
+            .scrollContentBackground(.hidden)
+            .background { if backdrop { HUDBackdrop() } }
+            .id(phosphor)
+    }
+}
+
+extension View {
+    func hubChrome(backdrop: Bool = true) -> some View { modifier(HubChrome(backdrop: backdrop)) }
 }

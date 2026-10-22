@@ -60,18 +60,18 @@ struct PlateWatchHubApp: App {
         .commands { HubWindowCommands() }
 
         MenuBarExtra("PlateWatch Hub", systemImage: "antenna.radiowaves.left.and.right") {
-            HubStatusView(hub: hub)
+            HubStatusView(hub: hub).hubChrome()
         }
         .menuBarExtraStyle(.window)
         .modelContainer(modelContainer)
 
         Window("PlateWatch Hub Help", id: "hub-help") {
-            HubHelpView()
+            HubHelpView().hubChrome()
         }.defaultSize(width: 660, height: 650)
 
         // Feed terms review window
         Window("Feed terms", id: "feeds-review") {
-            FeedsReviewView(hub: hub)
+            FeedsReviewView(hub: hub).hubChrome()
         }
     }
 }
@@ -118,7 +118,7 @@ struct HubStatusView: View {
                     Text("\(hub.confirmedNV511Count.formatted()) confirmed")
                         .font(.caption)
                     Button("Watch all") { hub.watchAllNV511() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(HUDProminentButtonStyle())
                         .controlSize(.small)
                         .help("Restore background analysis for all confirmed Nevada 511 cameras")
                         .accessibilityLabel("Watch all confirmed Nevada 511 feeds")

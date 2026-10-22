@@ -107,11 +107,7 @@ struct ConsoleView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(HUDBackdrop())
         }
-        .tint(HubTheme.accent)
-        .buttonStyle(HUDButtonStyle())
-        .groupBoxStyle(HUDGroupBoxStyle())
-        .scrollContentBackground(.hidden)
-        .id(phosphor)
+        .hubChrome(backdrop: false)
         .onChange(of: selection) { _, pane in
             if pane == .feeds { feedsVisited = true }
             if let pane { visited.insert(pane) }

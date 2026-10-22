@@ -91,6 +91,7 @@ struct TermsReviewSheet: View {
             }.padding()
         }
         .frame(width: 640, height: 620)
+        .hubChrome()
         .onAppear {
             if let s = sample {
                 licenseClass = s.terms.licenseClass
