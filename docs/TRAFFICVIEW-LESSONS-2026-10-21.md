@@ -40,7 +40,7 @@ the owner then enabled it and I saw dashed/solid boxes with two-line chips ("Car
 | TrafficView idea | Decision |
 |---|---|
 | Per-provider terms store and "Viewing only" mode | PlateWatch already has per-host terms with a human decision; unchanged |
-| Colour by vehicle family; dashed stroke for uncertain type | Our boxes carry no per-box confidence/family yet. Candidate follow-up: add `classConfidence` and body family to `LiveFrameResult.Box` |
+| Colour by vehicle family; dashed stroke for uncertain type | Dashed stroke added 2026-10-21 for boxes whose type is unknown (label is just "Vehicle"); a first try keyed on class confidence < 50 % made nearly every box dashed (confidences are low even for obvious cars), so it was dropped. Per-family colour not done |
 | IoU tracker + vote smoothing for stable labels | Worth doing, bigger change: needs track IDs across frames in `analyseFeedVideoFrame` (ours are per-frame UUIDs) |
 | Right-hand track inspector | Candidate follow-up after tracks exist |
 | Multi-tile live wall | Conflicts with the four-stream budget and per-host politeness; not started |
@@ -52,3 +52,6 @@ the owner then enabled it and I saw dashed/solid boxes with two-line chips ("Car
 Verified in the running Hub: Map pane renders 13,332 pins in clusters; Live shows moving NV511 video with the new boxes (McCarran & Caughlin/Cashill,
 10 vehicles detected) once the stream connects. Built but not exercised: "Show on map" end-to-end click path (see NEXT-STEPS), the 40 s patience (the
 upstream stayed slow), cluster-title change. No Hub XCTest changes beyond the backoff test in FeedIngest.
+
+## Follow-ups done the same day
+- Favorites tiles got a map button (Show on map). The installed MCP script was refreshed from the repo (previous copy saved in `~/.local/share/platewatch-mcp/config-backups/`); restart the MCP client to pick up the `map` pane and the RSS tools.

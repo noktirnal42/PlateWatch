@@ -1255,9 +1255,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
     private func liveResult(_ frame: DetectionFrame, hits: Int) -> LiveFrameResult {
         let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
-            return .init(id: vehicle.id, rect: vehicle.boundingBox,
-                         label: VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence),
-                         isFleet: gate.verdict(fleetConfidence: confidence) == .persistAndSync)
+            let isFleet = gate.verdict(fleetConfidence: confidence) == .persistAndSync
+            let label = VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence)
+            return .init(id: vehicle.id, rect: vehicle.boundingBox, label: label, isFleet: isFleet,
+                         uncertain: !isFleet && label.hasPrefix("Vehicle"))
         }
         return LiveFrameResult(boxes: boxes, hits: hits)
     }
@@ -1298,7 +1299,11 @@ final class HubController: ObservableObject, ReviewHubProviding {
 }
 
 struct LiveFrameResult: Sendable {
-    struct Box: Sendable, Identifiable { let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool }
+    struct Box: Sendable, Identifiable {
+        let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool
+        /// The type of vehicle is not known (label is just "Vehicle"); drawn with a dashed stroke, never colour alone.
+        var uncertain = false
+    }
     var boxes: [Box]
     var hits: Int
 }

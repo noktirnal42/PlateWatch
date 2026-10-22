@@ -393,7 +393,7 @@ struct FeedsPane: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
-                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, location: locationLabel($0), provider: providerLabel($0), isActive: isActive, onOpenLive: onOpenLive) }
+                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, location: locationLabel($0), provider: providerLabel($0), isActive: isActive, onOpenLive: onOpenLive, onShowOnMap: onShowOnMap) }
                     }.padding(.bottom, 8)
                 }
             }
@@ -444,6 +444,7 @@ struct FavoriteTile: View {
     let provider: String
     let isActive: Bool
     var onOpenLive: () -> Void
+    var onShowOnMap: () -> Void = {}
     @State private var image: NSImage?
     @State private var message = ""
     @State private var policyRetryDelay: TimeInterval?
@@ -464,10 +465,14 @@ struct FavoriteTile: View {
                 FeedBlockButton(hub: hub, preferences: favorites, source: source)
                 FeedWatchButton(hub: hub, favorites: favorites, source: source)
             }
-            Button("Open in Live", systemImage: "play.rectangle") {
-                hub.openFeedInLive(source); onOpenLive()
-            }.help("Open this camera's analysed snapshots in Live")
-                .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
+            HStack {
+                Button("Open in Live", systemImage: "play.rectangle") {
+                    hub.openFeedInLive(source); onOpenLive()
+                }.help("Open this camera's analysed snapshots in Live")
+                    .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
+                Button { hub.requestMapFocus(source); onShowOnMap() } label: { Image(systemName: "map") }
+                    .help("Show on map").accessibilityLabel("Show \(source.name) on the map")
+            }
             Text(location).font(.caption.weight(.medium)).lineLimit(1)
                 .help("Nearest Census place to the camera's position, not a jurisdiction boundary")
             Text(provider).font(.caption2).foregroundStyle(.secondary).lineLimit(1)

@@ -73,7 +73,7 @@ struct VehicleBoxCanvas: View {
         let color = box.isFleet ? fleet : vehicle
         let path = Path(roundedRect: rect, cornerRadius: 4)
         context.stroke(path, with: .color(.black.opacity(0.55)), lineWidth: box.isFleet ? 4.5 : 3.5)
-        context.stroke(path, with: .color(color), lineWidth: box.isFleet ? 2.5 : 2)
+        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: box.isFleet ? 2.5 : 2, dash: box.uncertain ? [6, 4] : []))
         guard rect.width >= 56 else { return }
 
         let lines = box.label.components(separatedBy: " · ").filter { !$0.isEmpty }
