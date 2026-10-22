@@ -423,7 +423,7 @@ final class FeedRunner: ObservableObject {
         // leaving a video tile in "Connecting" for half a minute.
         // The camera the operator is watching gets more patience: NV511 hosts often take 10–60 s to answer a playlist request
         // (measured 2026-10-21: connect ~8 s, first byte ~9 s, or no answer for 60 s), so a 15 s limit made Live look dead.
-        let decoder = HLSFrameSource(source: source, stallTimeout: source.id == requestedHLSID ? 40 : 15, requestPolicy: resourcePolicy(for: source))
+        let decoder = HLSFrameSource(source: source, stallTimeout: source.id == requestedHLSID ? 75 : 15, requestPolicy: resourcePolicy(for: source))
         // The camera on screen is sampled ~4x/s for overlay boxes (the Hub runs the heavy pass about once a second); background watches stay at 1/s.
         decoder.tapInterval = source.id == requestedHLSID ? 0.25 : 1
         decoder.onStateChange = { [weak self, weak decoder] state in
