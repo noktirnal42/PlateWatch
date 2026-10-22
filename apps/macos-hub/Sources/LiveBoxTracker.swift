@@ -37,6 +37,8 @@ struct LiveBoxTracker {
         var hits = 1
         var misses = 0
         var seenAt: TimeInterval = 0
+        /// A full analysis frame has classified this vehicle; until then the box is drawn dashed.
+        var classified = false
         var velocity: (x: Double, y: Double) = (0, 0)
     }
     private var tracks: [Track] = []
@@ -89,7 +91,8 @@ struct LiveBoxTracker {
             if tracks[t].votes.count > Self.voteWindow { tracks[t].votes.removeFirst(tracks[t].votes.count - Self.voteWindow) }
             let base = Self.winner(tracks[t].votes)
             let label = ([base] + parts.dropFirst()).joined(separator: " · ")
-            let uncertain = detection.uncertain && base.hasPrefix("Vehicle")
+            if authoritative { tracks[t].classified = true }
+            let uncertain = !tracks[t].classified || (detection.uncertain && base.hasPrefix("Vehicle"))
             if authoritative || tracks[t].shown == nil { tracks[t].shown = (label, detection.isFleet, uncertain) }
             out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: label, isFleet: detection.isFleet,
                                uncertain: uncertain, hits: tracks[t].hits, velocity: tracks[t].velocity))

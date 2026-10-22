@@ -22,6 +22,14 @@ final class LiveBoxTrackerTests: XCTestCase {
         XCTAssertEqual(second[0].velocity.x, 0.1, accuracy: 0.001)   // 0.05 over 0.25 s, halved by smoothing from 0 → 0.1
     }
 
+    func testBoxIsDashedUntilAFullFrameClassifiesIt() {
+        var tracker = LiveBoxTracker()
+        XCTAssertTrue(tracker.update(authoritative: false, [det(0.3, "Car")])[0].uncertain)
+        XCTAssertTrue(tracker.update(authoritative: false, [det(0.31, "Car")])[0].uncertain)
+        XCTAssertFalse(tracker.update(authoritative: true, [det(0.32, "Blue Car · class 61%")])[0].uncertain)
+        XCTAssertFalse(tracker.update(authoritative: false, [det(0.33, "Car")])[0].uncertain, "stays solid once classified")
+    }
+
     func testLabelFlickerIsSmoothedButTheLatestScoreIsShown() {
         var tracker = LiveBoxTracker()
         var shown = ""
