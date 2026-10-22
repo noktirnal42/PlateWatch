@@ -7,12 +7,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 DERIVED_DATA="${PLATEWATCH_DERIVED_DATA:-${TMPDIR:-/tmp}/platewatch-hub-derived}"
 INSTALL_DIR="${PLATEWATCH_INSTALL_DIR:-$HOME/Applications}"
-APP="$DERIVED_DATA/Build/Products/Debug/PlateWatchHub.app"
+CONFIGURATION="${PLATEWATCH_CONFIGURATION:-Debug}"   # PLATEWATCH_CONFIGURATION=Release for an optimised build
+APP="$DERIVED_DATA/Build/Products/$CONFIGURATION/PlateWatchHub.app"
 
 xcodebuild \
   -project "$ROOT_DIR/apps/macos-hub/PlateWatchHub.xcodeproj" \
   -scheme PlateWatchHub \
-  -configuration Debug \
+  -configuration "$CONFIGURATION" \
   -destination 'platform=macOS' \
   -derivedDataPath "$DERIVED_DATA" \
   -allowProvisioningUpdates \
