@@ -442,6 +442,15 @@ final class FeedRunner: ObservableObject {
         }
         hlsSources[id] = decoder
         decoder.start(sink: videoSink)
+        // The pinned camera is now connecting: release the background decoders that were started before it (selection was
+        // computed while its state was still unset, so they were all allowed).
+        if id == requestedHLSID {
+            let keep = selectedHLSIDs
+            for other in Array(hlsSources.keys) where !keep.contains(other) {
+                stopHLS(other)
+                if !blockedIDs.contains(other) { sourceStates[other] = watchedIDs.contains(other) ? .videoIdle : nil }
+            }
+        }
         updateStatus()
     }
 

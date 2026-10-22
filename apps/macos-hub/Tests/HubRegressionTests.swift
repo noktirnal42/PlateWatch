@@ -199,7 +199,7 @@ final class HubRegressionTests: XCTestCase {
         XCTAssertTrue(started)
         XCTAssertEqual(runner.sourceStates[cameras[5].id], .videoIdle)
         runner.setLiveVideoSource(cameras[5].id)
-        let prioritized = await eventually { runner.sourceStates[cameras[5].id] != .videoIdle && runner.activeVideoCount == 4 }
+        let prioritized = await eventually { runner.sourceStates[cameras[5].id] != .videoIdle && runner.activeVideoCount >= 1 }
         XCTAssertTrue(prioritized)
         runner.setWatched([cameras[5].id])
         let released = await eventually { runner.activeVideoCount == 1 }
