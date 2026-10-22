@@ -34,6 +34,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDel
             UserDefaults.standard.set(plates, forKey: "watchlistPlates")
         }
         WatchPresenceCoordinator.ingest(session.receivedApplicationContext)
+        if let phosphor = session.receivedApplicationContext["phosphor"] as? String { UserDefaults.standard.set(phosphor, forKey: "pwPhosphor") }
     }
 
     nonisolated func session(_ session: WCSession,
@@ -42,6 +43,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDel
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         WatchPresenceCoordinator.ingest(applicationContext)
+        if let phosphor = applicationContext["phosphor"] as? String { UserDefaults.standard.set(phosphor, forKey: "pwPhosphor") }
         guard let plates = applicationContext["watchlistPlates"] as? [String] else { return }
         UserDefaults.standard.set(plates, forKey: "watchlistPlates")
     }

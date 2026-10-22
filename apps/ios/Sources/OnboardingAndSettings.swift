@@ -89,6 +89,8 @@ struct SettingsView: View {
     @State private var connectionStatus = "Not checked"
     @State private var checkingConnection = false
     @AppStorage("presenceEnabled") private var presenceEnabled = false
+    @AppStorage(PWPhosphor.defaultsKey) private var phosphor = PWPhosphor.green.rawValue
+    @AppStorage("pwAppearance") private var appearance = "dark"
     @State private var draftDestination = SyncSettings.load().destination
     @State private var draftMirrorURL = SyncSettings.load().mirrorURL ?? ""
     @State private var backendSettingsMessage: String?
@@ -133,6 +135,16 @@ struct SettingsView: View {
                             Text("PRE-ALPHA · \(version)").font(.caption.monospaced()).foregroundStyle(PWStyle.fleetText)
                         }
                     }.padding(.vertical, 8)
+                }
+                Section {
+                    Picker("Phosphor", selection: $phosphor) { ForEach(PWPhosphor.allCases) { Text($0.title).tag($0.rawValue) } }
+                        .pickerStyle(.segmented)
+                        .onChange(of: phosphor) { _, value in WatchlistConnectivity.shared.send(phosphor: value) }
+                    Picker("Appearance", selection: $appearance) {
+                        Text("Dark").tag("dark"); Text("System").tag("system")
+                    }.pickerStyle(.segmented)
+                } header: { Text("Appearance") } footer: {
+                    Text("Console glow colour: classic green or amber. Dark is the default look; System follows light/dark mode.")
                 }
                 Section("Analysis & delivery") {
                     LabeledContent("Shared database") { Text(backendName).multilineTextAlignment(.trailing) }

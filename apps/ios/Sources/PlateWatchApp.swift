@@ -34,24 +34,24 @@ struct PlateWatchApp: App {
     var body: some Scene {
         WindowGroup {
             TabView(selection: $selectedTab) {
-                CaptureView()
+                CaptureView().background(PWBackdrop())
                     .tabItem { Label("Capture", systemImage: "camera.viewfinder") }
                     .tag(0)
-                SightingsListView()
+                SightingsListView().background(PWBackdrop())
                     .tabItem { Label("Sightings", systemImage: "list.bullet.rectangle") }
                     .tag(1)
-                WatchlistView()
+                WatchlistView().background(PWBackdrop())
                     .tabItem { Label("Watchlist", systemImage: "eye") }
                     .tag(2)
-                HeatmapView()
+                HeatmapView().background(PWBackdrop())
                     .tabItem { Label("Explore", systemImage: "map") }
                     .tag(3)
-                SettingsView()
+                SettingsView().background(PWBackdrop())
                     .tabItem { Label("About", systemImage: "info.circle") }
                     .tag(4)
             }
+            .pwTheme()
             .modifier(PreviewAppearance())
-            .tint(PWStyle.fleetText)
             .fullScreenCover(isPresented: Binding(get: { PreviewFixtures.isEnabled ? ProcessInfo.processInfo.arguments.contains("-PWPreviewOnboarding") && !previewOnboarded : !hasOnboarded }, set: { _ in })) {
                 OnboardingView {
                     if PreviewFixtures.isEnabled { previewOnboarded = true }

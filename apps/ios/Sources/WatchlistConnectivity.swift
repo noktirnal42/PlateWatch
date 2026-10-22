@@ -33,6 +33,9 @@ final class WatchlistConnectivity: NSObject, WCSessionDelegate, @unchecked Senda
         push("watchlistPlates", normalized)
     }
 
+    /// The console glow colour ("green" / "amber") so the watch matches the phone.
+    func send(phosphor: String) { push("phosphor", phosphor) }
+
     /// Aggregate counts only (sessions, processors, Hub dashboard totals). No identifiers, plates or frames.
     func send(presence aggregate: PresenceAggregate) {
         let s = aggregate.stats

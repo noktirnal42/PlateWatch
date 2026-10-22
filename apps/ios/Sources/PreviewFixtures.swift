@@ -58,11 +58,11 @@ enum PreviewFixtures {
 struct PreviewAppearance: ViewModifier {
     func body(content: Content) -> some View {
         if PreviewFixtures.isEnabled {
+            // The app's own theme (dark by default) applies unless a preview argument says otherwise.
             if ProcessInfo.processInfo.arguments.contains("-PWPreviewLargeText") {
                 content.dynamicTypeSize(.accessibility3)
-                    .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-PWPreviewDark") ? .dark : nil)
             } else {
-                content.preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-PWPreviewDark") ? .dark : nil)
+                content
             }
         } else {
             content

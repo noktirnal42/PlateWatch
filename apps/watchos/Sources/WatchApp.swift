@@ -21,6 +21,13 @@ struct PlateWatchWatchApp: App {
     }
 }
 
+/// Phosphor glow shared with the iPhone app: green by default; the phone relays its Green/Amber choice (`phosphor` key).
+enum WatchPhosphor {
+    static let defaultsKey = "pwPhosphor"
+    static var isAmber: Bool { UserDefaults.standard.string(forKey: defaultsKey) == "amber" }
+    static var accent: Color { isAmber ? Color(red: 1, green: 0.69, blue: 0) : Color(red: 0.24, green: 1, blue: 0.53) }
+}
+
 /// watchOS is intentionally camera-less: this app is the alert-and-log
 /// companion. CKQuerySubscription pushes wake it when a watchlist vehicle is
 /// fleet-confirmed nearby; the extension delegate plays the haptic.
@@ -30,9 +37,7 @@ struct WatchRootView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Live stats") {
-                    WatchStatsView()
-                }
+                Section { WatchStatsView() } header: { Text("LIVE STATS").font(.system(size: 10, weight: .semibold, design: .monospaced)).tracking(1.2).foregroundStyle(WatchPhosphor.accent) }
                 Section {
                     if delegate.hits.isEmpty {
                         Text("No alerts yet")
@@ -52,7 +57,7 @@ struct WatchRootView: View {
                     }
                 } header: {
                     HStack {
-                        Text("Recent fleet hits")
+                        Text("RECENT FLEET HITS").font(.system(size: 10, weight: .semibold, design: .monospaced)).tracking(1.2).foregroundStyle(WatchPhosphor.accent)
                         Spacer()
                         if delegate.unreadCount > 0 {
                         Text("\(delegate.unreadCount) new")
@@ -68,6 +73,9 @@ struct WatchRootView: View {
             }
             .navigationTitle("PlateWatch")
         }
+        .tint(WatchPhosphor.accent)
+        .scrollContentBackground(.hidden)
+        .background(Color.black)
     }
 }
 
@@ -141,7 +149,7 @@ private struct WatchStatsView: View {
 
     private func statRow(_ title: String, value: String, icon: String) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: icon).frame(width: 16).foregroundStyle(.blue)
+            Image(systemName: icon).frame(width: 16).foregroundStyle(WatchPhosphor.accent)
             Text(title).font(.caption)
             Spacer(minLength: 4)
             Text(value).font(.headline.monospacedDigit())
@@ -158,7 +166,7 @@ private struct WatchStatsView: View {
 
     private var freshnessColor: Color {
         guard let updatedAt = stats.updatedAt else { return .secondary }
-        return Date.now.timeIntervalSince(updatedAt) > 90 ? .orange : .green
+        return Date.now.timeIntervalSince(updatedAt) > 90 ? .orange : WatchPhosphor.accent
     }
 }
 
