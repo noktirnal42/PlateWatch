@@ -74,7 +74,7 @@ final class LiveBoxTrackerTests: XCTestCase {
         let fast = tracker.update(authoritative: false, [det(0.33, "Vehicle · class 30%", uncertain: true)])
         XCTAssertEqual(fast[0].label, "White Car · Patrol · fleet 91%")
         XCTAssertTrue(fast[0].isFleet)
-        XCTAssertEqual(fast[0].rect.x, 0.33, accuracy: 1e-9, "the box follows the vehicle")
+        XCTAssertEqual(fast[0].rect.x, 0.30 + 0.03 * LiveBoxTracker.smoothing, accuracy: 1e-9, "the box follows the vehicle, blended with its last position")
         let fresh = tracker.update(authoritative: false, [det(0.70, "Vehicle · class 30%", uncertain: true)])
         XCTAssertFalse(fresh[0].isFleet, "a newly seen box starts as an ordinary vehicle until a full frame scores it")
         XCTAssertTrue(fresh[0].uncertain)

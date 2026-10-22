@@ -26,6 +26,8 @@ struct LiveBoxTracker {
     }
 
     static let matchIoU = 0.3
+    /// Weight of the newest detection in a matched box's position (1 = no smoothing).
+    static let smoothing = 0.65
     static let maxMisses = 3
     static let voteWindow = 7
 
@@ -74,7 +76,11 @@ struct LiveBoxTracker {
                     let vx = (detection.rect.x - tracks[t].rect.x) / dt, vy = (detection.rect.y - tracks[t].rect.y) / dt
                     tracks[t].velocity = (0.5 * tracks[t].velocity.x + 0.5 * vx, 0.5 * tracks[t].velocity.y + 0.5 * vy)
                 }
-                tracks[t].rect = detection.rect
+                // Detector boxes jitter a few pixels frame to frame; blend with the previous position so the box glides.
+                let prev = tracks[t].rect, a = Self.smoothing
+                tracks[t].rect = NormalizedBox(x: prev.x + (detection.rect.x - prev.x) * a, y: prev.y + (detection.rect.y - prev.y) * a,
+                                               width: prev.width + (detection.rect.width - prev.width) * a,
+                                               height: prev.height + (detection.rect.height - prev.height) * a)
                 tracks[t].seenAt = now
                 tracks[t].misses = 0
                 tracks[t].hits += 1
@@ -82,7 +88,7 @@ struct LiveBoxTracker {
                 tracks.append(Track(rect: detection.rect, seenAt: now)); t = tracks.count - 1
             }
             if !authoritative, trackFor[d] != nil, let shown = tracks[t].shown {
-                out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: shown.label, isFleet: shown.isFleet,
+                out.append(Tracked(id: tracks[t].id, rect: tracks[t].rect, label: shown.label, isFleet: shown.isFleet,
                                    uncertain: shown.uncertain, hits: tracks[t].hits, velocity: tracks[t].velocity))
                 continue
             }
@@ -94,7 +100,7 @@ struct LiveBoxTracker {
             if authoritative { tracks[t].classified = true }
             let uncertain = !tracks[t].classified || (detection.uncertain && base.hasPrefix("Vehicle"))
             if authoritative || tracks[t].shown == nil { tracks[t].shown = (label, detection.isFleet, uncertain) }
-            out.append(Tracked(id: tracks[t].id, rect: detection.rect, label: label, isFleet: detection.isFleet,
+            out.append(Tracked(id: tracks[t].id, rect: tracks[t].rect, label: label, isFleet: detection.isFleet,
                                uncertain: uncertain, hits: tracks[t].hits, velocity: tracks[t].velocity))
         }
         tracks.removeAll { $0.misses > Self.maxMisses }

@@ -47,7 +47,9 @@ struct VehicleBoxCanvas: View {
     var updatedAt: Date = .now
     /// Extrapolate box positions between analysed frames (moving live video only).
     var glide = false
-    static let maxGlide: TimeInterval = 0.35
+    static let maxGlide: TimeInterval = 0.5
+    /// Time between a frame being captured and its boxes appearing (tap interval + analysis); the picture has moved on by then.
+    static let captureLatency: TimeInterval = 0.12
 
     /// Vehicles use the console's phosphor colour; fleet hits use its contrast colour (amber on green, green on amber).
     static var vehicle: Color { HubTheme.accent }
@@ -58,7 +60,7 @@ struct VehicleBoxCanvas: View {
             let age = timeline.date.timeIntervalSince(updatedAt)
             // Boxes are measured ~4x/s; carry each along its tracked velocity until the next measurement. Capped so a stalled
             // stream's boxes never wander far from where the vehicle last was.
-            let lead = glide ? min(max(age, 0), Self.maxGlide) : 0
+            let lead = glide ? min(max(age, 0) + (age < Self.maxGlide ? Self.captureLatency : 0), Self.maxGlide) : 0
             Canvas { context, size in
                 guard frameSize.width > 0, frameSize.height > 0 else { return }
                 let video = Self.aspectFit(content: frameSize, in: size)
