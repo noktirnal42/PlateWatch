@@ -102,3 +102,22 @@ server, model-pipeline, MCP and eval-harness job. The iOS UI job failed
 `demo1` in `fleet-plate-input`. That exact WS1 diagnostic is separate from
 these Hub tests. The apps job was still running when inspected; no complete
 remote green claim is made for this checkpoint.
+
+## Release-integrity gate discovered in runtime verification
+
+The published `vehicle-type-classifier.aar` digest is
+`728ff6aaca8da8d20cad646c5a8edd68b23311a4e501f2644d12948cd88ce01e`,
+which matches the local release archive. The checked-in/cached registry instead
+pins `6f0aa0e85c247838158c8824de7ef648b003efb1c8e80b84cff293387c8e6b32`.
+The archive's model specification and weight blob were compared with the
+native-test source package and match byte-for-byte. The native test therefore
+exercises the published artifact, but fresh installation remains blocked by
+the registry mismatch. The running Hub's model cache contained the two
+detectors, with no compiled type model.
+
+`ModelManager.install` returns the cumulative loaded-model count. The Hub had
+added both passes, making two loaded detectors appear as four active models.
+It now uses the final cumulative count and explicitly marks the type model
+unavailable. The verified registry digest/input-description repair belongs to
+the next WS3 checkpoint; checksum enforcement is preserved. This is a real
+availability gate for selected-HLS type estimates, not a completed deployment.

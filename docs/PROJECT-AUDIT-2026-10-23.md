@@ -208,3 +208,11 @@ the shared/iOS consumer or the historical registry input description.
 Hub: 80 tests (five opt-in skips), FeedIngest: 171 (four skips), zero failures.
 Full evidence, native opt-in reproduction, scope and next gates:
 [Hub Live types](HUB-LIVE-TYPES-2026-10-23.md).
+
+Runtime verification also found a release-integrity gate: the published type
+archive matches the native-test package, but its SHA differs from the pinned
+registry value. The running app has no compiled type model; its earlier
+four-model status double-counted two cumulative installer results. Hub now
+reports the actual final count and type unavailability. Correcting the
+verified registry SHA/input description is next in WS3; no checksum bypass
+or accepted-type deployment claim is made here.

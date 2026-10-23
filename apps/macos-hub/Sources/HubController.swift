@@ -839,11 +839,14 @@ final class HubController: ObservableObject, ReviewHubProviding {
         // Vehicle type is display-only and may not have a published artifact.
         // Install it separately so its network failure cannot delay or replace
         // the core detectors used for fleet analysis.
-        let typeCount = await Task.detached(priority: .utility) {
+        let total = await Task.detached(priority: .utility) {
             await manager.install(tasks: ["vehicle-type-classification"], into: box)
         }.value
-        let total = detectorCount + typeCount
+        // install returns the cumulative context count, not a per-pass delta.
         modelStatus = total == 0 ? "baseline vision" : "CoreML active (\(total) models)"
+        if box.current.models["vehicle-type-classification"] == nil {
+            modelStatus += " · type model unavailable"
+        }
     }
 
     func attach(context: ModelContext) {
