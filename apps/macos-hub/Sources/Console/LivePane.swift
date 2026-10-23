@@ -170,9 +170,8 @@ struct LivePane: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
                         Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
-                        FeedFreshnessLabel(received: runner.lastReceivedAt[source.id],
+                        FeedFreshnessLabel(runner: runner, sourceID: source.id,
                                            analysed: hub.liveFeedFrame?.updatedAt,
-                                           changed: runner.contentChangedAt[source.id],
                                            snapshotInterval: source.kind == .snapshotJPEG ? source.refreshInterval : nil)
                     }
                     Spacer()
@@ -312,14 +311,15 @@ struct LivePane: View {
 }
 
 private struct FeedFreshnessLabel: View {
-    let received: Date?
+    @ObservedObject var runner: FeedRunner
+    let sourceID: UUID
     let analysed: Date?
-    let changed: Date?
     let snapshotInterval: TimeInterval?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { tick in
-            let health = LiveFeedHealth(now: tick.date, received: received, analysed: analysed,
+            let changed = runner.contentChangedAt[sourceID]
+            let health = LiveFeedHealth(now: tick.date, received: runner.lastReceivedAt[sourceID], analysed: analysed,
                                         changed: changed, snapshotInterval: snapshotInterval)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(health.deliveryText) · \(health.analysisText)")
