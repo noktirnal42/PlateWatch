@@ -169,8 +169,7 @@ struct LivePane: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
-                        Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
-                        FeedFreshnessLabel(runner: runner, sourceID: source.id,
+                        FeedFreshnessLabel(runner: runner, sourceID: source.id, status: hub.liveFeedStatus,
                                            analysed: hub.liveFeedFrame?.updatedAt,
                                            snapshotInterval: source.kind == .snapshotJPEG ? source.refreshInterval : nil)
                     }
@@ -235,7 +234,9 @@ struct LivePane: View {
                         Image(decorative: image, scale: 1).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
                         if showOverlays {
                             VehicleBoxCanvas(boxes: hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? []),
-                                             frameSize: CGSize(width: image.width, height: image.height), staleAfter: .infinity)
+                                             frameSize: CGSize(width: image.width, height: image.height),
+                                             staleAfter: hub.liveFeed?.kind == .hls ? 4 : .infinity,
+                                             updatedAt: hub.liveFeedFrame?.updatedAt ?? .now)
                         }
                     }
                 } else {
@@ -313,6 +314,7 @@ struct LivePane: View {
 private struct FeedFreshnessLabel: View {
     @ObservedObject var runner: FeedRunner
     let sourceID: UUID
+    let status: String
     let analysed: Date?
     let snapshotInterval: TimeInterval?
 
@@ -322,6 +324,8 @@ private struct FeedFreshnessLabel: View {
             let health = LiveFeedHealth(now: tick.date, received: runner.lastReceivedAt[sourceID], analysed: analysed,
                                         changed: changed, snapshotInterval: snapshotInterval)
             VStack(alignment: .leading, spacing: 2) {
+                Text("\(snapshotInterval == nil ? "Video feed" : "Snapshot feed") · \(health.delivery == .delayed ? "Frame delivery delayed" : status)")
+                    .foregroundStyle(health.delivery == .delayed ? Color.orange : Color.secondary)
                 Text("\(health.deliveryText) · \(health.analysisText)")
                     .foregroundStyle(health.delivery == .delayed ? Color.orange : Color.secondary)
                 if health.unchanged, let changed {
