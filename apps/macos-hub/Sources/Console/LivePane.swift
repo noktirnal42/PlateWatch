@@ -170,14 +170,10 @@ struct LivePane: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
                         Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
-                        if source.kind == .snapshotJPEG, let received = runner.lastReceivedAt[source.id] {
-                            SnapshotFreshnessLabel(received: received, changed: runner.contentChangedAt[source.id] ?? received,
-                                                   interval: source.refreshInterval)
-                        }
-                        if let frame = hub.liveFeedFrame {
-                            Text("Analysed \(frame.updatedAt, format: .dateTime.hour().minute().second()) · \(frame.result.boxes.count) vehicle(s)")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                        FeedFreshnessLabel(received: runner.lastReceivedAt[source.id],
+                                           analysed: hub.liveFeedFrame?.updatedAt,
+                                           changed: runner.contentChangedAt[source.id],
+                                           snapshotInterval: source.kind == .snapshotJPEG ? source.refreshInterval : nil)
                     }
                     Spacer()
                     FeedBlockButton(hub: hub, preferences: hub.favorites, source: source)
@@ -282,14 +278,21 @@ struct LivePane: View {
         let frame = hub.liveFeedFrame
         let local = hub.liveFeed == nil && live.running
         HStack(spacing: 8) {
-            if streaming { HUDStatusChip(text: "Live · HLS", color: HubTheme.live, pulsing: true) }
+            if streaming, let source = hub.liveFeed {
+                TimelineView(.periodic(from: .now, by: 1)) { tick in
+                    let health = LiveFeedHealth(now: tick.date, received: runner.lastReceivedAt[source.id], analysed: nil)
+                    HUDStatusChip(text: health.delivery == .current ? "Live · HLS" : health.deliveryText,
+                                  color: health.delivery == .current ? HubTheme.live : HubTheme.amber,
+                                  pulsing: health.delivery == .current)
+                }
+            }
             else if local { HUDStatusChip(text: "Live · camera", color: HubTheme.live, pulsing: true) }
             else if hub.liveFeed != nil, frame != nil { HUDStatusChip(text: "Sampled stills", color: HubTheme.amber) }
             else if hub.liveFeed != nil { HUDStatusChip(text: "Acquiring", color: HubTheme.amber, pulsing: true) }
             if let frame, showOverlays {
                 TimelineView(.periodic(from: .now, by: 1)) { tick in
                     let age = max(0, Int(tick.date.timeIntervalSince(frame.updatedAt)))
-                    Text(streaming && age > 6 ? "NO NEW FRAMES · \(age)s" : "VEH \(frame.result.boxes.count) · T-\(age)s")
+                    Text("VEH \(frame.result.boxes.count) · ANALYSIS \(age)s AGO")
                         .font(HubTheme.mono(10, .medium)).tracking(1.1).foregroundStyle(streaming && age > 6 ? HubTheme.amber : HubTheme.textPrimary)
                         .padding(.horizontal, 7).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
                 }
@@ -308,22 +311,28 @@ struct LivePane: View {
     }
 }
 
-private struct SnapshotFreshnessLabel: View {
-    let received: Date
-    let changed: Date
-    let interval: TimeInterval
+private struct FeedFreshnessLabel: View {
+    let received: Date?
+    let analysed: Date?
+    let changed: Date?
+    let snapshotInterval: TimeInterval?
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { tick in
-            let warning = tick.date.timeIntervalSince(changed) > max(600, interval * 2)
-            Group {
-                if warning {
-                    Text("Received \(received, format: .dateTime.hour().minute().second()) · image unchanged since \(changed, format: .dateTime.hour().minute())")
-                } else {
-                    Text("Received \(received, format: .dateTime.hour().minute().second())")
+        TimelineView(.periodic(from: .now, by: 1)) { tick in
+            let health = LiveFeedHealth(now: tick.date, received: received, analysed: analysed,
+                                        changed: changed, snapshotInterval: snapshotInterval)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(health.deliveryText) · \(health.analysisText)")
+                    .foregroundStyle(health.delivery == .delayed ? Color.orange : Color.secondary)
+                if health.unchanged, let changed {
+                    Text("Image unchanged since \(changed, format: .dateTime.hour().minute())")
+                        .foregroundStyle(.secondary)
                 }
             }
-            .font(.caption).foregroundStyle(warning ? Color.orange : Color.secondary)
-            .help("Receiving an image proves delivery, not camera freshness. Identical image bytes may indicate a static scene or an upstream freeze.")
+            .font(.caption)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("liveFeedFreshness")
+            .help("Frame delivery and analysis are measured separately. Identical image bytes may indicate a static scene or an upstream freeze; delivery does not prove camera freshness.")
         }
     }
 }
