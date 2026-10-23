@@ -40,7 +40,7 @@ asset alone does not prove the corresponding workflow is complete.
    calibration, per-state results and the Minneapolis/Waltham regressions.
    More specimen images alone do not satisfy it. See
    [the specification](https://github.com/noktirnal42/PlateWatch/blob/feat/hub-moderation/docs/PLATE-STATE-CLASSIFIER-SPEC.md) and
-   [training log](MODEL-TRAINING.md).
+   [training log](https://github.com/noktirnal42/PlateWatch/blob/feat/hub-moderation/docs/MODEL-TRAINING.md).
 2. **Fleet/civilian:** train on vehicle crops, not whole scenes. Include
    civilian look-alikes and preserve the existing fleet thresholds. Earlier
    scene classifiers plateaued; see the crop recipe in MODEL-TRAINING.
@@ -108,7 +108,9 @@ box legend.
 - PlateKit: 84 tests; CaptureKit: 18; VehicleML: 45 (one skip);
   PlateSync: 48; FleetImporters: 38; zero failures in these local runs.
 - AccountabilityKit: 51 tests (one opt-in skip); reference server: 68 tests;
-  zero failures. Agent-package verification is pending dependency resolution. No new handheld/device, classifier-quality,
+  zero failures. FoundationModelsParser: three tests passed. HubAgents did
+  not reach tests: dependency checkout stalled and was stopped after more than
+  16 minutes. No assertion failure was observed there. No new handheld/device, classifier-quality,
   production-publication or two-account claim is made by these unit runs.
 - Remote run `38985547075` failed the Hub build and iOS UI job. Its package,
   server, eval-harness, model-pipeline and MCP jobs passed. This is an older
@@ -142,3 +144,19 @@ turned off; the original enabled preference was restored. No new decoded-frame
 or sustained-throughput claim is made from that connection attempt. TrafficView
 was not running. A concurrent test attempt hit Xcode's build-database lock;
 verification was rescheduled after the signed build finished.
+
+### Runtime follow-up and publication
+
+The selected approved HLS source subsequently delivered analysis and then
+stalled with TrafficView closed. The new health header correctly reported
+late delivery while its analysis age advanced. This exposed a second stale
+success message (`Live video`) above the health header; the follow-up makes
+that line report `Frame delivery delayed` and fades old HLS fallback boxes.
+The follow-up Hub suite passed 66 tests (four opt-in skips), zero failures.
+The app bridge reported 425 completed public-feed frames during the session;
+that aggregate does not prove uninterrupted delivery for the selected camera.
+
+Public status publication on main: `6ae4a1a`; GitHub Pages deployment
+`40025612846` succeeded and the live website was inspected. Development draft:
+[PR #25](https://github.com/noktirnal42/PlateWatch/pull/25), stacked on the Hub
+repair branch. Its new CI run is queued; no green remote app/UI claim is made.
