@@ -189,3 +189,30 @@ only full analysis can establish that verdict. Additional regressions cover
 that boundary, offscreen crops and the exact 48-pixel inclusion boundary.
 The eval-harness metric tests passed 3/3 and the Hub suite passed 66 tests
 (four opt-in skips), zero failures. No shared DTO or model-weight changes.
+
+### WS2 per-track type scheduling and real-model compatibility
+
+Selected HLS Live now schedules at most four eligible display-type requests per
+full pass, with a two-second per-track cooldown, overdue-work priority, a
+three-second positive cache and bounded metadata. Session tokens reject stale
+results after source changes/retries; estimates remain outside recording and
+carry an explicit estimate label without borrowing detector confidence.
+
+Native testing uncovered that the released type model is tensor-input while
+the old stage assumed Vision image input. The Hub adapter now implements the
+published ViT preprocessing and normalizes the artifact's logits before the
+unchanged acceptance threshold. The real smoke photo produces weak scores and
+abstains; accepted-type quality remains unproven. This does not silently fix
+the shared/iOS consumer or the historical registry input description.
+
+Hub: 80 tests (five opt-in skips), FeedIngest: 171 (four skips), zero failures.
+Full evidence, native opt-in reproduction, scope and next gates:
+[Hub Live types](HUB-LIVE-TYPES-2026-10-23.md).
+
+Runtime verification also found a release-integrity gate: the published type
+archive matches the native-test package, but its SHA differs from the pinned
+registry value. The running app has no compiled type model; its earlier
+four-model status double-counted two cumulative installer results. Hub now
+reports the actual final count and type unavailability. Correcting the
+verified registry SHA/input description is next in WS3; no checksum bypass
+or accepted-type deployment claim is made here.
