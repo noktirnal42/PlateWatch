@@ -60,6 +60,10 @@ final class CaptureViewModel: ObservableObject {
 
     @Published private(set) var cameraState = CameraState.starting
     @Published private(set) var statusText = "Starting camera…"
+    /// A running AVCaptureSession can still be waiting for its first sample
+    /// buffer (for example while a physical lens is waking). Keep that state
+    /// explicit so the UI never claims that analysis is active prematurely.
+    @Published private(set) var hasReceivedFrame = false
     @Published var fleetHitPending = false
     @Published var permissionDenied = false
     @Published private(set) var latestEventClip: EventClip?
@@ -121,11 +125,18 @@ final class CaptureViewModel: ObservableObject {
     func refreshModels() async {
         let box = contextBox
         let manager = modelManager
-        // Shared with the Hub; a developer-override model in <cache>/Local/<task>.mlmodel loads even offline.
-        let count: Int = await Task.detached(priority: .utility) {
+        // Install the core detectors first. Vehicle type is display-only and
+        // may not have a published artifact; its failure must not delay or
+        // clear the vehicle/plate models used by the capture path.
+        let detectorCount: Int = await Task.detached(priority: .utility) {
             await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
         }.value
-        modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
+        modelStatus = detectorCount == 0 ? "baseline vision" : "CoreML active (\(detectorCount) models)"
+        let typeCount: Int = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-type-classification"], into: box)
+        }.value
+        let total = detectorCount + typeCount
+        modelStatus = total == 0 ? "baseline vision" : "CoreML active (\(total) models)"
     }
 
     func attach(context: ModelContext, backend: any SyncBackend) {
@@ -152,6 +163,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func start() async {
+        hasReceivedFrame = false
         // Models are opt-in upgrades; try to install detectors before the
         // first frame, and never block capture on the network result.
         Task { await refreshModels() }
@@ -169,6 +181,7 @@ final class CaptureViewModel: ObservableObject {
         do {
             try session.configure()
             session.start()
+            PresenceCoordinator.shared.start(processing: true)
             cameraState = .running
             statusText = "Scanning for fleet vehicles"
         } catch {
@@ -180,6 +193,7 @@ final class CaptureViewModel: ObservableObject {
 
     func stop() {
         session.stop()
+        PresenceCoordinator.shared.captureStopped()
         if cameraState == .running { statusText = "Paused" }
     }
 
@@ -242,8 +256,18 @@ final class CaptureViewModel: ObservableObject {
         refreshPlateGate()
         defer { processingStill = false }
         statusText = source == "photo" ? "Analyzing photo…" : "Analyzing frame…"
-        guard let frame = try? await executor.submit(
-            FramePacketLike(pixelBuffer: pixelBuffer), mode: .processAll) else {
+        // A still must finish or fail visibly: a stuck analysis otherwise spins forever while the phone heats up.
+        let limit: Double = source == "photo" ? 120 : 60
+        let box = PixelBufferBox(buffer: pixelBuffer)
+        let analysed: DetectionFrame?? = await Self.withTimeout(seconds: limit) { [executor] in
+            try? await executor.submit(FramePacketLike(pixelBuffer: box.buffer), mode: .processAll)
+        }
+        if analysed == nil {
+            statusText = "Analysis timed out"
+            lastResult = .failed(source, "Analysis took longer than \(Int(limit)) seconds and was stopped. Try a smaller photo.")
+            return
+        }
+        guard let frame = analysed ?? nil else {
             statusText = "Could not analyze that image"
             lastResult = .failed(source, "The analyzer could not process this frame.")
             return
@@ -411,6 +435,7 @@ final class CaptureViewModel: ObservableObject {
 
     private func handle(_ packet: FramePacket) async {
         lastPacket = packet
+        hasReceivedFrame = true
         refreshPlateGate()
         guard let frame = try? await executor.submit(
             .init(pixelBuffer: packet.pixelBuffer), mode: .live) else { return }
@@ -465,12 +490,25 @@ final class CaptureViewModel: ObservableObject {
     /// LLM-first markings parse with deterministic fallback. FleetMarkings
     /// LLM runs on-device (Apple Intelligence); pre-iOS 26 falls back to the
     /// regex heuristics without a network round-trip either.
+    /// Races `work` against a deadline. Returns nil on timeout (the late result is discarded).
+    private static func withTimeout<T: Sendable>(seconds: Double, _ work: @escaping @Sendable () async -> T) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await work() }
+            group.addTask { try? await Task.sleep(for: .seconds(seconds)); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
     private func parseMarkings(_ observations: [SceneTextObservation]) async -> FleetMarkings {
         let heuristic = SceneTextHeuristics.parse(observations)
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
             let lines = observations.map(\.text)
-            if let claim = await FleetMarkingsLLMParser.parse(lines) {
+            // Apple Intelligence can stall (model unavailable/warming) and has no timeout of its own; the deterministic
+            // parse is the fallback, so never let it hold the analysis for more than a few seconds.
+            if let claim = await Self.withTimeout(seconds: 8, { await FleetMarkingsLLMParser.parse(lines) }) ?? nil {
                 // The LLM can invent fields from garbled text ("Hybridand" as a service): its output is a
                 // claim, kept only where the OCR text supports it.
                 return SceneTextHeuristics.grounded(claim, in: observations, fallback: heuristic)
@@ -484,3 +522,6 @@ final class CaptureViewModel: ObservableObject {
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
 }
+
+/// The analyzer only reads the buffer; the box lets it cross into the timeout task.
+private struct PixelBufferBox: @unchecked Sendable { let buffer: CVPixelBuffer }

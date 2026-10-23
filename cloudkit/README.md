@@ -31,7 +31,23 @@ world-readable `Sighting` / `Vehicle` / `Agency`. A raw detection — and its pl
 
 ## Publishing (moderation)
 
-Accepted submissions are copied to `Sighting` by the moderator tool (dashboard
-or a server-to-server key). That tool is **not built yet** — until it exists the
-public feed is empty on CloudKit builds; the Vapor reference server's moderator
-console and exports are the working path (see docs/BACKEND.md).
+Accepted submissions are copied to `Sighting` by moderator tooling (dashboard
+or a server-to-server key). `CloudKitBackend.publish(_:)` performs the guarded
+privacy-safe save with the moderator-only CloudKit ACL and stable idempotency
+record name. The operation is covered at the privacy boundary; a credentialed
+production save and two-account isolation check remain deployment gates.
+Until that worker is enabled, the public feed is empty on CloudKit builds; the
+Vapor reference server's moderator console and exports are the working path
+(see docs/BACKEND.md).
+
+## Required indexes for the Hub's creator-owned history (2026-10-18)
+
+`SightingSubmission` must declare `"___createdBy" REFERENCE QUERYABLE` (now in `schema.ckdb`). Without it, "Send CloudKit to Moderation"
+and "Recover CloudKit history" fail with `Field 'createdBy' is not marked queryable`. Re-run `cktool validate-schema` / `import-schema`
+against development, test the Hub handoff, then deploy to production. The owner runs this; no token belongs in the repo.
+
+
+## PresenceLease (added 2026-10-19)
+`schema.ckdb` now also declares `PresenceLease` (anonymous, 120-second live-presence leases; see `docs/PRESENCE-DESIGN.md`). Import it into
+*development* with the same `cktool validate-schema` / `import-schema` commands, verify a Hub heartbeat, then deploy to production. Until it is
+deployed the Hub shows "Offline · CloudKit schema not deployed" and nothing else is affected.

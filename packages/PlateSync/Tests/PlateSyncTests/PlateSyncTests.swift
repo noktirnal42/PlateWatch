@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import CloudKit
 import SwiftData
 @testable import PlateSync
 import PlateKit
@@ -140,6 +141,90 @@ final class CloudKitPrivacyTests: XCTestCase {
         XCTAssertNotEqual(first, different)
         XCTAssertEqual(first.uuidString.count, 36)
     }
+
+    func testSubmissionRecordNamePreservesHyphenatedIdempotencyKey() {
+        let key = "sha256-0123-abcdef"
+        XCTAssertEqual(CloudKitBackend.idempotencyKey(fromRecordName: "sighting-\(key)"), key)
+        let recordKey = CloudKitBackend.idempotencyKey(fromRecordName: "sighting-\(key)")
+        XCTAssertEqual(CloudKitBackend.uuid(fromRecordName: recordKey),
+                       CloudKitBackend.uuid(fromRecordName: key))
+    }
+
+    func testCreatorSubmissionRecordNamesAreOwnerScoped() {
+        let key = "sha256-0123-abcdef"
+        let first = CloudKitBackend.submissionRecordName(deviceIDHash: "account-a", idempotencyKey: key)
+        let second = CloudKitBackend.submissionRecordName(deviceIDHash: "account-b", idempotencyKey: key)
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(CloudKitBackend.idempotencyKey(fromRecordName: first), key)
+        XCTAssertEqual(CloudKitBackend.idempotencyKey(fromRecordName: second), key)
+    }
+
+    func testOwnedSubmissionReconstructionCarriesModerationFieldsOnly() {
+        let record = CKRecord(recordType: "SightingSubmission",
+                              recordID: CKRecord.ID(recordName: "sighting-recovery-key"))
+        record["capturedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as NSDate
+        record["geohash6"] = "9v6kn7"
+        record["deviceIDHash"] = "device-hash"
+        record["fleetConfidence"] = 0.91 as NSNumber
+        record["plateText"] = "1ABC234"
+        record["plateRegion"] = "TX"
+        record["vehicleClass"] = "SUV"
+        record["agencyName"] = "Example Police"
+        record["unitNumber"] = "42"
+        record["userConfirmed"] = true as NSNumber
+
+        let recovered = CloudKitBackend.ownedSubmission(from: record)
+        XCTAssertEqual(recovered?.idempotencyKey, "recovery-key")
+        XCTAssertEqual(recovered?.dto.geohash6, "9v6kn7")
+        XCTAssertEqual(recovered?.dto.vehicle.vehicleClass, "SUV")
+        XCTAssertEqual(recovered?.dto.markings?.unitNumber, "42")
+        XCTAssertEqual(recovered?.dto.plate?.text, "1ABC234")
+        XCTAssertNil(recovered?.dto.cropJPEGBase64)
+        XCTAssertNil(recovered?.dto.identity, "no agencyKey on the record → no identity is invented")
+        record["agencyKey"] = "US-TX/example/police"
+        let withAgency = CloudKitBackend.ownedSubmission(from: record)
+        XCTAssertEqual(withAgency?.dto.identity?.agency?.agencyKey, "US-TX/example/police")
+        XCTAssertEqual(withAgency?.dto.identity?.agency?.needsReview, true, "missing review flag is treated as needing review")
+        XCTAssertNil(withAgency?.dto.identity?.plate, "the handoff identity never carries a plate")
+        record["agencyNeedsReview"] = 0 as NSNumber
+        XCTAssertEqual(CloudKitBackend.ownedSubmission(from: record)?.dto.identity?.agency?.needsReview, false)
+        XCTAssertNil(recovered?.dto.exactLatitude)
+        XCTAssertNil(recovered?.dto.exactLongitude)
+    }
+
+    func testPublishedRecordStripsCreatorOnlyFields() {
+        let record = CKRecord(recordType: "SightingSubmission",
+                              recordID: CKRecord.ID(recordName: "sighting-publish-key"))
+        record["capturedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as NSDate
+        record["geohash6"] = "9v6kn7"
+        record["deviceIDHash"] = "creator-only"
+        record["fleetConfidence"] = 0.91 as NSNumber
+        record["plateText"] = "1ABC234"
+        record["vehicleClass"] = "patrol"
+        record["agencyName"] = "Example Police"
+        record["unitNumber"] = "42"
+        record["userConfirmed"] = true as NSNumber
+
+        let submission = try! XCTUnwrap(CloudKitBackend.ownedSubmission(from: record))
+        let published = try! XCTUnwrap(CloudKitBackend.publishedRecord(from: submission))
+        XCTAssertEqual(published.recordType, "Sighting")
+        XCTAssertEqual(published["moderationState"] as? String, "fleetConfirmed")
+        XCTAssertEqual(published["plateText"] as? String, "1ABC234")
+        XCTAssertNil(published["deviceIDHash"])
+        XCTAssertNil(published["userConfirmed"])
+    }
+
+    func testUnconfirmedSubmissionCannotBecomePublishedRecord() {
+        let record = CKRecord(recordType: "SightingSubmission",
+                              recordID: CKRecord.ID(recordName: "sighting-pending-key"))
+        record["capturedAt"] = Date() as NSDate
+        record["fleetConfidence"] = 0.99 as NSNumber
+        record["vehicleClass"] = "patrol"
+        record["agencyName"] = "Example Police"
+        record["userConfirmed"] = false as NSNumber
+        let submission = try! XCTUnwrap(CloudKitBackend.ownedSubmission(from: record))
+        XCTAssertNil(CloudKitBackend.publishedRecord(from: submission))
+    }
 }
 
 final class AgencyReportDTOTests: XCTestCase {
@@ -156,5 +241,110 @@ final class AgencyReportDTOTests: XCTestCase {
         let decoded = try JSONDecoder().decode(
             AgencyReportDTO.self, from: JSONEncoder().encode(report))
         XCTAssertEqual(decoded, report)
+    }
+}
+
+final class PresenceDTOTests: XCTestCase {
+    func testPresenceAggregateRoundTrips() throws {
+        let feed = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let value = PresenceAggregate(activeSessions: 2, activeProcessors: 1,
+                                      processorsByFeed: [feed: 1],
+                                      generatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let data = try JSONEncoder().encode(value)
+        let decoded = try JSONDecoder().decode(PresenceAggregate.self, from: data)
+        XCTAssertEqual(decoded, value)
+    }
+
+    func testPresenceAggregateCarriesPrivacySafeHubCounters() throws {
+        let stats = PresenceStats(framesAnalyzed: 1202, publicFeedFrames: 1202,
+                                  fleetHitsToday: 3, skippedWhileBusy: 327,
+                                  outboxPending: 4)
+        let value = PresenceAggregate(activeSessions: 2, activeProcessors: 1, stats: stats)
+        let decoded = try JSONDecoder().decode(PresenceAggregate.self,
+                                                from: JSONEncoder().encode(value))
+        XCTAssertEqual(decoded.stats, stats)
+    }
+
+    func testHeartbeatPreservesOnlyFeedDemandFields() throws {
+        let value = PresenceHeartbeat(sessionID: "install-session-123456",
+                                      platform: "macOS-hub",
+                                      feedIDs: [UUID()], activeProcessing: true)
+        let decoded = try JSONDecoder().decode(PresenceHeartbeat.self,
+                                                from: JSONEncoder().encode(value))
+        XCTAssertEqual(decoded, value)
+    }
+}
+
+final class WithdrawalAndAlertHistoryTests: XCTestCase {
+    private func dto() -> SightingSubmissionDTO {
+        SightingSubmissionDTO(capturedAt: Date(timeIntervalSince1970: 1_700_000_000), geohash6: "9v6kn7",
+                              deviceIDHash: "dev", fleetConfidence: 0.9,
+                              vehicle: VehicleObservationDTO(vehicleClass: "patrol", classConfidence: 0.8))
+    }
+
+    func testCloudKitHandleIsTheCreatorRecordNameAndRESTNeedsNone() {
+        // A CloudKitBackend cannot be constructed in a unit-test process (CKContainer needs entitlements), so pin the
+        // record-name derivation its handle uses.
+        let handle = CloudKitBackend.submissionRecordName(deviceIDHash: "dev", idempotencyKey: "abc")
+        XCTAssertTrue(handle.hasPrefix("submission-") && handle.hasSuffix("-abc"))
+        let rest = RESTBackend(baseURL: URL(string: "http://127.0.0.1:8083")!)
+        XCTAssertNil(rest.withdrawalHandle(for: dto(), idempotencyKey: "abc"))
+    }
+
+    func testOutcomeMessagesDoNotOverClaim() {
+        XCTAssertTrue(WithdrawalOutcome(kind: .recordDeleted, publicRecordMayRemain: true).message.contains("moderator must still remove"))
+        XCTAssertFalse(WithdrawalOutcome(kind: .recordDeleted, publicRecordMayRemain: false).message.contains("moderator"))
+        XCTAssertTrue(WithdrawalOutcome(kind: .takedownRequested, publicRecordMayRemain: false).message.contains("moderator will review"))
+    }
+
+    func testBackendWithoutWithdrawalSupportThrowsUnsupported() async {
+        struct Minimal: SyncBackend {
+            func submit(_ sighting: SightingSubmissionDTO, idempotencyKey: String) async throws -> SubmissionReceipt { throw SyncError.unsupported }
+            func pullSightings(since cursor: SyncCursor?) async throws -> SightingDelta { throw SyncError.unsupported }
+            func vehicles(matchingPlate plateText: String) async throws -> [PublicVehicleDTO] { [] }
+            func agencies() async throws -> [PlateSync.PublicAgencyDTO] { [] }
+            func agencyReport(id: UUID) async throws -> AgencyReportDTO { throw SyncError.unsupported }
+            func ensureWatchlistSubscription() async throws {}
+            func heatmap(geohashPrefix: String?, from: Date, to: Date) async throws -> HeatmapAggregateDTO { throw SyncError.unsupported }
+        }
+        do { _ = try await Minimal().withdraw(handle: nil, sightingID: UUID(), moderationState: .pending); XCTFail() }
+        catch SyncError.unsupported { /* expected */ }
+        catch { XCTFail("\(error)") }
+    }
+
+    @MainActor func testReceiptWithdrawalState() throws {
+        let container = try ModelContainer(for: ReceivedSubmissionReceipt.self,
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let r = ReceivedSubmissionReceipt(sightingID: UUID(), receivedAt: Date(), moderationState: .fleetConfirmed,
+                                          idempotencyKey: "k", withdrawalHandle: "submission-x-k")
+        container.mainContext.insert(r)
+        XCTAssertFalse(r.isWithdrawn); XCTAssertNil(r.withdrawalOutcome)
+        r.markWithdrawn(.init(kind: .recordDeleted, publicRecordMayRemain: true), at: Date(timeIntervalSince1970: 5))
+        XCTAssertTrue(r.isWithdrawn)
+        XCTAssertEqual(r.withdrawalOutcome, .init(kind: .recordDeleted, publicRecordMayRemain: true))
+    }
+
+    func testAlertHistoryOrdersByAlertTimeNotInsertionOrder() {
+        var h = AlertHistory()
+        h.record(.init(alertedAt: Date(timeIntervalSince1970: 200), plate: "NEWER", sightingID: UUID()))
+        h.record(.init(alertedAt: Date(timeIntervalSince1970: 100), plate: "OLDER", sightingID: UUID()))
+        XCTAssertEqual(h.records.map(\.plate), ["NEWER", "OLDER"])
+    }
+
+    func testAlertHistoryIsBoundedDedupedAndPersisted() throws {
+        var h = AlertHistory()
+        let sid = UUID()
+        XCTAssertTrue(h.record(.init(plate: "ABC123", sightingID: sid)))
+        XCTAssertFalse(h.record(.init(plate: "ABC123", sightingID: sid)), "same sighting is not alerted twice")
+        for i in 0..<(AlertHistory.capacity + 20) { h.record(.init(plate: "P\(i)", sightingID: UUID())) }
+        XCTAssertEqual(h.records.count, AlertHistory.capacity)
+        XCTAssertEqual(h.records.first?.plate, "P\(AlertHistory.capacity + 19)", "newest first")
+        let suite = UserDefaults(suiteName: "alert-history-test-\(UUID().uuidString)")!
+        AlertHistoryStore.save(h, suite)
+        XCTAssertEqual(AlertHistoryStore.load(suite).records.map(\.id), h.records.map(\.id), "ISO-8601 storage drops sub-second precision, so compare identity")
+        XCTAssertTrue(AlertHistoryStore.append(.init(plate: "NEW", sightingID: UUID()), suite))
+        XCTAssertEqual(AlertHistoryStore.load(suite).records.first?.plate, "NEW")
+        var cleared = AlertHistoryStore.load(suite); cleared.clear()
+        XCTAssertTrue(cleared.records.isEmpty)
     }
 }

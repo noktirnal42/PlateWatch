@@ -61,13 +61,20 @@ targets:
       - Sources/EvidenceCrop.swift
       - Sources/EvidenceArchive.swift
       - Sources/VehicleOverlayLabel.swift
+      - Sources/LiveBoxTracker.swift
+      - Sources/LiveFeedHealth.swift
+      - Sources/LiveTypeScheduler.swift
+      - Sources/LiveTypeEnricher.swift
+      - Sources/HubVehicleTypeClassifier.swift
       - Sources/FeedRunner.swift
+      - Sources/FeedIdentity.swift
       - Sources/HLSPreviewBudget.swift
       - Sources/Console/FeedPreferences.swift
       - Sources/Console/ModeratorAccess.swift
       - Sources/Console/ModerationStore.swift
       - Sources/Console/RecordsWorkspace.swift
       - Sources/Console/ReviewPane.swift
+      - Sources/Console/HubTheme.swift
       - Sources/Console/ReviewQueue.swift
     settings:
       base:
@@ -75,6 +82,7 @@ targets:
     dependencies:
       - package: FeedIngest
       - package: PlateKit
+      - package: VehicleML
       - package: PlateSync
       - package: AccountabilityKit
 

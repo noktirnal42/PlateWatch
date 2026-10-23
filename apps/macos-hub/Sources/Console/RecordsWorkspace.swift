@@ -47,6 +47,17 @@ final class RecordsWorkspace {
     var tracker: FOIATracker { didSet { save(tracker, trackerStore) } }
     var ledger: RecordsLedger { didSet { save(ledger, ledgerStore) } }
     var budget: PacerBudget { didSet { save(budget, budgetStore) } }
+    var rss: RSSLibrary { didSet { save(rss, rssStore) } }
+    private(set) var refreshingFeeds: Set<UUID> = []
+    /// Minutes between automatic refreshes of every followed feed; 0 = off. Persisted in UserDefaults.
+    var autoRefreshMinutes: Int = UserDefaults.standard.integer(forKey: "hubRecords_rssAutoRefreshMinutes") {
+        didSet {
+            UserDefaults.standard.set(autoRefreshMinutes, forKey: "hubRecords_rssAutoRefreshMinutes")
+            startAutoRefresh()
+        }
+    }
+    private(set) var lastAutoRefresh: Date?
+    private var autoRefreshTask: Task<Void, Never>?
     var lastError = ""
     private(set) var currentCourtQuery = ""
     private(set) var currentCourtSource = ""
@@ -96,15 +107,18 @@ final class RecordsWorkspace {
     private let trackerStore: JSONFileStore<FOIATracker>
     private let ledgerStore: JSONFileStore<RecordsLedger>
     private let budgetStore: JSONFileStore<PacerBudget>
+    private let rssStore: JSONFileStore<RSSLibrary>
 
     init(directory: URL = RecordsWorkspace.defaultDirectory) {
         self.directory = directory
         trackerStore = .init(url: directory.appendingPathComponent("foia-requests.json"))
         ledgerStore = .init(url: directory.appendingPathComponent("ledger.json"))
         budgetStore = .init(url: directory.appendingPathComponent("pacer-budget.json"))
+        rssStore = .init(url: directory.appendingPathComponent("rss-feeds.json"))
         tracker = trackerStore.load(default: FOIATracker())
         ledger = ledgerStore.load(default: RecordsLedger())
         budget = budgetStore.load(default: PacerBudget())
+        rss = rssStore.load(default: RSSLibrary())
         for source in RosterCatalog.all {
             let snap = rosterStore(source.id).load(default: RosterSnapshot(sourceID: source.id, importedAt: .distantPast, asOf: nil, entries: []))
             if !snap.entries.isEmpty { rosterSnapshots[source.id] = snap }
@@ -207,5 +221,75 @@ final class RecordsWorkspace {
             lastError = ""
             return ledger.add(found)
         } catch { lastError = "Import failed (\(source.title)): \(error)"; return 0 }
+    }
+
+    // MARK: RSS reader
+
+    /// Fetches one feed (https only, size-capped). Failures are kept on the subscription, not thrown.
+    @discardableResult
+    func refreshFeed(_ id: UUID) async -> Int {
+        guard let sub = rss.subscriptions.first(where: { $0.id == id }), refreshingFeeds.insert(id).inserted else { return 0 }
+        defer { refreshingFeeds.remove(id) }
+        do {
+            let parsed = try await RSSFetcher().fetch(sub.url)
+            return rss.merge(parsed, into: id)
+        } catch {
+            rss.recordFailure("\(error)", for: id)
+            return 0
+        }
+    }
+
+    /// Refreshes every subscription sequentially so no host is hit in parallel.
+    @discardableResult
+    func refreshAllFeeds() async -> Int {
+        var added = 0
+        for sub in rss.subscriptions { added += await refreshFeed(sub.id) }
+        return added
+    }
+
+    /// (Re)starts the timer. Safe to call repeatedly; one loop runs at a time and it sleeps between passes.
+    func startAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+        guard autoRefreshMinutes > 0 else { return }
+        let interval = autoRefreshMinutes
+        autoRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(interval * 60))
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshAllFeeds()
+                self.lastAutoRefresh = Date()
+            }
+        }
+    }
+
+    func subscribeToFeed(urlText: String, title: String = "", group: String = "") async -> Bool {
+        guard let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            lastError = "That is not a valid web address."; return false
+        }
+        do {
+            let sub = try rss.subscribe(title: title, url: url, group: group)
+            lastError = ""
+            await refreshFeed(sub.id)
+            return true
+        } catch RSSLibrary.AddError.insecure { lastError = "Feed addresses must start with https://"
+        } catch RSSLibrary.AddError.duplicate { lastError = "You already follow that feed."
+        } catch { lastError = "That is not a valid feed address." }
+        return false
+    }
+
+    func importOPML(_ data: Data) -> Int {
+        var added = 0
+        for entry in OPML.parse(data) {
+            if (try? rss.subscribe(title: entry.title, url: entry.url, group: entry.group)) != nil { added += 1 }
+        }
+        return added
+    }
+
+    /// Saves a feed entry as a *pending* cited candidate in the normal review queue.
+    @discardableResult
+    func saveFeedItemForReview(_ item: RSSItem) -> Bool {
+        let title = rss.subscriptions.first { $0.id == item.feedID }?.title ?? "RSS feed"
+        return ledger.add([rss.candidate(for: item, feedTitle: title)]) > 0
     }
 }

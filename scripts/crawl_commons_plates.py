@@ -1,7 +1,7 @@
 #!/usr/bin/env python3 -I
 """Crawl a TRAINING set of US licence-plate images, labelled by issuing state, from Wikimedia Commons.
 
-Usage: python3 -I scripts/crawl_commons_plates.py <out dir> [--cap 120] [--allow-sa]
+Usage: python3 -I scripts/crawl_commons_plates.py <out dir> [--cap 120] [--depth 1] [--allow-sa]
   --allow-sa  also keep CC BY-SA files (owner decision 2026-10-13, for the plate-state classifier ONLY).
               Resumes: files already in <out dir> are kept and not downloaded again.
 Writes <out>/<State>/*.jpg|png and <out>/manifest.json (source page, licence, author per file).
@@ -24,6 +24,7 @@ SKIP_TITLE = re.compile(r"trailer|motorcycle|temporary|dealer|sample|specimen", 
 args = sys.argv
 out = args[1]
 cap = int(args[args.index("--cap") + 1]) if "--cap" in args else 120
+DEPTH = int(args[args.index("--depth") + 1]) if "--depth" in args else 1
 
 def get(params):
     params["format"] = "json"
@@ -60,9 +61,17 @@ for cat in states:
     state = state_name(cat)
     os.makedirs(os.path.join(out, state), exist_ok=True)
     titles = members(cat, "file")
-    for sub in members(cat, "subcat"):          # one level of subcategories (by plate series)
-        if not SKIP_TITLE.search(sub) and not OLD_YEAR.search(sub): titles += members(sub, "file")
-        time.sleep(0.3)
+    # Subcategories (by plate series, by year, by vehicle) breadth-first down to --depth levels (default 1).
+    frontier, seen_cats = [cat], {cat}
+    for _ in range(DEPTH):
+        nxt = []
+        for parent in frontier:
+            for sub in members(parent, "subcat"):
+                if sub in seen_cats or SKIP_TITLE.search(sub) or OLD_YEAR.search(sub): continue
+                seen_cats.add(sub); nxt.append(sub)
+                titles += members(sub, "file")
+                time.sleep(0.3)
+        frontier = nxt
     titles = [t for t in dict.fromkeys(titles)
               if re.search(r"\.(jpe?g|png)$", t, re.I) and not OLD_YEAR.search(t) and not SKIP_TITLE.search(t)]
     kept = sum(1 for m in manifest if m["class"] == state)

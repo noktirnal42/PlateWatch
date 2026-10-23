@@ -20,21 +20,30 @@ public enum FOIADeadlines {
 
     /// Keyed by two-letter state code; "US" is the federal FOIA.
     public static let rules: [String: Rule] = [
-        "US": .init(days: 20, businessDays: true, covers: .response, citation: "5 U.S.C. § 552(a)(6)(A)(i)", verified: false),
-        "CA": .init(days: 10, businessDays: false, covers: .response, citation: "Cal. Gov. Code § 7922.535(a)", verified: false, checkedNote: "10 days to determine and give a production estimate, extendable up to 14 days in unusual circumstances. A 2026 bill (AB 1821) would change this to business days — check its status."),
-        "TX": .init(days: 10, businessDays: true, covers: .acknowledgement, citation: "Tex. Gov't Code § 552.221(d)", verified: false, checkedNote: "Within 10 business days the agency must produce the records or certify in writing when it will; \"promptly\" (§ 552.221(a)) can be stricter."),
-        "IL": .init(days: 5, businessDays: true, covers: .response, citation: "5 ILCS 140/3(d)", verified: false, checkedNote: "Confirmed in Attorney General binding opinions: comply or deny within 5 business days (one 5-business-day extension for listed reasons); silence is treated as a denial."),
-        "MA": .init(days: 10, businessDays: true, covers: .response, citation: "M.G.L. c. 66, § 10(b)", verified: false, checkedNote: "10 business days from the records access officer's receipt; written extension reported up to 15 more business days."),
-        "WA": .init(days: 5, businessDays: true, covers: .acknowledgement, citation: "RCW 42.56.520", verified: false, checkedNote: "Within 5 business days: provide the record, acknowledge with a time estimate, or deny. Day of receipt is not counted."),
-        "NY": .init(days: 5, businessDays: true, covers: .acknowledgement, citation: "N.Y. Pub. Off. Law § 89(3)(a)", verified: false, checkedNote: "5 business days to make available, deny, or acknowledge with an approximate date. 2025 bills would add a 20-business-day period; not confirmed as law."),
-        "VA": .init(days: 5, businessDays: true, covers: .response, citation: "Va. Code § 2.2-3704(B)", verified: false, checkedNote: "Not confirmed in the 2026-10-15 check (only a school division's policy page was found). Read the statute."),
-        "CT": .init(days: 4, businessDays: true, covers: .response, citation: "Conn. Gen. Stat. § 1-206(a)", verified: false, checkedNote: "Denial must be in writing within 4 business days; failure is deemed a denial; appeal to the FOI Commission within 30 days."),
-        "NH": .init(days: 5, businessDays: true, covers: .response, citation: "RSA 91-A:4, IV", verified: false, checkedNote: "Within 5 business days: make available, deny, or state the time reasonably needed (since 2020)."),
+        "US": .init(days: 20, businessDays: true, covers: .response, citation: "5 U.S.C. § 552(a)(6)(A)(i)", verified: true, checkedNote: "Statute text read at law.cornell.edu on 2026-10-18: the agency must determine within 20 days (excepting Saturdays, Sundays and legal public holidays) of receipt by the appropriate component (no later than 10 days after any component receives it); a written extension may add at most 10 working days for unusual circumstances; appeals are decided within 20 working days."),
+        "CA": .init(days: 10, businessDays: false, covers: .response, citation: "Cal. Gov. Code § 7922.535(a)", verified: true, checkedNote: "Statute text read at leginfo.legislature.ca.gov on 2026-10-18 (as amended by AB 370, Stats. 2025, ch. 34, effective 2026-01-01): within 10 days of receipt the agency determines whether the request seeks disclosable records, notifies the requester with reasons, and for disclosable records states an estimated date and time of availability; written notice may extend by no more than 14 days for the listed unusual circumstances. AB 1821 (chaptered text read the same day) changes both periods to business days for requests on/after 2027-01-01."),
+        "TX": .init(days: 10, businessDays: true, covers: .acknowledgement, citation: "Tex. Gov't Code § 552.221(d)", verified: true, checkedNote: "Statute text read on 2026-10-18 (texas.public.law republication; the official capitol site is script-rendered): the officer must promptly produce (§ 552.221(a): as soon as possible, within a reasonable time); if not producible within 10 business days of the request, certify that in writing and set a date and hour within a reasonable time."),
+        "IL": .init(days: 5, businessDays: true, covers: .response, citation: "5 ILCS 140/3(d)", verified: true, checkedNote: "Statute text read at ilga.gov on 2026-10-18: comply or deny within 5 business days; one extension of up to 5 business days for the listed reasons (§ 3(e)); failure to respond, extend or deny within 5 business days is deemed a denial; the requester and body may agree in writing to a longer time."),
+        "MA": .init(days: 10, businessDays: true, covers: .response, citation: "M.G.L. c. 66, § 10(b)", verified: true, checkedNote: "Statute text read at malegislature.gov on 2026-10-18: permit inspection or furnish a copy within 10 business days of receipt; if not possible, a written response within 10 business days with a timeframe not exceeding 15 business days (agency) or 25 business days (municipality); the supervisor of records may grant one further extension of up to 20 (agency) or 30 (municipality) business days."),
+        "WA": .init(days: 5, businessDays: true, covers: .acknowledgement, citation: "RCW 42.56.520", verified: true, checkedNote: "Statute text read at app.leg.wa.gov on 2026-10-18: within five business days an agency must provide the record, acknowledge receipt with a reasonable time estimate, or deny. The text read did not address how the day of receipt is counted; the tracker counts from the filing date."),
+        "NY": .init(days: 5, businessDays: true, covers: .acknowledgement, citation: "N.Y. Pub. Off. Law § 89(3)(a)", verified: true, checkedNote: "Statute text read at nysenate.gov on 2026-10-18: within five business days of a written request the agency must make the record available, deny it, or furnish a written acknowledgement with an approximate date; the current text also requires a written reason and a date certain if disclosure cannot happen within twenty business days. No change to the five-day rule was found in the text."),
+        "VA": .init(days: 5, businessDays: true, covers: .response, citation: "Va. Code § 2.2-3704(B)", verified: true, checkedNote: "Statute text read at law.lis.virginia.gov on 2026-10-18: respond promptly and within five working days; if conditions prevent that, a written response within those five days gives the body seven more work days (60 work days for criminal investigative files under § 2.2-3706.1). The tracker uses the five-day window."),
+        "CT": .init(days: 4, businessDays: true, covers: .response, citation: "Conn. Gen. Stat. § 1-206(a)", verified: true, checkedNote: "Statute text read at cga.ct.gov on 2026-10-18: denial must be in writing within four business days of the request (ten business days when subsections (b)/(c) of § 1-214 apply, i.e. personnel or medical files); failure to comply in that time is deemed a denial; appeal to the FOI Commission within thirty days of the denial."),
+        "NH": .init(days: 5, businessDays: true, covers: .response, citation: "RSA 91-A:4, IV", verified: true, checkedNote: "Statute text read at gc.nh.gov on 2026-10-18: if a record cannot be made available immediately, within 5 business days the body must make it available, deny the request, or give a written statement of the time reasonably needed, the reason for delay and an itemized cost estimate."),
     ]
 
-    public static func rule(forState code: String?) -> Rule? {
+    /// Enacted changes that take effect later: the rule applies to requests filed on/after `effective`.
+    public static let scheduledChanges: [String: (effective: Date, rule: Rule)] = [
+        "CA": (Date(timeIntervalSince1970: 1_798_761_600), // 2027-01-01T00:00:00Z
+               .init(days: 10, businessDays: true, covers: .response, citation: "Cal. Gov. Code § 7922.535(a) as amended by AB 1821 (Stats. 2026, ch. 899)", verified: true,
+                     checkedNote: "Chaptered text read at leginfo.legislature.ca.gov on 2026-10-18 (AB 1821, approved and filed 2026-09-30; Ch. 899, Stats. 2026): 10 business days to determine and notify; written extension of no more than 14 business days. The bill is non-urgency (status page: Non-Urgency), so under Cal. Const. art. IV, § 8(c) it takes effect 2027-01-01; the bill text itself states no date. Weekends are skipped, holidays are not.")),
+    ]
+
+    public static func rule(forState code: String?, asOf date: Date = Date()) -> Rule? {
         guard let code else { return nil }
-        return rules[code.uppercased()]
+        let key = code.uppercased()
+        if let change = scheduledChanges[key], date >= change.effective { return change.rule }
+        return rules[key]
     }
 
     /// The date `rule` falls due for a request submitted on `start`. Business days skip Saturday and Sunday only.
@@ -110,7 +119,7 @@ public struct FOIARequest: Sendable, Identifiable, Hashable, Codable {
     public mutating func markSubmitted(on date: Date, calendar: Calendar = .gregorianUTC) {
         status = .submitted
         submittedOn = date
-        if !dueDateIsOverride, let rule = FOIADeadlines.rule(forState: stateCode) {
+        if !dueDateIsOverride, let rule = FOIADeadlines.rule(forState: stateCode, asOf: date) {
             dueOn = FOIADeadlines.dueDate(from: date, rule: rule, calendar: calendar)
         }
         events.append(.init(date: date, text: "Submitted"))

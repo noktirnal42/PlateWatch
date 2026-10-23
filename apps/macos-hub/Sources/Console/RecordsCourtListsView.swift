@@ -204,7 +204,7 @@ struct RecordsCourtListsView: View {
                             Button("Accept as cited record") { try? workspace.ledger.accept(candidateID: c.id, subject: nil, agencyID: nil) }
                             Button("Reject") { reject(c) }
                             if let url = c.citation.url { Link("Source", destination: url) }
-                        }.buttonStyle(.bordered).controlSize(.small)
+                        }.buttonStyle(HUDButtonStyle()).controlSize(.small)
                     }.padding(.vertical, 2)
                 }
             }

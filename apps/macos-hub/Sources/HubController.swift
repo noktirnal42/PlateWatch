@@ -27,6 +27,8 @@ final class HubController: ObservableObject, ReviewHubProviding {
     @Published private(set) var snapshotPort: UInt16 = 0
     @Published private(set) var rtspServerStatus = "Stopped"
     @Published private(set) var rtspStreams: [String: RTSPStreamStatus] = [:]
+    @Published private(set) var presenceAggregate = PresenceAggregate()
+    @Published private(set) var presenceStatus = "Off"
 
     private let pipeline = PlateAnalysisPipeline()
     /// Detector models (plate / vehicle) hot-swap in here as they install; empty = baseline Vision.
@@ -49,6 +51,8 @@ final class HubController: ObservableObject, ReviewHubProviding {
     private let fileSource = FileFrameSource()
     private let gate = RedactionGate(config: .standard)
     private var watchDescriptor: DispatchSourceFileSystemObject?
+    private var presenceTask: Task<Void, Never>?
+    private let presenceSessionID: String
 
     var agentBridge: HubAgentBridge?
     private var modelContext: ModelContext?
@@ -79,6 +83,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.ingestFolder = docs.appending(path: "PlateWatch-Ingest", directoryHint: .isDirectory)
         self.modelContext = context
+        if let saved = UserDefaults.standard.string(forKey: "hubPresenceSessionID") {
+            self.presenceSessionID = saved
+        } else {
+            let created = UUID().uuidString.lowercased()
+            UserDefaults.standard.set(created, forKey: "hubPresenceSessionID")
+            self.presenceSessionID = created
+        }
         self.homeGeohash6 = UserDefaults.standard.string(forKey: "hubGeohash6") ?? ""   // not only once the menu opens
         self.platesAllowed = Self.platesAllowed(forGeohash6: homeGeohash6)
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -87,11 +98,12 @@ final class HubController: ObservableObject, ReviewHubProviding {
             registryURL: URL(string: "https://raw.githubusercontent.com/noktirnal42/PlateWatch/main/models/registry.json")!,
             cacheDirectory: support))
         refreshPendingCount()
-        if HubQAFixture.enabled { startFeeds(); return }
+        if HubQAFixture.enabled { startFeeds(); startPresence(); return }
         try? FileManager.default.createDirectory(at: ingestFolder, withIntermediateDirectories: true)
         startWatching()
         Task { await refreshModels() }
         startFeeds()
+        startPresence()
         #if DEBUG
         if CommandLine.arguments.contains("-PWImportAustin") { Task { await importAustinCameras() } }
         if let index = CommandLine.arguments.firstIndex(of: "-PWImportCatalogues"),
@@ -105,6 +117,68 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
         #endif
         processNewFiles()   // pick up anything dropped while the Hub was not running
+    }
+
+    /// Presence is opt-in and ephemeral. It counts only explicitly watched
+    /// feeds, never passive catalogue browsing or local folder ingestion.
+    var presenceEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "hubPresenceEnabled") }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "hubPresenceEnabled")
+            if newValue { startPresence() } else { stopPresence() }
+        }
+    }
+
+    func processorCount(for feedID: UUID) -> Int? {
+        guard presenceEnabled else { return nil }
+        return presenceAggregate.processorsByFeed[feedID]
+    }
+
+    func refreshPresence() {
+        guard presenceEnabled else { return }
+        Task { [weak self] in await self?.publishPresence() }
+    }
+
+    private func startPresence() {
+        guard presenceEnabled, presenceTask == nil else { return }
+        presenceStatus = "Connecting…"
+        presenceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.publishPresence()
+                try? await Task.sleep(for: .seconds(45))
+            }
+        }
+    }
+
+    private func stopPresence() {
+        presenceTask?.cancel()
+        presenceTask = nil
+        presenceAggregate = PresenceAggregate()
+        presenceStatus = "Off"
+        Task { [weak self] in
+            guard let self else { return }
+            try? await PresenceServices.makeDefault().release(sessionID: presenceSessionID)
+        }
+    }
+
+    private func publishPresence() async {
+        guard presenceEnabled else { return }
+        let payload = PresenceHeartbeat(sessionID: presenceSessionID,
+                                        platform: "macOS-hub",
+                                        feedIDs: Array(favorites.watchedIDs),
+                                        activeProcessing: !favorites.watchedIDs.isEmpty,
+                                        stats: PresenceStats(framesAnalyzed: framesAnalyzed,
+                                                              publicFeedFrames: feedFramesAnalyzed,
+                                                              fleetHitsToday: fleetHitsToday,
+                                                              skippedWhileBusy: framesDropped,
+                                                              outboxPending: pendingCount))
+        do {
+            presenceAggregate = try await PresenceServices.makeDefault().heartbeat(payload)
+            presenceStatus = "Live"
+        } catch {
+            // Feed processing remains local when the optional presence service is offline.
+            presenceStatus = (error as? PresenceError)?.statusText ?? "Offline · local processing continues"
+        }
     }
 
     /// Imports the City of Austin traffic-camera catalogue (Socrata `b4k4-adkb`, listed Public Domain) into `feeds.json`.
@@ -147,6 +221,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
         case iowa = "Iowa DOT (about 1,300)"
         case newMexico = "New Mexico — NMRoads (about 185 cameras)"
         case utah = "Utah — UDOT public GIS (about 480 cameras)"
+        case utahAPI = "Utah — UDOT camera API (needs API key)"
         case oregon = "Oregon — TripCheck (about 1,160)"
         var id: String { rawValue }
         var key: String {
@@ -158,6 +233,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
             case .iowa: "iowa"
             case .oregon: "oregon"
             case .utah: "utah"
+            case .utahAPI: "utah-api"
             case .newMexico: "new-mexico"
             }
         }
@@ -208,6 +284,19 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 let (data, response) = try await fetchSigned(request)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
                 result = try AZ511Cameras.sources(fromJSON: data, key: key)
+            case .utahAPI:
+                guard let key = SourceCredentials.key(for: "utah-api"), !key.isEmpty else {
+                    importStatus = "The UDOT camera API needs a key. Add one in Settings › Source API keys — the signup link is next to the key field."
+                    return
+                }
+                var request = URLRequest(url: UDOTCameras.endpoint
+                    .appending(queryItems: [URLQueryItem(name: "key", value: key),
+                                            URLQueryItem(name: "format", value: "json")]))
+                request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 60
+                let (data, response) = try await fetchSigned(request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                result = try UDOTCameras.sources(fromJSON: data, key: key)
             case .nevada:
                 // One catalogue request per import — well inside the 10 calls / 60 s the API allows.
                 guard let key = SourceCredentials.key(for: "nv511"), !key.isEmpty else {
@@ -308,6 +397,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// restarting the whole runner.
     private func syncRunnerWatch() {
         feedRunner.setWatched(watchedForRunner)
+        refreshPresence()
     }
 
     /// Toggle background analysis for one camera and apply it immediately.
@@ -323,13 +413,50 @@ final class HubController: ObservableObject, ReviewHubProviding {
         syncRunnerWatch()
     }
 
+    /// Select the confirmed Nevada 511 snapshot/HLS sources for background
+    /// processing. HLS remains bounded by FeedRunner's rotating four-stream
+    /// budget and snapshots still share the per-host throttle.
+    var confirmedNV511Count: Int {
+        activeFeedSources.values.filter { Self.isNV511($0) && $0.mayBeAnalysed }.count
+    }
+
+    func watchAllNV511() {
+        let ids = activeFeedSources.values
+            .filter { Self.isNV511($0) && $0.mayBeAnalysed }
+            .map(\.id)
+        favorites.watch(Set(ids))
+        syncRunnerWatch()
+    }
+
+    private static func isNV511(_ source: PublicFeedSource) -> Bool {
+        if source.state?.uppercased() == "NV" { return true }
+        let host = source.url.host?.lowercased() ?? ""
+        return host == "nvroads.com" || host.hasSuffix(".nvroads.com")
+            || host == "its.nv.gov" || host.hasSuffix(".its.nv.gov")
+    }
+
+    /// A request to centre, zoom and highlight one camera on the Map pane ("Show on map" in Public feeds).
+    @Published private(set) var mapFocus: (id: UUID, token: UUID)?
+    func requestMapFocus(_ source: PublicFeedSource) { mapFocus = (source.id, UUID()) }
     @Published private(set) var liveFeed: PublicFeedSource?
     @Published private(set) var liveFeedFrame: WebFeedFrame?
     @Published private(set) var liveFeedStatus = ""
+    /// Changes whenever the user explicitly retries Live. Including this in the
+    /// Live view task identity cancels the old decoder before starting a fresh
+    /// bounded attempt, rather than stacking HLS players on a stalled source.
+    @Published private(set) var liveFeedReloadToken = UUID()
+    /// NV511 HLS paths are operator-issued and can rotate while the catalogue
+    /// keeps the camera ID stable. Keep a short local cooldown so a stale path
+    /// can be repaired without turning a failed preview into API polling.
+    private var lastNV511RouteRefresh: Date?
 
     func openFeedInLive(_ source: PublicFeedSource) {
         guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
+        liveFeedReloadToken = UUID()
+        lastLiveThorough = .distantPast
+        liveQuickMillis = nil; liveFullMillis = nil
         liveFeedFrame = nil
+        liveTracker.reset()
         liveFeedStatus = "Waiting for a frame…"
         liveFeed = source
         syncRunnerWatch()
@@ -338,7 +465,25 @@ final class HubController: ObservableObject, ReviewHubProviding {
 
     func stopLiveFeed() {
         feedRunner.setLiveVideoSource(nil)
+        liveFeedReloadToken = UUID()
         liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
+        liveQuickMillis = nil; liveFullMillis = nil
+        liveTracker.reset()
+        syncRunnerWatch()
+    }
+
+    /// Restart the currently selected Live source after a transport failure.
+    /// HLS providers can leave a playlist reachable while media segments are
+    /// unavailable; a retry must therefore reset both the frame and decoder.
+    func retryLiveFeed() {
+        guard let source = liveFeed else { return }
+        liveFeedFrame = nil
+        liveFeedStatus = source.kind == .hls ? "Retrying HLS…" : "Refreshing feed…"
+        liveFeedReloadToken = UUID()
+        lastLiveThorough = .distantPast
+        liveQuickMillis = nil; liveFullMillis = nil
+        liveTracker.reset()
+        if source.kind == .hls { feedRunner.retryLiveVideoSource(source) }
         syncRunnerWatch()
     }
 
@@ -347,20 +492,95 @@ final class HubController: ObservableObject, ReviewHubProviding {
         guard let source = liveFeed else { return }
         if source.kind == .hls {
             feedRunner.setLiveVideoSource(source.id)
+            // NV511 publishes a paired reviewed snapshot for the same stable
+            // camera ID. Fetch it in parallel so Live becomes useful while a
+            // slow or retired HLS route is still inside its bounded attempt.
+            // The snapshot remains subject to the same terms, robots and
+            // analysis gates as every other source.
+            let snapshot = pairedSnapshot(for: source)
+            if snapshot != nil {
+                liveFeedStatus = "HLS connecting · paired snapshot ready"
+            }
+            let pairedSnapshotTask: Task<Void, Never>? = snapshot.map { snapshot in
+                Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                        guard let self, !Task.isCancelled, self.liveFeed?.id == source.id,
+                              self.liveFeedFrame == nil else { return }
+                        let data = try await self.feedRunner.fetchPreview(of: snapshot)
+                        guard !Task.isCancelled, self.liveFeed?.id == source.id,
+                              self.liveFeedFrame == nil else { return }
+                        if await self.analyseFeedFrame(data, from: snapshot) {
+                            self.liveFeedStatus = "HLS connecting · showing paired snapshot"
+                        }
+                    } catch {
+                        // The HLS attempt remains authoritative; its bounded
+                        // error path will report the final provider state.
+                    }
+                }
+            }
+            defer { pairedSnapshotTask?.cancel() }
             // Do not wait for the rotating background decoder to deliver the
             // first frame. Opening a feed is an interactive action, so obtain
             // one bounded preview immediately and put it through the same
             // on-device analysis path as the continuing HLS sink.
+            var previewFailure: String?
+            // The pinned decoder is already connecting to this very stream; a second bounded decode of the same camera only
+            // competes with it on a slow host. Give it a head start and skip the preview if it comes up.
+            for _ in 0..<12 where !feedRunner.isStreaming(source.id) {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+            }
+            if feedRunner.isStreaming(source.id) { return }
             do {
                 let data = try await feedRunner.fetchPreview(of: source)
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
                 await analyseFeedFrame(data, from: source)
             } catch {
                 guard !Task.isCancelled, liveFeed?.id == source.id else { return }
-                liveFeedStatus = error.localizedDescription
+                previewFailure = error.localizedDescription
+                liveFeedStatus = previewFailure ?? "Video unavailable"
+                // NV511 rotates the media path independently of the camera
+                // catalogue. Refresh once per cooldown and retry the same
+                // stable camera ID before falling back to its snapshot view.
+                if let refreshed = await refreshNV511RouteIfNeeded(for: source) {
+                    do {
+                        let data = try await feedRunner.fetchPreview(of: refreshed)
+                        guard !Task.isCancelled, liveFeed?.id == refreshed.id else { return }
+                        await analyseFeedFrame(data, from: refreshed)
+                        liveFeedStatus = "HLS route refreshed · live video restored"
+                        previewFailure = nil
+                    } catch {
+                        liveFeedStatus = "Video unavailable: \(previewFailure ?? error.localizedDescription)"
+                    }
+                }
+                // NV511 occasionally keeps an HLS route in its catalogue after
+                // the media host retires it. The same camera normally still
+                // publishes a snapshot view; use that view as an explicit,
+                // policy-checked fallback rather than leaving Live blank.
+                if previewFailure != nil, liveFeedFrame == nil, let snapshot = pairedSnapshot(for: liveFeed ?? source) {
+                    liveFeedStatus = "HLS unavailable · trying paired snapshot…"
+                    do {
+                        let data = try await feedRunner.fetchPreview(of: snapshot)
+                        guard !Task.isCancelled, liveFeed?.id == source.id else { return }
+                        let analyzed = await analyseFeedFrame(data, from: snapshot)
+                        if analyzed {
+                            liveFeedStatus = "HLS unavailable · showing paired snapshot · refreshed at the camera's interval"
+                        } else if liveFeedFrame == nil {
+                            liveFeedStatus = "HLS unavailable · paired snapshot could not be analyzed"
+                        }
+                    } catch {
+                        liveFeedStatus = "HLS unavailable · paired snapshot failed: \(error.localizedDescription)"
+                    }
+                } else if previewFailure != nil, liveFeedFrame != nil {
+                    liveFeedStatus = "HLS unavailable · showing paired snapshot · refreshed at the camera's interval"
+                }
             }
             while !Task.isCancelled, liveFeed?.id == source.id {
-                if liveFeedFrame == nil { liveFeedStatus = feedRunner.state(of: source).text }
+                // Preserve a bounded preview failure in the UI. Previously the
+                // background decoder immediately overwrote useful diagnostics
+                // with a perpetual "Connecting" label.
+                if liveFeedFrame == nil, previewFailure == nil { liveFeedStatus = feedRunner.state(of: source).text }
                 do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
             }
             return
@@ -377,6 +597,43 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 guard let delay = (error as? FeedRunner.PreviewError)?.policyRetryDelay else { return }
                 do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             }
+        }
+    }
+
+    private func refreshNV511RouteIfNeeded(for source: PublicFeedSource) async -> PublicFeedSource? {
+        guard source.kind == .hls, Self.isNV511(source), SourceCredentials.hasKey("nv511") else { return nil }
+        if let lastNV511RouteRefresh, Date().timeIntervalSince(lastNV511RouteRefresh) < 300 { return nil }
+        lastNV511RouteRefresh = Date()
+        await importCatalogue(.nevada)
+        guard let refreshed = activeFeedSources[source.id], refreshed.kind == .hls, refreshed.mayBeAnalysed else { return nil }
+        liveFeed = refreshed
+        feedRunner.setLiveVideoSource(refreshed.id)
+        return refreshed
+    }
+
+    /// NV511 publishes one snapshot and one HLS view for many cameras. Match
+    /// them by their stable human-readable name while preserving the HLS
+    /// source as the selected Live identity.
+    private func pairedSnapshot(for source: PublicFeedSource) -> PublicFeedSource? {
+        guard source.kind == .hls else { return nil }
+        let base = source.name
+            .replacingOccurrences(of: " · HLS", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBase = base
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "  ", with: " ")
+            .lowercased()
+        return activeFeedSources.values.first {
+            guard $0.kind == .snapshotJPEG, $0.mayBeAnalysed else { return false }
+            let normalizedName = $0.name
+                .replacingOccurrences(of: " · Snapshot", with: "")
+                .replacingOccurrences(of: "–", with: "-")
+                .replacingOccurrences(of: "—", with: "-")
+                .replacingOccurrences(of: "  ", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return normalizedName == normalizedBase
         }
     }
 
@@ -419,39 +676,53 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// One frame from a public feed. Everything is decided from *that source*: its catalogued position (identity hint
     /// and the plate-recognition jurisdiction gate), and the frame's real size (analysis tier). The frame lives in
     /// memory only.
-    func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async {
-        // Analysis blocks threads (Vision OCR). With hundreds of cameras, unbounded concurrency starves the whole app
-        // (even unrelated network requests never get scheduled), so at most `maxFeedAnalyses` frames are analysed at once and
-        // the surplus is dropped — a camera is simply looked at again on its next refresh.
-        guard feedAnalysesInFlight < Self.maxFeedAnalyses else {
+    @discardableResult
+    func analyseFeedFrame(_ data: Data, from source: PublicFeedSource) async -> Bool {
+        // Analysis blocks threads (Vision OCR). With hundreds of cameras, unbounded concurrency starves the whole app.
+        // Keep one slot reserved for the selected Live source so a full background watch list cannot make the interactive
+        // pane appear hung. Non-Live frames are dropped and retried on their next published interval.
+        let displaysInLive = liveFeed?.id == source.id
+            || (liveFeed.flatMap { pairedSnapshot(for: $0)?.id } == source.id)
+        let backgroundCapacity = max(1, Self.maxFeedAnalyses - 1)
+        let capacity = displaysInLive ? Self.maxFeedAnalyses : backgroundCapacity
+        guard feedAnalysesInFlight < capacity else {
             framesDropped += 1
-            if liveFeed?.id == source.id { liveFeedStatus = "Analysis busy; waiting for the next camera refresh" }
-            return
+            if displaysInLive { liveFeedStatus = "Analysis busy; Live has priority and will retry immediately" }
+            return false
         }
         feedAnalysesInFlight += 1
         defer { feedAnalysesInFlight -= 1 }
         guard let buffer = FileFrameSource.pixelBuffer(from: data) else {
             if liveFeed?.id == source.id { liveFeedStatus = "Image unavailable or unreadable. Use ⦸ to block this camera." }
-            return
+            return false
         }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
-        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
+        let frame: DetectionFrame
+        do {
+            frame = try await pipeline.analyze(.init(pixelBuffer: buffer),
+                                                context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true))
+        } catch {
+            if liveFeed?.id == source.id {
+                liveFeedStatus = "Image received, but local analysis failed: \(error.localizedDescription)"
+            }
+            return false
+        }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         // Permissions can be revoked while Vision is processing a frame.
         guard !favorites.isBlocked(source.id),
               let current = activeFeedSources[source.id],
-              current.mayBeAnalysed else { return }
+              current.mayBeAnalysed else { return false }
         let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
                                        mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
-        if liveFeed?.id == source.id,
+        if displaysInLive,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
-            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
+            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits, tracked: true), updatedAt: Date())
             liveFeedStatus = "Background analysis · refreshed at the camera's interval"
         }
+        return true
     }
 
     /// One decoded frame from a continuous video feed (HLS today, RTSP via a
@@ -459,13 +730,77 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// frames — only the transport differs. The decoder taps ~15 fps; the
     /// concurrency cap is what bounds the analysis cost.
     func analyseFeedVideoFrame(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
-        guard feedAnalysesInFlight < Self.maxFeedAnalyses else { framesDropped += 1; return }
+        let displaysInLive = liveFeed?.id == source.id
+        // Moving video on screen: draw boxes from a fast detector-only pass every frame (~10 fps) and run the full
+        // fleet-scoring pass in the background about once a second. Only the full pass can score or record a hit.
+        if displaysInLive {
+            let due = Date().timeIntervalSince(lastLiveThorough) >= 1.2 && !liveThoroughInFlight
+            if due {
+                liveThoroughInFlight = true
+                lastLiveThorough = Date()
+                Task { @MainActor [weak self] in
+                    let started = ContinuousClock.now
+                    await self?.analyseFeedVideoFrameFully(buffer, from: source)
+                    self?.liveFullMillis = Int(started.duration(to: .now) / .milliseconds(1))
+                    self?.liveThoroughInFlight = false
+                }
+            } else {
+                await quickLiveBoxes(buffer, from: source)
+            }
+            return
+        }
+        await analyseFeedVideoFrameFully(buffer, from: source)
+    }
+
+    /// Latest durations (ms) of the fast box pass and the full pass for the stream on screen; shown in the Live HUD.
+    @Published private(set) var liveQuickMillis: Int?
+    @Published private(set) var liveFullMillis: Int?
+    private var lastLiveThorough = Date.distantPast
+    private var liveThoroughInFlight = false
+    private var liveQuickInFlight = false
+    private let liveTypes = LiveTypeEnricher()
+    private static let liveCIContext = CIContext(options: [.cacheIntermediates: false])
+
+    /// Detector-only boxes for the stream on screen. Display only: no OCR, no plate work, never scored, never recorded.
+    private func quickLiveBoxes(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        guard !liveQuickInFlight, !favorites.isBlocked(source.id), activeFeedSources[source.id]?.mayBeAnalysed == true else { return }
+        liveQuickInFlight = true
+        defer { liveQuickInFlight = false }
+        let epoch = liveFeedReloadToken
+        var context = frameContext(contextBox, for: buffer, readPlates: false, publicFeed: true)
+        context.boxesOnly = true
+        context.thorough = false
+        let started = ContinuousClock.now
+        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer), context: context),
+              liveFeed?.id == source.id, liveFeedReloadToken == epoch else { return }
+        liveQuickMillis = Int(started.duration(to: .now) / .milliseconds(1))
+        let ci = CIImage(cvPixelBuffer: buffer)
+        guard let image = Self.liveCIContext.createCGImage(ci, from: ci.extent) else { return }
+        liveFeedFrame = .init(image: image, result: liveResult(frame, hits: liveFeedFrame?.result.hits ?? 0, tracked: true, authoritative: false),
+                              updatedAt: Date())
+    }
+
+    func analyseFeedVideoFrameFully(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
+        let displaysInLive = liveFeed?.id == source.id
+        let epoch = liveFeedReloadToken
+        let backgroundCapacity = max(1, Self.maxFeedAnalyses - 1)
+        let capacity = displaysInLive ? Self.maxFeedAnalyses : backgroundCapacity
+        guard feedAnalysesInFlight < capacity else {
+            framesDropped += 1
+            if displaysInLive { liveFeedStatus = "Analysis busy; Live has priority and will retry immediately" }
+            return
+        }
         feedAnalysesInFlight += 1
         defer { feedAnalysesInFlight -= 1 }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
-        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
+        let input = FramePacketLike(pixelBuffer: buffer)
+        var context = frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)
+        let typeContext = context
+        let classifyLiveTypes = displaysInLive && context.models["vehicle-type-classification"] != nil
+        // Selected Live uses a fair per-track display budget after recording.
+        if displaysInLive { context.models.removeValue(forKey: "vehicle-type-classification") }
+        guard let frame = try? await pipeline.analyze(input, context: context) else { return }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         guard !favorites.isBlocked(source.id),
@@ -474,10 +809,21 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
                                        mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
-        if liveFeed?.id == source.id,
+        if displaysInLive, liveFeed?.id == source.id, liveFeedReloadToken == epoch,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
-            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits), updatedAt: Date())
-            liveFeedStatus = "Live video analysis · sampled from the stream"
+            let display: DetectionFrame
+            if classifyLiveTypes {
+                display = await liveTypes.enrich(frame, input: input, context: typeContext,
+                                                scope: epoch, now: ProcessInfo.processInfo.systemUptime)
+            } else { display = frame }
+            guard liveFeed?.id == source.id, liveFeedReloadToken == epoch,
+                  !favorites.isBlocked(source.id), activeFeedSources[source.id]?.mayBeAnalysed == true else { return }
+            let estimates = Set(zip(frame.vehicles, display.vehicles).compactMap { original, shown in
+                original.attributes?.bodyType != shown.attributes?.bodyType ? shown.id : nil
+            })
+            liveFeedFrame = .init(image: image, result: liveResult(display, hits: recorded.hits, tracked: true,
+                                                                 inferredBodyTypes: estimates), updatedAt: Date())
+            liveFeedStatus = "Live video · boxes ~10/s, fleet scoring ~1/s"
         }
     }
 
@@ -485,10 +831,22 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// failure leaves baseline Vision active.
     func refreshModels() async {
         let box = contextBox, manager = modelManager
-        let count = await Task.detached(priority: .utility) {
+        let detectorCount = await Task.detached(priority: .utility) {
             await manager.install(tasks: ["vehicle-detection", "plate-detection"], into: box)
         }.value
-        modelStatus = count == 0 ? "baseline vision" : "CoreML active (\(count) models)"
+        modelStatus = detectorCount == 0 ? "baseline vision" : "CoreML active (\(detectorCount) models)"
+
+        // Vehicle type is display-only and may not have a published artifact.
+        // Install it separately so its network failure cannot delay or replace
+        // the core detectors used for fleet analysis.
+        let total = await Task.detached(priority: .utility) {
+            await manager.install(tasks: ["vehicle-type-classification"], into: box)
+        }.value
+        // install returns the cumulative context count, not a per-pass delta.
+        modelStatus = total == 0 ? "baseline vision" : "CoreML active (\(total) models)"
+        if box.current.models["vehicle-type-classification"] == nil {
+            modelStatus += " · type model unavailable"
+        }
     }
 
     func attach(context: ModelContext) {
@@ -545,12 +903,119 @@ final class HubController: ObservableObject, ReviewHubProviding {
         }
         try? modelContext.save()
         refreshPendingCount()
-        let destination = cloudKitDelivery ? "CloudKit submission store" : "reference server"
-        syncStatus = pendingCount == 0 ? "Delivered to \(destination)" : "\(pendingCount) still pending"
+        let destinationLabel = cloudKitDelivery ? "CloudKit submission store" : "reference server"
+        syncStatus = pendingCount == 0 ? "Delivered to \(destinationLabel)" : "\(pendingCount) still pending"
         if delivered > 0 || rejected > 0 {
-            lastReceiptSummary = "Recorded \(delivered) accepted · \(rejected) rejected · backend: \(destination)"
+            lastReceiptSummary = "Recorded \(delivered) accepted · \(rejected) rejected · backend: \(destinationLabel)"
         } else if let lastReceipt {
-            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · backend: \(destination)"
+            lastReceiptSummary = "Last receipt: \(lastReceipt.moderationState.rawValue) · backend: \(destinationLabel)"
+        }
+    }
+
+    /// Reconciles creator-readable CloudKit submissions that were delivered by
+    /// an older Hub before the local receipt ledger existed. No submission
+    /// payload fields are copied back to disk.
+    func recoverDeliveredReceipts() async {
+        guard let modelContext else {
+            lastReceiptSummary = "Local receipt store unavailable"
+            return
+        }
+        guard SyncBackends.cloudKitAvailable() else {
+            lastReceiptSummary = "CloudKit recovery unavailable in this build"
+            return
+        }
+        syncStatus = "Recovering CloudKit delivery history…"
+        do {
+            let recovered = try await CloudKitBackend().recoverOwnedSubmissionReceipts()
+            var inserted = 0
+            for receipt in recovered {
+                let exists = (try? modelContext.fetch(FetchDescriptor<ReceivedSubmissionReceipt>(
+                    predicate: #Predicate { $0.sightingID == receipt.sightingID }
+                )))?.isEmpty == false
+                if !exists {
+                    modelContext.insert(ReceivedSubmissionReceipt(
+                        sightingID: receipt.sightingID,
+                        receivedAt: receipt.serverReceivedAt,
+                        moderationState: receipt.moderationState,
+                        operatorConfirmed: receipt.operatorConfirmed ?? false,
+                        idempotencyKey: receipt.idempotencyKey))
+                    inserted += 1
+                }
+            }
+            try modelContext.save()
+            syncStatus = "CloudKit history reconciled"
+            lastReceiptSummary = "Recovered (inserted) new receipt(s) · (recovered.count) CloudKit submission(s) visible to this iCloud account"
+        } catch {
+            syncStatus = "CloudKit history recovery failed"
+            lastReceiptSummary = "Could not recover CloudKit submissions: \(error.localizedDescription)"
+        }
+    }
+
+    /// Explicitly bridges creator-owned CloudKit submissions into the local
+    /// reference moderation queue. RESTBackend applies its network redaction
+    /// rules again; this is never an automatic mirror.
+    func sendCloudKitHistoryToModeration() async {
+        guard SyncBackends.cloudKitAvailable() else {
+            lastReceiptSummary = "CloudKit handoff unavailable in this build"
+            return
+        }
+        syncStatus = "Sending CloudKit submissions to Moderation…"
+        do {
+            let submissions = try await CloudKitBackend().recoverOwnedSubmissions()
+            let backend = SyncBackends.makeDefault(destination: .referenceServer)
+            var sent = 0
+            var failed = 0
+            for submission in submissions {
+                do {
+                    _ = try await backend.submit(submission.dto, idempotencyKey: submission.idempotencyKey)
+                    sent += 1
+                } catch {
+                    failed += 1
+                }
+            }
+            syncStatus = "CloudKit handoff complete"
+            lastReceiptSummary = "Sent (sent) CloudKit submission(s) to the reference moderation queue · (failed) failed"
+        } catch {
+            syncStatus = "CloudKit handoff failed"
+            lastReceiptSummary = "Could not hand off CloudKit submissions: \(error.localizedDescription)"
+        }
+    }
+
+    /// Publishes only confirmed, fleet-gated CloudKit submissions through the
+    /// moderator ACL. This is intentionally explicit and never part of the
+    /// ordinary device sync path.
+    func publishCloudKitHistory() async {
+        guard SyncBackends.cloudKitAvailable() else {
+            lastReceiptSummary = "CloudKit publication unavailable in this build"
+            return
+        }
+        syncStatus = "Publishing confirmed CloudKit sightings…"
+        do {
+            let submissions = try await CloudKitBackend().recoverOwnedSubmissions()
+            let backend = CloudKitBackend()
+            var published = 0
+            var skipped = 0
+            var failed = 0
+            var firstFailure = ""
+            for submission in submissions {
+                guard CloudKitBackend.publishedRecord(from: submission) != nil else {
+                    skipped += 1
+                    continue
+                }
+                do {
+                    _ = try await backend.publish(submission)
+                    published += 1
+                } catch {
+                    failed += 1
+                    if firstFailure.isEmpty { firstFailure = error.localizedDescription }
+                }
+            }
+            syncStatus = "CloudKit publication complete"
+            lastReceiptSummary = "Published \(published) · skipped \(skipped) not confirmed · failed \(failed)" +
+                (firstFailure.isEmpty ? "" : " · \(firstFailure)")
+        } catch {
+            syncStatus = "CloudKit publication failed"
+            lastReceiptSummary = "Could not publish CloudKit submissions: \(error.localizedDescription)"
         }
     }
 
@@ -836,11 +1301,10 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// all (docs/FEED-SOURCES.md §1-2).
     private func feedIdentity(vehicle: VehicleObservation, markings: FleetMarkings, confidence: Double,
                               tier: AnalysisTier, geohash6: String) -> VehicleIdentity? {
-        guard tier != .appearanceOnly else { return nil }
-        return identityResolver.syncIdentity(vehicle: vehicle, markings: markings, confidence: confidence,
-                                             location: .init(geohash6: geohash6),
-                                             forceReview: !tier.identityMayBeConfirmed)
+        FeedIdentity.resolve(resolver: identityResolver, vehicle: vehicle, markings: markings, confidence: confidence,
+                             tier: tier, geohash6: geohash6)
     }
+
 
     nonisolated private func sendHTTPResponse(on connection: NWConnection, status: Int, body: String) {
         connection.send(content: HTTPResponses.text(status: status, body), completion: .contentProcessed { _ in
@@ -876,14 +1340,22 @@ final class HubController: ObservableObject, ReviewHubProviding {
         return liveResult(frame, hits: recorded.hits)
     }
 
-    private func liveResult(_ frame: DetectionFrame, hits: Int) -> LiveFrameResult {
-        let boxes = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
+    /// Follows boxes across the analysed frames of the feed open in Live (stable ids, smoothed labels). Reset whenever Live changes feed.
+    private var liveTracker = LiveBoxTracker()
+
+    private func liveResult(_ frame: DetectionFrame, hits: Int, tracked: Bool = false, authoritative: Bool = true,
+                            inferredBodyTypes: Set<UUID> = []) -> LiveFrameResult {
+        let raw = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
-            return .init(id: vehicle.id, rect: vehicle.boundingBox,
-                         label: VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence),
-                         isFleet: gate.verdict(fleetConfidence: confidence) == .persistAndSync)
+            let isFleet = gate.verdict(fleetConfidence: confidence) == .persistAndSync
+            let label = VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence,
+                                                 bodyTypeEstimated: inferredBodyTypes.contains(vehicle.id))
+            return .init(id: vehicle.id, rect: vehicle.boundingBox, label: label, isFleet: isFleet,
+                         uncertain: !isFleet && label.hasPrefix("Vehicle"))
         }
-        return LiveFrameResult(boxes: boxes, hits: hits)
+        guard tracked else { return LiveFrameResult(boxes: raw, hits: hits) }
+        let smoothed = liveTracker.update(authoritative: authoritative, raw.map { .init(rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain) })
+        return LiveFrameResult(boxes: smoothed.map { .init(id: $0.id, rect: $0.rect, label: $0.label, isFleet: $0.isFleet, uncertain: $0.uncertain, vx: $0.velocity.x, vy: $0.velocity.y) }, hits: hits)
     }
 
     private func processNewFiles() {
@@ -922,7 +1394,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
 }
 
 struct LiveFrameResult: Sendable {
-    struct Box: Sendable, Identifiable { let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool }
+    struct Box: Sendable, Identifiable {
+        let id: UUID; let rect: NormalizedBox; let label: String; let isFleet: Bool
+        /// The type of vehicle is not known (label is just "Vehicle"); drawn with a dashed stroke, never colour alone.
+        var uncertain = false
+        /// Origin velocity (frame fractions / s) from the tracker; lets the overlay glide between analysed frames.
+        var vx = 0.0, vy = 0.0
+    }
     var boxes: [Box]
     var hits: Int
 }

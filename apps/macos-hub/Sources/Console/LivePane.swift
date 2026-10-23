@@ -169,18 +169,20 @@ struct LivePane: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(source.name, systemImage: "antenna.radiowaves.left.and.right").font(.headline)
-                        Text("\(source.kind == .snapshotJPEG ? "Snapshot feed" : "Video feed") · \(hub.liveFeedStatus)").font(.caption).foregroundStyle(.secondary)
-                        if source.kind == .snapshotJPEG, let received = runner.lastReceivedAt[source.id] {
-                            SnapshotFreshnessLabel(received: received, changed: runner.contentChangedAt[source.id] ?? received,
-                                                   interval: source.refreshInterval)
-                        }
-                        if let frame = hub.liveFeedFrame {
-                            Text("Analysed \(frame.updatedAt, format: .dateTime.hour().minute().second()) · \(frame.result.boxes.count) vehicle(s)")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                        FeedFreshnessLabel(runner: runner, sourceID: source.id, status: hub.liveFeedStatus,
+                                           analysed: hub.liveFeedFrame?.updatedAt,
+                                           snapshotInterval: source.kind == .snapshotJPEG ? source.refreshInterval : nil)
                     }
                     Spacer()
                     FeedBlockButton(hub: hub, preferences: hub.favorites, source: source)
+                    if source.kind == .hls {
+                        Button {
+                            hub.retryLiveFeed()
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                        .help("Restart this HLS decoder and request a fresh frame")
+                    }
                     Button("Close web feed") { hub.stopLiveFeed() }
                 }
             }
@@ -202,14 +204,14 @@ struct LivePane: View {
                     .help("Show car, truck, bus and motorcycle boxes; fleet labels include a fleet score. Small boxes show their label on hover.")
                 if showOverlays {
                     HStack(spacing: 8) {
-                        Label("Vehicle class", systemImage: "square")
-                            .foregroundStyle(.yellow)
+                        Label("Vehicle", systemImage: "square")
+                            .foregroundStyle(VehicleBoxCanvas.vehicle)
                         Label("Fleet hit", systemImage: "square.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(VehicleBoxCanvas.fleet)
                     }
                     .font(.caption)
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Yellow boxes show vehicle classes. Green boxes show fleet hits.")
+                    .accessibilityLabel("Cyan boxes show vehicles. Green boxes show fleet hits.")
                 }
                 if hub.liveFeed == nil {
                     Text("\(live.status) · \(live.hits) fleet hit(s)").font(.caption).foregroundStyle(.secondary)
@@ -217,36 +219,43 @@ struct LivePane: View {
             }
             ZStack {
                 Rectangle().fill(.black.opacity(0.85))
-                if let image = hub.liveFeed == nil ? live.image : hub.liveFeedFrame?.image {
-                    GeometryReader { geo in
-                        let size = fitted(CGSize(width: image.width, height: image.height), in: geo.size)
-                        ZStack(alignment: .topLeading) {
-                            Image(decorative: image, scale: 1).resizable().frame(width: size.width, height: size.height)
-                            ForEach(showOverlays ? (hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? [])) : []) { box in
-                                Rectangle().stroke(box.isFleet ? Color.green : Color.yellow, lineWidth: 2)
-                                    .frame(width: box.rect.width * size.width, height: box.rect.height * size.height)
-                                    .overlay(alignment: .topLeading) {
-                                        if box.rect.width * size.width >= 72 {
-                                            Text(box.label).font(.system(size: 11, weight: .semibold, design: .rounded))
-                                                .fixedSize().padding(.horizontal, 6).padding(.vertical, 3)
-                                                .background(box.isFleet ? Color.green : Color.yellow, in: RoundedRectangle(cornerRadius: 4))
-                                                .foregroundStyle(.black)
-                                                .offset(y: box.rect.y * size.height > 24 ? -24 : 2)
-                                        }
-                                    }
-                                    .help(box.label)
-                                    .accessibilityLabel(box.label)
-                                    .offset(x: box.rect.x * size.width, y: box.rect.y * size.height)
-                            }
+                if let source = hub.liveFeed, source.kind == .hls, runner.isStreaming(source.id), let player = runner.livePlayer(for: source.id) {
+                    // Moving video from the decoder's own player; boxes come from the ~1 fps analysis and fade when stale.
+                    ZStack {
+                        LiveVideoSurface(player: player)
+                        if showOverlays, let frame = hub.liveFeedFrame {
+                            VehicleBoxCanvas(boxes: frame.result.boxes,
+                                             frameSize: CGSize(width: frame.image.width, height: frame.image.height),
+                                             updatedAt: frame.updatedAt, glide: true)
                         }
-                        .frame(width: size.width, height: size.height)
-                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                    }
+                } else if let image = hub.liveFeed == nil ? live.image : hub.liveFeedFrame?.image {
+                    ZStack {
+                        Image(decorative: image, scale: 1).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if showOverlays {
+                            VehicleBoxCanvas(boxes: hub.liveFeed == nil ? live.boxes : (hub.liveFeedFrame?.result.boxes ?? []),
+                                             frameSize: CGSize(width: image.width, height: image.height),
+                                             staleAfter: hub.liveFeed?.kind == .hls ? 4 : .infinity,
+                                             updatedAt: hub.liveFeedFrame?.updatedAt ?? .now)
+                        }
                     }
                 } else {
-                    Text(hub.liveFeed == nil ? "Start a camera, open a video, or choose Open in Live in Public feeds" : hub.liveFeedStatus).foregroundStyle(.secondary)
+                    VStack(spacing: 8) {
+                        Text(hub.liveFeed == nil ? "Start a camera, open a video, or choose Open in Live in Public feeds" : hub.liveFeedStatus)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if let source = hub.liveFeed, source.kind == .hls {
+                            Button("Retry HLS") { hub.retryLiveFeed() }
+                                .buttonStyle(HUDButtonStyle())
+                                .accessibilityHint("Restarts the bounded HLS connection attempt")
+                        }
+                    }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(CornerBrackets(length: 26).stroke(HubTheme.accent.opacity(0.85), lineWidth: 1.6).padding(8).allowsHitTesting(false))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(HubTheme.hairline, lineWidth: 1).allowsHitTesting(false))
+                .overlay(alignment: .topLeading) { hudReadout.padding(18).allowsHitTesting(false) }
             Text("In memory only. Overlays show general vehicle classes; fleet labels include a fleet score. Plate text is never shown. Fleet hits pass the same redaction gate and jurisdiction rules as every other source.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -256,11 +265,44 @@ struct LivePane: View {
                                                        mediaType: .video, position: .unspecified).devices
             if selected.isEmpty { selected = devices.first?.uniqueID ?? "" }
         }
-        .task(id: "\(isActive)-\(hub.liveFeed?.id.uuidString ?? "local")") {
+        .task(id: "\(isActive)-\(hub.liveFeed?.id.uuidString ?? "local")-\(hub.liveFeedReloadToken.uuidString)") {
             if isActive, hub.liveFeed != nil { live.stop(); await hub.loadLiveFeed() }
         }
         .onChange(of: isActive) { _, active in if !active { live.pause() } }
         .onDisappear { live.stop() }
+    }
+
+    /// Top-left readout on the video: transport state, vehicle count and the age of the analysis the boxes came from.
+    @ViewBuilder private var hudReadout: some View {
+        let streaming = hub.liveFeed.map { $0.kind == .hls && runner.isStreaming($0.id) } ?? false
+        let frame = hub.liveFeedFrame
+        let local = hub.liveFeed == nil && live.running
+        HStack(spacing: 8) {
+            if streaming, let source = hub.liveFeed {
+                TimelineView(.periodic(from: .now, by: 1)) { tick in
+                    let health = LiveFeedHealth(now: tick.date, received: runner.lastReceivedAt[source.id], analysed: nil)
+                    HUDStatusChip(text: health.delivery == .current ? "Live · HLS" : health.deliveryText,
+                                  color: health.delivery == .current ? HubTheme.live : HubTheme.amber,
+                                  pulsing: health.delivery == .current)
+                }
+            }
+            else if local { HUDStatusChip(text: "Live · camera", color: HubTheme.live, pulsing: true) }
+            else if hub.liveFeed != nil, frame != nil { HUDStatusChip(text: "Sampled stills", color: HubTheme.amber) }
+            else if hub.liveFeed != nil { HUDStatusChip(text: "Acquiring", color: HubTheme.amber, pulsing: true) }
+            if let frame, showOverlays {
+                TimelineView(.periodic(from: .now, by: 1)) { tick in
+                    let age = max(0, Int(tick.date.timeIntervalSince(frame.updatedAt)))
+                    Text("VEH \(frame.result.boxes.count) · ANALYSIS \(age)s AGO")
+                        .font(HubTheme.mono(10, .medium)).tracking(1.1).foregroundStyle(streaming && age > 6 ? HubTheme.amber : HubTheme.textPrimary)
+                        .padding(.horizontal, 7).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
+                }
+                if let quick = hub.liveQuickMillis, streaming {
+                    Text("BOX \(quick)ms · FULL \(hub.liveFullMillis.map { "\($0)ms" } ?? "—")")
+                        .font(HubTheme.mono(10, .medium)).tracking(1.0).foregroundStyle(HubTheme.textSecondary)
+                        .padding(.horizontal, 7).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.45)))
+                }
+            }
+        }
     }
 
     private func fitted(_ image: CGSize, in box: CGSize) -> CGSize {
@@ -269,22 +311,32 @@ struct LivePane: View {
     }
 }
 
-private struct SnapshotFreshnessLabel: View {
-    let received: Date
-    let changed: Date
-    let interval: TimeInterval
+private struct FeedFreshnessLabel: View {
+    @ObservedObject var runner: FeedRunner
+    let sourceID: UUID
+    let status: String
+    let analysed: Date?
+    let snapshotInterval: TimeInterval?
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { tick in
-            let warning = tick.date.timeIntervalSince(changed) > max(600, interval * 2)
-            Group {
-                if warning {
-                    Text("Received \(received, format: .dateTime.hour().minute().second()) · image unchanged since \(changed, format: .dateTime.hour().minute())")
-                } else {
-                    Text("Received \(received, format: .dateTime.hour().minute().second())")
+        TimelineView(.periodic(from: .now, by: 1)) { tick in
+            let changed = runner.contentChangedAt[sourceID]
+            let health = LiveFeedHealth(now: tick.date, received: runner.lastReceivedAt[sourceID], analysed: analysed,
+                                        changed: changed, snapshotInterval: snapshotInterval)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(snapshotInterval == nil ? "Video feed" : "Snapshot feed") · \(health.delivery == .delayed ? "Frame delivery delayed" : status)")
+                    .foregroundStyle(health.delivery == .delayed ? Color.orange : Color.secondary)
+                Text("\(health.deliveryText) · \(health.analysisText)")
+                    .foregroundStyle(health.delivery == .delayed ? Color.orange : Color.secondary)
+                if health.unchanged, let changed {
+                    Text("Image unchanged since \(changed, format: .dateTime.hour().minute())")
+                        .foregroundStyle(.secondary)
                 }
             }
-            .font(.caption).foregroundStyle(warning ? Color.orange : Color.secondary)
-            .help("Receiving an image proves delivery, not camera freshness. Identical image bytes may indicate a static scene or an upstream freeze.")
+            .font(.caption)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("liveFeedFreshness")
+            .help("Frame delivery and analysis are measured separately. Identical image bytes may indicate a static scene or an upstream freeze; delivery does not prove camera freshness.")
         }
     }
 }

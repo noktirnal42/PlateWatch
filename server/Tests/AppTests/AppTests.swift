@@ -123,6 +123,50 @@ final class SightingCursorTests: XCTestCase {
     }
 }
 
+final class PresenceStoreTests: XCTestCase {
+    func testHubCountersAggregateWithoutExposingMedia() async {
+        let store = PresenceStore()
+        let stats = PresenceStats(framesAnalyzed: 1202, publicFeedFrames: 1202,
+                                  fleetHitsToday: 3, skippedWhileBusy: 327,
+                                  outboxPending: 4)
+        let aggregate = await store.heartbeat(PresenceHeartbeat(sessionID: "hub-stats-123456",
+                                                                  platform: "macOS-hub", feedIDs: [],
+                                                                  activeProcessing: true, stats: stats))
+        XCTAssertEqual(aggregate.stats, stats)
+    }
+
+    func testHeartbeatAggregatesAndReleaseRemovesLease() async {
+        let store = PresenceStore()
+        let feed = UUID()
+        let first = await store.heartbeat(PresenceHeartbeat(sessionID: "session-one-123456",
+                                                             platform: "hub", feedIDs: [feed], activeProcessing: true))
+        XCTAssertEqual(first.activeSessions, 1)
+        XCTAssertEqual(first.activeProcessors, 1)
+        XCTAssertEqual(first.processorsByFeed[feed], 1)
+
+        let second = await store.heartbeat(PresenceHeartbeat(sessionID: "session-two-123456",
+                                                              platform: "ios", feedIDs: [feed], activeProcessing: false))
+        XCTAssertEqual(second.activeSessions, 2)
+        XCTAssertEqual(second.activeProcessors, 1)
+        XCTAssertEqual(second.processorsByFeed[feed], 1)
+
+        let released = await store.release("session-one-123456")
+        XCTAssertEqual(released.activeSessions, 1)
+        XCTAssertEqual(released.activeProcessors, 0)
+        XCTAssertNil(released.processorsByFeed[feed])
+    }
+
+    func testExpiredLeaseIsNotCounted() async {
+        let store = PresenceStore()
+        let now = Date(timeIntervalSince1970: 1_000)
+        _ = await store.heartbeat(PresenceHeartbeat(sessionID: "session-expiry-123456",
+                                                     platform: "hub", feedIDs: [], activeProcessing: true), now: now)
+        let aggregate = await store.aggregate(now: now.addingTimeInterval(91))
+        XCTAssertEqual(aggregate.activeSessions, 0)
+        XCTAssertEqual(aggregate.activeProcessors, 0)
+    }
+}
+
 final class RedactionGateServiceTests: XCTestCase {
     private func dto(fleetConfidence: Double,
                      agencyText: String? = nil,
@@ -157,6 +201,16 @@ final class RedactionGateServiceTests: XCTestCase {
         let out = RedactionGateService.evaluate(dto(fleetConfidence: 0.85))
         XCTAssertEqual(out.state, .pending)
         XCTAssertFalse(out.exactGeoAllowed)
+    }
+
+    func testSensitiveVehiclesNeverAutoConfirm() {
+        for text in ["SWAT", "County Tactical Unit", "SCHOOL BUS 12", "Ambulance 7", "undercover"] {
+            let out = RedactionGateService.evaluate(dto(fleetConfidence: 0.95, agencyText: text, unitNumber: "4421"))
+            XCTAssertEqual(out.state, .pending, text)
+            XCTAssertFalse(out.exactGeoAllowed, text)
+        }
+        XCTAssertEqual(RedactionGateService.evaluate(dto(fleetConfidence: 0.85, agencyText: "SCHOOLCRAFT POLICE", unitNumber: "9")).state,
+                       .fleetConfirmed, "whole-word match only")
     }
 
     func testExemptPlatePlusConfidenceConfirmed() {

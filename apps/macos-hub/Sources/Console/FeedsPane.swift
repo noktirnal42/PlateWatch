@@ -6,6 +6,7 @@ struct FeedsPane: View {
     let hub: HubController
     let isActive: Bool
     var onOpenLive: () -> Void
+    var onShowOnMap: () -> Void = {}
     @ObservedObject private var favorites: FeedFavorites
     @ObservedObject private var runner: FeedRunner
     @ObservedObject private var browser: FeedBrowserState
@@ -13,10 +14,11 @@ struct FeedsPane: View {
     @State private var termsExpanded = false
     @State private var reviewing: FeedHostSummary?
 
-    init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void) {
+    init(hub: HubController, isActive: Bool, onOpenLive: @escaping () -> Void, onShowOnMap: @escaping () -> Void = {}) {
         self.hub = hub
         self.isActive = isActive
         self.onOpenLive = onOpenLive
+        self.onShowOnMap = onShowOnMap
         _favorites = ObservedObject(wrappedValue: hub.favorites)
         _runner = ObservedObject(wrappedValue: hub.feedRunner)
         _browser = ObservedObject(wrappedValue: hub.feedBrowserState)
@@ -30,8 +32,27 @@ struct FeedsPane: View {
     private var ascending: Bool { browser.ascending }
     private var favoritesFirst: Bool { browser.favoritesFirst }
     private var selected: Set<UUID> { browser.selected }
+    private var importing: Bool { hub.importStatus.hasPrefix("Importing") }
 
     @State private var hosts: [FeedHostSummary] = []
+    /// Nearest-Census-place label per camera, computed off the main thread after each reload.
+    @State private var places: [UUID: FeedPlace] = [:]
+    private nonisolated static let placeIndex = FeedPlaceIndex()
+    /// The state a camera is shown under: where it physically is (nearest place) when known, else the catalogue's recorded state.
+    private func displayState(_ s: PublicFeedSource) -> String { places[s.id]?.state ?? s.state ?? "" }
+    private func locationLabel(_ s: PublicFeedSource) -> String {
+        if let p = places[s.id] { return p.label }
+        return s.state ?? "Unknown"
+    }
+    private func providerLabel(_ s: PublicFeedSource) -> String {
+        let host = (s.url.host ?? "").replacingOccurrences(of: ":443", with: "")
+        let who = s.terms.attribution.trimmingCharacters(in: .whitespacesAndNewlines)
+        return who.isEmpty ? host : "\(who) · \(host)"
+    }
+    private var stateOptions: [(code: String, count: Int)] {
+        Dictionary(grouping: catalogue?.sources ?? [], by: displayState).filter { !$0.key.isEmpty }
+            .map { ($0.key, $0.value.count) }.sorted { $0.0 < $1.0 }
+    }
     private var needReview: [FeedHostSummary] { hosts.filter { $0.confirmedCount < $0.totalCount } }
     private var totalCount: Int { catalogue?.sources.count ?? 0 }
 
@@ -43,18 +64,31 @@ struct FeedsPane: View {
         if tab == .favorites { list = list.filter { favorites.contains($0.id) } }
         if !hostFilter.isEmpty { list = list.filter { $0.url.host == hostFilter } }
         if let statusFilter { list = list.filter { hub.feedRunner.state(of: $0).kind == statusFilter } }
+        if !browser.stateFilter.isEmpty { list = list.filter { displayState($0) == browser.stateFilter } }
+        switch browser.termsFilter {
+        case .any: break
+        case .analysable: list = list.filter(\.mayBeAnalysed)
+        case .awaiting: list = list.filter { !$0.mayBeAnalysed }
+        }
+        switch browser.kindFilter {
+        case .any: break
+        case .snapshot: list = list.filter { $0.kind == .snapshotJPEG }
+        case .stream: list = list.filter { $0.kind != .snapshotJPEG }
+        }
         let words = query.lowercased().split(separator: " ").map(String.init)
         if !words.isEmpty {
             list = list.filter { s in
-                let hay = "\(s.name) \(s.url.host ?? "") \(s.geohash6) \(s.state ?? "") \(s.terms.attribution)".lowercased()
+                let hay = "\(s.name) \(s.url.host ?? "") \(s.geohash6) \(locationLabel(s)) \(s.state ?? "") \(s.terms.attribution)".lowercased()
                 return words.allSatisfy(hay.contains)
             }
         }
         func key(_ s: PublicFeedSource) -> String {
             switch sortKey {
-            case .state: return (s.state ?? "zz") + " " + s.name.lowercased()
+            case .state: return (displayState(s).isEmpty ? "zz" : displayState(s)) + " " + (places[s.id]?.city.lowercased() ?? "zz") + " " + s.name.lowercased()
+            case .city: return (places[s.id]?.city.lowercased() ?? "zz") + " " + displayState(s) + " " + s.name.lowercased()
             case .name: return s.name.lowercased()
             case .host: return (s.url.host ?? "") + " " + s.name.lowercased()
+            case .provider: return s.terms.attribution.lowercased() + " " + displayState(s) + " " + s.name.lowercased()
             case .location: return s.geohash6 + " " + s.name.lowercased()
             case .status: return runner.state(of: s).kind.rawValue + " " + s.name.lowercased()
             }
@@ -80,6 +114,9 @@ struct FeedsPane: View {
             .onChange(of: hostFilter) { _, _ in refreshRows() }
             .onChange(of: statusFilter) { _, _ in refreshRows() }
             .onChange(of: sortKey) { _, _ in refreshRows() }
+            .onChange(of: browser.stateFilter) { _, _ in refreshRows() }
+            .onChange(of: browser.termsFilter) { _, _ in refreshRows() }
+            .onChange(of: browser.kindFilter) { _, _ in refreshRows() }
             .onChange(of: ascending) { _, _ in refreshRows() }
             .onChange(of: favoritesFirst) { _, _ in refreshRows() }
     }
@@ -103,6 +140,24 @@ struct FeedsPane: View {
                 Label("\(favorites.watchedIDs.count) watched", systemImage: "eye.fill")
                     .foregroundStyle(.secondary)
                     .help("Cameras selected for background analysis")
+                if SourceCredentials.hasKey("nv511") {
+                    Button(importing ? "Refreshing NV511…" : "Refresh NV511", systemImage: "arrow.clockwise") {
+                        Task {
+                            await hub.importCatalogue(.nevada)
+                            reload()
+                        }
+                    }
+                    .disabled(importing)
+                    .help("Fetch the current keyed NV511 catalogue and merge it with this Mac's saved feeds")
+                    .accessibilityLabel(importing ? "Refreshing Nevada 511 catalogue" : "Refresh Nevada 511 catalogue")
+                }
+                if hub.confirmedNV511Count > 0 {
+                    Button("Watch NV511 (\(hub.confirmedNV511Count.formatted()))", systemImage: "eye.fill") {
+                        hub.watchAllNV511()
+                    }
+                    .help("Select all confirmed Nevada 511 sources for background processing; HLS streams rotate within the four-stream budget")
+                    .accessibilityLabel("Watch all confirmed Nevada 511 feeds")
+                }
                 Button("Watch \(favorites.ids.count) favorites") { hub.watchAllFavorites() }
                     .disabled(favorites.ids.isEmpty)
                     .help("Analyse all starred cameras in the background")
@@ -110,6 +165,23 @@ struct FeedsPane: View {
             }
             FeedStatusRow(runner: hub.feedRunner)
                 .font(.caption).foregroundStyle(.secondary)
+            if tab == .favorites {
+                HStack(spacing: 10) {
+                    Label("Favorites scope: showing \(favorites.ids.count) starred feeds; the full catalogue has \(totalCount.formatted()) sources.", systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Show all feeds") { browser.resetView(); reload() }
+                        .buttonStyle(HUDProminentButtonStyle())
+                        .controlSize(.small)
+                        .accessibilityHint("Clears the persisted Favorites scope and all feed filters")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Favorites scope. Showing \(favorites.ids.count) starred feeds out of \(totalCount) total. Show all feeds button available.")
+            }
             if tab == .all && totalCount > favorites.watchedIDs.count {
                 Label {
                     Text("The catalogue is fully loaded. Background analysis runs only for watched cameras (\(favorites.watchedIDs.count) selected); idle cameras remain available for preview or Live.")
@@ -126,7 +198,7 @@ struct FeedsPane: View {
                 .help("Use the eye column or Watch favorites to select cameras for background analysis. This avoids polling thousands of public endpoints at once.")
             }
             if !hub.importStatus.isEmpty { Text(hub.importStatus).font(.caption).foregroundStyle(.secondary) }
-            if tab != .favorites { controls }
+            controls
             if tab == .favorites { favoritesGrid } else { listAndPreview }
             if tab != .favorites {
                 Text(tab == .blocked
@@ -149,7 +221,7 @@ struct FeedsPane: View {
         .onChange(of: runner.stateRevision) { _, _ in if statusFilter != nil || sortKey == .status { refreshRows() } }
         .onChange(of: tab) { _, _ in refreshRows() }
         .onChange(of: tab) { _, value in
-            if value == .blocked { browser.query = ""; browser.hostFilter = ""; browser.statusFilter = nil; browser.save() }
+            if value == .blocked { browser.clearFilters() }
         }
         .onChange(of: hub.importStatus) { _, _ in reload() }
         .sheet(item: Binding(get: { reviewing.map(HostBox.init) }, set: { reviewing = $0?.host })) { box in
@@ -191,7 +263,8 @@ struct FeedsPane: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) { searchControl; sourceControl; statusControl }
+            HStack(spacing: 10) { searchControl; stateControl; sourceControl }
+            HStack(spacing: 10) { termsControl; kindControl; statusControl }
             HStack(spacing: 10) {
                 sortControl
                 Spacer()
@@ -221,6 +294,25 @@ struct FeedsPane: View {
             Text("All sources").tag("")
             ForEach(hosts, id: \.host) { Text("\($0.host) (\($0.totalCount))").tag($0.host) }
         }.frame(maxWidth: 260).help("Filter cameras by their image host")
+    }
+
+    private var stateControl: some View {
+        Picker("State", selection: Binding(get: { browser.stateFilter }, set: { browser.stateFilter = $0; browser.save() })) {
+            Text("All states").tag("")
+            ForEach(stateOptions, id: \.code) { Text("\($0.code) (\($0.count.formatted()))").tag($0.code) }
+        }.frame(maxWidth: 170).help("Filter by the state the camera is physically in (nearest Census place), not by its feed's host")
+    }
+
+    private var termsControl: some View {
+        Picker("Terms", selection: Binding(get: { browser.termsFilter }, set: { browser.termsFilter = $0; browser.save() })) {
+            ForEach(FeedBrowserState.TermsFilter.allCases) { Text($0.rawValue).tag($0) }
+        }.frame(maxWidth: 230).help("Show only cameras whose image-host terms a person has confirmed, or only those still waiting")
+    }
+
+    private var kindControl: some View {
+        Picker("Media", selection: Binding(get: { browser.kindFilter }, set: { browser.kindFilter = $0; browser.save() })) {
+            ForEach(FeedBrowserState.KindFilter.allCases) { Text($0.rawValue).tag($0) }
+        }.frame(maxWidth: 190)
     }
 
     private var statusControl: some View {
@@ -253,32 +345,46 @@ struct FeedsPane: View {
                     FeedBlockButton(hub: hub, preferences: favorites, source: s)
                 }.width(28)
                 TableColumn("Watch") { source in
-                    FeedWatchButton(hub: hub, favorites: favorites, source: source)
+                    VStack(spacing: 2) {
+                        FeedWatchButton(hub: hub, favorites: favorites, source: source)
+                        if hub.presenceEnabled {
+                            FeedDemandBadge(hub: hub, source: source)
+                        }
+                    }
                 }.width(42)
-                TableColumn("Camera / source") { source in
+                TableColumn("Camera / location / source") { source in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(source.name).lineLimit(1)
-                        Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text(locationLabel(source)).font(.caption.weight(.medium)).lineLimit(1)
+                        Text(providerLabel(source)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
                     .padding(.vertical, 3)
-                    .help("\(source.name)\n\(source.url.host ?? "")\nArea: \(source.geohash6)")
-                }.width(min: 120, ideal: 180, max: 360)
+                    .help("\(source.name)\nNear \(locationLabel(source)) (nearest Census place to the camera's position, not a jurisdiction boundary)\nSource: \(providerLabel(source))\nArea code: \(source.geohash6)")
+                }.width(min: 160, ideal: 230, max: 420)
                 TableColumn("Status") { s in
                     let state = hub.feedRunner.state(of: s)
                     Label(state.text, systemImage: state.icon).foregroundStyle(state.color).lineLimit(1).help(state.text)
                 }.width(120)
             }
             .frame(minWidth: 430)
-            CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive,
-                               source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } })
+            CameraPreviewPanel(hub: hub, favorites: favorites, isActive: isActive, onOpenLive: onOpenLive, onShowOnMap: onShowOnMap,
+                               source: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } },
+                               location: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } }.map(locationLabel) ?? "",
+                               provider: selected.first.flatMap { id in catalogue?.sources.first { $0.id == id } }.map(providerLabel) ?? "")
                 .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
         }
     }
 
     private var favoritesGrid: some View {
-        let favs = (catalogue?.sources ?? []).filter { favorites.contains($0.id) && !favorites.isBlocked($0.id) }.sorted { $0.name < $1.name }
+        let favs = rows   // already scoped to favorites and run through the search, filters and sort above
         return Group {
-            if favs.isEmpty {
+            if favs.isEmpty && browser.hasActiveFilters && !favorites.ids.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal.decrease.circle").font(.largeTitle).foregroundStyle(.secondary)
+                    Text("No favorites match these filters").font(.headline)
+                    Button("Clear filters") { browser.clearFilters(); reload() }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if favs.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "star").font(.largeTitle).foregroundStyle(.secondary)
                     Text("No favorites yet").font(.headline)
@@ -287,7 +393,7 @@ struct FeedsPane: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
-                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, isActive: isActive, onOpenLive: onOpenLive) }
+                        ForEach(favs) { FavoriteTile(hub: hub, favorites: favorites, source: $0, location: locationLabel($0), provider: providerLabel($0), isActive: isActive, onOpenLive: onOpenLive, onShowOnMap: onShowOnMap) }
                     }.padding(.bottom, 8)
                 }
             }
@@ -300,6 +406,32 @@ struct FeedsPane: View {
         // Grouping 8,000+ URLs on every frame/status notification starves the main thread.
         hosts = catalogue?.hosts() ?? []
         refreshRows()
+        let sources = catalogue?.sources ?? []
+        let missing = sources.filter { places[$0.id] == nil }
+        if !missing.isEmpty {
+            Task.detached(priority: .utility) {
+                var found: [UUID: FeedPlace] = [:]
+                for s in missing { if let p = Self.placeIndex.place(for: s) { found[s.id] = p } }
+                await MainActor.run { places.merge(found) { _, new in new }; refreshRows() }
+            }
+        }
+    }
+}
+
+private struct FeedDemandBadge: View {
+    @ObservedObject var hub: HubController
+    let source: PublicFeedSource
+
+    var body: some View {
+        let count = hub.processorCount(for: source.id)
+        let value = count.map(String.init) ?? "—"
+        let demandText = count.map { "\($0) active processing console(s) selected this feed" }
+            ?? ("Active processing count unavailable while presence is " + hub.presenceStatus.lowercased())
+        Label(value, systemImage: "person.2")
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(count == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+            .help(demandText)
+            .accessibilityLabel(demandText)
     }
 }
 
@@ -308,8 +440,11 @@ struct FavoriteTile: View {
     @ObservedObject var hub: HubController
     @ObservedObject var favorites: FeedFavorites
     let source: PublicFeedSource
+    let location: String
+    let provider: String
     let isActive: Bool
     var onOpenLive: () -> Void
+    var onShowOnMap: () -> Void = {}
     @State private var image: NSImage?
     @State private var message = ""
     @State private var policyRetryDelay: TimeInterval?
@@ -323,12 +458,6 @@ struct FavoriteTile: View {
             }.aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 8))
             HStack {
                 Text(source.name).font(.callout.bold()).lineLimit(1)
-                if let state = source.state {
-                    Text(state).font(.caption2.bold())
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
-                        .help("State recorded by the catalogue import")
-                }
                 Spacer()
                 Button { favorites.toggle(source.id) } label: { Image(systemName: "star.fill").foregroundStyle(.yellow) }
                     .buttonStyle(.plain).help("Remove from favorites")
@@ -336,11 +465,17 @@ struct FavoriteTile: View {
                 FeedBlockButton(hub: hub, preferences: favorites, source: source)
                 FeedWatchButton(hub: hub, favorites: favorites, source: source)
             }
-            Button("Open in Live", systemImage: "play.rectangle") {
-                hub.openFeedInLive(source); onOpenLive()
-            }.help("Open this camera's analysed snapshots in Live")
-                .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
-            Text(source.url.host ?? "").font(.caption2).foregroundStyle(.secondary).monospaced()
+            HStack {
+                Button("Open in Live", systemImage: "play.rectangle") {
+                    hub.openFeedInLive(source); onOpenLive()
+                }.help("Open this camera's analysed snapshots in Live")
+                    .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
+                Button { hub.requestMapFocus(source); onShowOnMap() } label: { Image(systemName: "map") }
+                    .help("Show on map").accessibilityLabel("Show \(source.name) on the map")
+            }
+            Text(location).font(.caption.weight(.medium)).lineLimit(1)
+                .help("Nearest Census place to the camera's position, not a jurisdiction boundary")
+            Text(provider).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
         }
         .task(id: "\(source.id)-\(isActive)") {
             guard isActive else { image = nil; return }
@@ -367,7 +502,10 @@ struct CameraPreviewPanel: View {
     @ObservedObject var favorites: FeedFavorites
     let isActive: Bool
     var onOpenLive: () -> Void
+    var onShowOnMap: () -> Void = {}
     let source: PublicFeedSource?
+    var location: String = ""
+    var provider: String = ""
     @State private var image: NSImage?
     @State private var fetchedAt: Date?
     @State private var message = ""
@@ -387,7 +525,8 @@ struct CameraPreviewPanel: View {
                     FeedBlockButton(hub: hub, preferences: favorites, source: source)
                     FeedWatchButton(hub: hub, favorites: favorites, source: source)
                 }
-                Text(source.url.host ?? "").font(.caption).foregroundStyle(.secondary).monospaced()
+                if !location.isEmpty { Text(location).font(.subheadline.weight(.medium)) }
+                Text(provider.isEmpty ? (source.url.host ?? "") : provider).font(.caption).foregroundStyle(.secondary)
                 Label(source.kind == .hls ? "HLS video · sampled analysis" : "Snapshot camera · refresh ≥ \(Int(source.refreshInterval)) seconds", systemImage: source.kind == .hls ? "video" : "photo")
                     .font(.caption).foregroundStyle(.secondary)
                 ZStack {
@@ -408,6 +547,8 @@ struct CameraPreviewPanel: View {
                 .modifier(HubPrimaryAction())
                 .help("Show this camera's analysed snapshots and vehicle overlays in Live")
                 .disabled(!source.mayBeAnalysed || favorites.isBlocked(source.id))
+                Button("Show on map", systemImage: "map") { hub.requestMapFocus(source); onShowOnMap() }
+                    .help("Centre, zoom and highlight this camera on the Map (approximate position, ~1 km)")
                 if !source.mayBeAnalysed {
                     Text("Confirm this host's terms (Review terms…) to view and poll its cameras.").font(.caption).foregroundStyle(.orange)
                 }

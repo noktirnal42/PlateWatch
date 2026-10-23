@@ -62,3 +62,4 @@ models/release/
 # Local Python environments and caches
 **/__pycache__/
 **/.venv/
+training

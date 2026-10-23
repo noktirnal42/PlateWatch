@@ -66,7 +66,7 @@ struct NIMResearchPane: View {
                 Toggle("I confirm this content is public/licensed and approved for NVIDIA hosted processing", isOn: $approved).disabled(running)
                 HStack {
                     Button(running ? "Processing…" : "Run hosted research", action: start).disabled(running || !approved)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(HUDProminentButtonStyle())
                     Button("Stop") { work?.cancel() }.disabled(!running)
                     Button("Export research result…", action: export).disabled(running || output.isEmpty)
                     if running { ProgressView().controlSize(.small) }

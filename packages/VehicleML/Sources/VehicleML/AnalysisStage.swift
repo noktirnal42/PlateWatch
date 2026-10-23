@@ -18,9 +18,13 @@ public struct AnalysisContext: @unchecked Sendable {
     /// `PlateKit.JurisdictionPolicy`). Plate detection, plate OCR and plate-shaped text are all skipped; fleet
     /// detection from lettering and appearance is unaffected.
     public var readPlates: Bool
+    /// Fast overlay path for moving video: whole-frame vehicle detector plus cheap colour only — no text recognition,
+    /// no detail tiles, no plate work. Results are for drawing boxes; they must never be used to score or record fleet hits.
+    public var boxesOnly: Bool
 
     public init(models: [String: MLModel] = [:], timestamp: Date = Date(), thorough: Bool = false,
-                readPlates: Bool = true, suppressCameraCaptions: Bool = false) {
+                readPlates: Bool = true, suppressCameraCaptions: Bool = false, boxesOnly: Bool = false) {
+        self.boxesOnly = boxesOnly
         self.models = models
         self.timestamp = timestamp
         self.thorough = thorough

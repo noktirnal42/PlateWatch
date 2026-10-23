@@ -4,6 +4,21 @@ One entry per decision, newest first. Each records the choice, the reason,
 and what it commits us to. Superseded decisions stay here with a pointer to
 the replacement.
 
+## 2026-10-19 — Plate-design training images: state DMV / agency images may be used (counsel: fair use)
+
+**Decision.** The owner reports that counsel advises that images published by public/government entities (state DMVs and agencies) may be
+reused for this project as **fair use**. Standard-issue plate images from state agency websites are therefore allowed as *training
+examples* for the plate-state classifier, superseding the "no state confirmed usable" finding in `PLATE-DESIGN-DATASET.md` (2026-10-19).
+This is the owner's/counsel's legal determination recorded here; it is not the agent's legal opinion and is not in writing from counsel in
+the repository.
+
+**Conditions we keep regardless** (they make the fair-use position easier to defend and cost nothing): training use only; images are never
+redistributed, committed or published (`training/` is gitignored, weights are not committed); one request per second with a descriptive
+User-Agent and `robots.txt` honoured; every file recorded in a manifest with state, source page URL, retrieval date and the statement
+"agency-published image, used under counsel's fair-use determination 2026-10-19"; standard-issue base designs only (no sponsor/specialty plates
+whose designs belong to outside parties, no private-citizen photos); anything a site says it forbids (robots, explicit no-reuse notice) is skipped
+and noted. Fair use is a defence, not a licence: if a state objects, its images are removed and the model retrained.
+
 ## 2026-10-13 — Plate detector: home-trained Create ML model wins the head-to-head
 
 **Decision.** `plate-detector-createml-v1` (0.2.0, single-file `.mlmodel`, 416×416

@@ -180,3 +180,11 @@ authorized by this exception. Model output remains untrusted research data; orig
 source URL/page and extracted regions accompany it. Accepted record enrichment still
 requires `SourceCitation` and human review. No API key or image bytes enter the action
 journal. The original local evidence and shared structured-data rules remain in force.
+
+## Addendum 2026-10-19 — live presence counts
+Opt-in "live sessions / processors" counts are published as anonymous, 120-second `PresenceLease` records in the CloudKit public database
+(design and limits: [PRESENCE-DESIGN.md](PRESENCE-DESIGN.md)). A lease contains only a platform label, an expiry, an "actively processing"
+flag, up to 100 *public camera* IDs and (Hub only) aggregate frame counters. It never contains plates, frames, evidence crops, locations,
+names or sighting data, and it is never joined to a sighting. Because CloudKit exposes an opaque creator id on public records, a lease is
+pseudonymous per iCloud account rather than fully anonymous; that is disclosed in Settings and the feature stays **off by default**. The
+published counts are estimates and must not be used to infer where any person is. This does not change Rules 1–6.

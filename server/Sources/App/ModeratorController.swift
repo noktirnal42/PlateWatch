@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Fluent
 import Foundation
 import Vapor
@@ -24,6 +28,18 @@ struct ModeratorController: RouteCollection {
 
     private let token: String?
     private let requireSecondReview: Bool
+
+    enum SecondReviewStep: Equatable {
+        case recordFirst
+        case allow
+        case rejectSameReviewer
+    }
+
+    static func secondReviewStep(required: Bool, firstReviewer: String?, reviewer: String) -> SecondReviewStep {
+        guard required else { return .allow }
+        guard let firstReviewer else { return .recordFirst }
+        return firstReviewer == reviewer ? .rejectSameReviewer : .allow
+    }
 
     init(token: String? = nil, requireSecondReview: Bool = false) {
         self.requireSecondReview = requireSecondReview
@@ -61,7 +77,8 @@ struct ModeratorController: RouteCollection {
             .all()
         return rows.compactMap { row in
             row.id.map { APIQueueItem(id: $0, capturedAt: row.capturedAt, geohash6: row.geohash6,
-                                      unitNumber: row.unitNumber, fleetConfidence: row.fleetConfidence) }
+                                      unitNumber: row.unitNumber, fleetConfidence: row.fleetConfidence,
+                                      agencyKey: APIQueueItem.agencyKey(for: row), agencyName: APIQueueItem.agencyName(for: row)) }
         }
     }
 
@@ -78,15 +95,19 @@ struct ModeratorController: RouteCollection {
         guard let row = try await Sighting.find(id, on: req.db) else { throw Abort(.notFound) }
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
             let reviewer = Self.reviewerFingerprint(req)
-            if decision == .approve, requireSecondReview {
-                if let first = row.firstReviewerFingerprint {
-                    guard first != reviewer else { throw Abort(.conflict, reason: "a second reviewer is required") }
-                } else {
+            if decision == .approve {
+                switch Self.secondReviewStep(required: requireSecondReview,
+                                             firstReviewer: row.firstReviewerFingerprint,
+                                             reviewer: reviewer) {
+                case .rejectSameReviewer:
+                    throw Abort(.conflict, reason: "a second reviewer is required")
+                case .recordFirst:
                     row.firstReviewerFingerprint = reviewer
                     try await row.save(on: req.db)
                     await AuditEntry.record("moderation.first_review", target: id.uuidString,
                                             detail: "state=pending; source=api; reviewer=\(reviewer)", on: req.db)
                     return .noContent
+                case .allow: break
                 }
             }
             let previous = row.moderationState
@@ -145,6 +166,7 @@ struct ModeratorController: RouteCollection {
             if body.action == "hide", let sid = request.sightingID, let sighting = try await Sighting.find(sid, on: req.db) {
                 sighting.takenDown = true
                 try await sighting.save(on: req.db)
+                try await Tombstone.record(for: sighting, on: req.db)
             }
             request.status = body.action == "hide" ? "hidden" : "dismissed"
             try await request.save(on: req.db)
@@ -165,6 +187,13 @@ struct ModeratorController: RouteCollection {
         var geohash6: String
         var unitNumber: String?
         var fleetConfidence: Double
+        /// Organisation identity only (never a person or plate); withheld while the identity is flagged for review so a
+        /// marginal read is not shown to moderators as fact. Additive: older clients ignore these fields.
+        var agencyKey: String?
+        var agencyName: String?
+
+        static func agencyKey(for row: Sighting) -> String? { row.agencyNeedsReview == true ? nil : row.agencyKey }
+        static func agencyName(for row: Sighting) -> String? { row.agencyNeedsReview == true ? nil : row.agencyName }
     }
 
     struct APIDecision: Content { var decision: String }
@@ -214,15 +243,19 @@ struct ModeratorController: RouteCollection {
         // Only pending rows are actionable; a double-submit is a no-op.
         if row.moderationState == RedactionGateService.ModerationState.pending.rawValue {
             let reviewer = Self.reviewerFingerprint(req)
-            if decision == .approve, requireSecondReview {
-                if let first = row.firstReviewerFingerprint {
-                    guard first != reviewer else { throw Abort(.conflict, reason: "a second reviewer is required") }
-                } else {
+            if decision == .approve {
+                switch Self.secondReviewStep(required: requireSecondReview,
+                                             firstReviewer: row.firstReviewerFingerprint,
+                                             reviewer: reviewer) {
+                case .rejectSameReviewer:
+                    throw Abort(.conflict, reason: "a second reviewer is required")
+                case .recordFirst:
                     row.firstReviewerFingerprint = reviewer
                     try await row.save(on: req.db)
                     await AuditEntry.record("moderation.first_review", target: id.uuidString,
                                             detail: "state=pending; source=html; reviewer=\(reviewer)", on: req.db)
                     return req.redirect(to: "/moderator", redirectType: .normal)
+                case .allow: break
                 }
             }
             let previous = row.moderationState

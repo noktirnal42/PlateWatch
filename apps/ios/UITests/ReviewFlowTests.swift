@@ -32,17 +32,26 @@ final class ReviewFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Waiting to send · 1"].waitForExistence(timeout: 5))
     }
 
+    @MainActor func testCapturePreviewShowsAllVehicleClasses() {
+        let app = preview(tab: 0)
+        let overlay = app.otherElements["vehicle-detections"]
+        XCTAssertTrue(overlay.waitForExistence(timeout: 5))
+        XCTAssertEqual(overlay.value as? String,
+                       "3 vehicles in view; 1 fleet vehicle. Police SUV, white sedan, blue pickup.")
+        capture("ios-capture-vehicle-classes", app)
+    }
+
     @MainActor func testWatchlistValidationAddMuteAndDelete() {
         let app = preview(tab: 2)
         capture("ios-watchlist", app)
         let field = app.textFields["fleet-plate-input"]
-        field.tap(); field.typeText("demo1")
-        app.keyboards.buttons["done"].tap()
+        field.tap(); dismissKeyboardCoachmark(app); field.typeText("demo1")
+        dismissWatchlistKeyboard(app)
         XCTAssertTrue(app.staticTexts["This plate is already on your watchlist."].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
         field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + "GOV123")
         XCTAssertFalse(app.buttons["Add to watchlist"].isEnabled)
-        app.keyboards.buttons["done"].tap()
+        dismissWatchlistKeyboard(app)
         XCTAssertEqual(field.value as? String, "GOV123")
         app.switches["fleet-attestation"].coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["Add to watchlist"].isEnabled)
@@ -94,11 +103,15 @@ final class ReviewFlowTests: XCTestCase {
         // A coordinate tap exercises the same visible control and is stable
         // across the large-text layout.
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        dismissKeyboardCoachmark(app)
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 3))
         field.typeText("GOV123")
-        app.keyboards.buttons["done"].tap()
+        dismissWatchlistKeyboard(app)
         let attestation = app.switches["fleet-attestation"]
-        if !attestation.isHittable { app.swipeUp() }
+        // Large Dynamic Type can leave the toggle below the first viewport
+        // after keyboard dismissal. Scroll only as far as needed, with a
+        // bounded loop so the test exercises the real accessibility path.
+        for _ in 0..<4 where !attestation.isHittable { app.swipeUp() }
         XCTAssertTrue(attestation.isHittable)
         capture("ios-watchlist-dark-large-text-controls", app)
     }
@@ -116,5 +129,26 @@ final class ReviewFlowTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor private func dismissWatchlistKeyboard(_ app: XCUIApplication) {
+        let toolbarDone = app.buttons["watchlist-keyboard-done"]
+        if toolbarDone.waitForExistence(timeout: 2) && toolbarDone.isHittable {
+            toolbarDone.tap()
+        } else {
+            let keyboardDone = app.keyboards.buttons["done"]
+            XCTAssertTrue(keyboardDone.waitForExistence(timeout: 2))
+            keyboardDone.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+    }
+
+    /// Fresh simulators can show Apple's first-use keyboard coachmark above
+    /// the app. It intercepts the large-text scroll gestures, so dismiss it
+    /// before asserting the actual watchlist controls.
+    @MainActor private func dismissKeyboardCoachmark(_ app: XCUIApplication) {
+        let continueButton = app.buttons["Continue"]
+        if continueButton.waitForExistence(timeout: 1) && continueButton.isHittable {
+            continueButton.tap()
+        }
     }
 }

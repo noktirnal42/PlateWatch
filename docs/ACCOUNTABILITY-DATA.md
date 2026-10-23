@@ -214,3 +214,17 @@ Next implementation sequence for the records workstream:
    separate from sighting locations, timelines and presence alerts.
 6. Validate citation enforcement, false-match handling, moderation and the
    location firewall before enabling publication or claiming automation works.
+
+## RSS / Atom feed reader (Records → Feeds)
+
+Operator-followed feeds (agency release pages, court and news feeds) are read locally by `RSSLibrary` /
+`RSSFetcher` in AccountabilityKit and stored in `records/rss-feeds.json`. Rules: https only; 3 MB and 200-entry
+parse caps; no DTD/external entities; links limited to http(s); entry text is shown as plain text and treated as
+untrusted data; 300 items retained per feed (starred never trimmed). "Save for review" creates a *pending*
+`RecordCandidate` (kind `news`, citation `newsReport` with the entry URL and excerpt hash) — it is never auto-accepted,
+person-linked or published. No feed is bundled, so no third-party endpoint is contacted until the operator adds one.
+
+Groups and refresh: feeds may carry an operator-chosen group; an optional timer (15 min–4 h, off by default) refreshes
+all feeds sequentially. "Suggested…" lists six feeds that were fetched and parsed on 2026-10-18; they are never followed
+automatically. Publisher attribution is shown with every entry and the original link is always offered.
+

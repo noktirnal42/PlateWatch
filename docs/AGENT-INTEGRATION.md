@@ -17,7 +17,7 @@ flowchart LR
   Commands --> Navigation
 ```
 
-MCP exposes 14 tools: status/launch, feed list/detail, explicit star/block settings, approved-feed Open in Live, console navigation, queued-review metadata and stored evidence crop, cited records search, pending-only CSV import, fleet FOIA draft/tracker, and record/roster source catalogues. One resource describes capabilities. Pagination caps results at 200 rows. Provider or imported strings are data, not instructions.
+MCP exposes 18 tools: status/launch, feed list/detail, explicit star/block settings, approved-feed Open in Live, console navigation, queued-review metadata and stored evidence crop, cited records search, pending-only CSV import, fleet FOIA draft/tracker, record/roster source catalogues, and the Records > Feeds RSS reader (`platewatch_rss_list`, `_refresh`, `_search`, `_save_for_review`: refresh contacts only feeds the operator already follows over https, and save-for-review creates a pending cited news candidate only; adding or removing subscriptions stays a human action in the Hub). One resource describes capabilities. Pagination caps results at 200 rows. Provider or imported strings are data, not instructions.
 
 No arbitrary shell, selector, external fetch, credential export, paid PACER search, terms approval, record acceptance, publication, moderation, biometric matching or person-location tool exists. Evidence returns only an existing intact local vehicle crop up to 40 KB (possibly including incidental background content), not a raw frame. Status is scheduling/model state, not proof of camera freshness or recognition accuracy.
 

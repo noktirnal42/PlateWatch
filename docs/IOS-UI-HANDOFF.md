@@ -92,11 +92,17 @@ A screenshot audit does not replace a full spoken VoiceOver pass.
    build the moderator publication tool and prove the receipt→public-feed loop (WS5).
 2. Handheld live-camera tests in portrait/landscape, daylight/dusk/motion, ten-minute
    thermal run and actual VoiceOver use (WS1). iPhone Mirroring cannot do this.
-3. Remote withdrawal/removal flow and alert history are **not implemented**.
+3. Withdrawal and alert history (2026-10-18): the receipt screen has "Withdraw this submission" (CloudKit deletes the creator-owned
+   submission record; the reference server records a takedown request for moderators) and the Watchlist has a local, bounded
+   "Alert history". Verified only in the simulator preview and by PlateSync unit tests — **no live CloudKit/REST withdrawal has been
+   run**, receipts delivered before 2026-10-18 carry no withdrawal handle and cannot be withdrawn from the device, and a record a
+   moderator already published can only be removed by a moderator (the app says so). Previously: not implemented.
    Received-submission receipts and bounded local crop history are now retained;
    they do not constitute a public archive or retract a backend record.
 4. Runtime-configurable mirror settings are still missing. Simulator development
    can set `PLATEWATCH_MIRROR_URL`; device backend configuration is owned by WS5.
+   **2026-10-19:** About → Backend now saves a destination (Automatic / Self-hosted server) and an https (or localhost http) server address via
+   `PlateSync.SyncSettings`; it applies on next launch. Unit-tested in PlateSync; not yet exercised on a signed device or against a live remote server.
 5. Recognition improvements and the open model-release PR remain WS3. No accuracy
    claim was remeasured by this visual pass, and no weights were committed.
 6. Physical watch push/haptics, CarPlay entitlement, signed release packaging,
@@ -110,3 +116,9 @@ The watchlist duplicate-validation UI test asserted a message while the keyboard
 obscure it. It now dismisses the keyboard and waits for the same duplicate warning,
 without changing validation or weakening the assertion. The targeted add/mute/delete
 flow passed on the local iOS 27 iPhone 18 Pro simulator. Full CI remains a separate check.
+
+## Photo-import hang on device — 2026-10-19
+The owner's first test (a Debug build on the iPhone 16 Pro Max) never finished analysing a test photo and the phone got hot; no crash log was produced (device Jetsam logs show PlateWatch at ~440–680 MB, not killed). The Release build finished the same kind of photo in "a few seconds" (owner report). Debug builds of the Swift pipeline are not representative for on-device timing — test with Release. Added regardless: a 120 s limit on photo analysis ("Analysis timed out") and an 8 s limit on the Apple Intelligence markings parse (falls back to the deterministic parse).
+
+## Phosphor HUD theme on iPhone and Apple Watch — 2026-10-21
+The Hub's phosphor look (docs/TRAFFICVIEW-LESSONS-2026-10-21.md) now covers the phone and watch. **iPhone:** `PWStyle.fleet/fleetText` resolve to phosphor green (default) or amber (About → Appearance → Phosphor), with an Appearance toggle (Dark default / System); `PWTheme` sets tint, dark scheme and hidden list backgrounds at the app root (and re-ids on change); new `PWCornerBrackets`, `PWPanel`, `PWLabel`, `PWBackdrop` helpers; section eyebrows are monospaced overlines; Increase Contrast gets solid borders and drops the grid. **Watch:** green/amber accent (the phone relays its choice over WatchConnectivity as `phosphor`), black background, monospaced section headers. Verified: iOS and watchOS simulator builds; iPhone simulator screenshots of Sightings, Explore and About in dark/green. **Not verified:** amber on device, the watch UI on a real or simulated watch screen, light mode ("System"), Increase Contrast, VoiceOver after the changes. The list backdrop grid is not visible under `NavigationStack` lists (the stack paints black); only the tint, mono labels and dark scheme show. The preview-mode banner is a solid phosphor bar (status-bar text on it is hard to read; preview only).

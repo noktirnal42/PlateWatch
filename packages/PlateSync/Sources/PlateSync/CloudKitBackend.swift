@@ -17,6 +17,21 @@ import PlateKit
 /// Requires the CloudKit capability + container.
 public struct CloudKitBackend: SyncBackend {
 
+    /// A creator-owned submission reconstructed for an explicit operator
+    /// handoff to the reference moderation queue. This type is intentionally
+    /// not exposed through the normal sync protocol.
+    public struct OwnedSubmission: Sendable {
+        public let dto: SightingSubmissionDTO
+        public let idempotencyKey: String
+        public let receivedAt: Date
+
+        public init(dto: SightingSubmissionDTO, idempotencyKey: String, receivedAt: Date) {
+            self.dto = dto
+            self.idempotencyKey = idempotencyKey
+            self.receivedAt = receivedAt
+        }
+    }
+
     public let container: CKContainer
 
     public init(containerIdentifier: String = "iCloud.org.platewatch.platewatch") {
@@ -43,6 +58,32 @@ public struct CloudKitBackend: SyncBackend {
                            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
+    /// CloudKit submission records use a stable `sighting-<idempotency key>`
+    /// name. Idempotency keys are content-derived and may contain hyphens, so
+    /// remove only the known prefix; splitting on every hyphen would silently
+    /// change the public ID used to reconcile receipts and deltas.
+    static func idempotencyKey(fromRecordName name: String) -> String {
+        if name.hasPrefix("submission-") {
+            // New creator-owned records are scoped by a one-way device hash so
+            // equal content from two accounts cannot collide in the public DB.
+            // The content key remains the suffix and therefore stays stable
+            // for local retries on the same device.
+            let parts = name.split(separator: "-", maxSplits: 2, omittingEmptySubsequences: true)
+            if parts.count == 3 { return String(parts[2]) }
+        }
+        return name.hasPrefix("sighting-") ? String(name.dropFirst("sighting-".count)) : name
+    }
+
+    /// Creator-owned CloudKit records need an owner scope even in the public
+    /// database. CloudKit creator ACLs control reads, but record IDs are still
+    /// global; without this prefix two accounts submitting the same content
+    /// hash would race on one record.
+    static func submissionRecordName(deviceIDHash: String, idempotencyKey: String) -> String {
+        let scope = SHA256.hash(data: Data(deviceIDHash.utf8)).prefix(8)
+            .map { String(format: "%02x", $0) }.joined()
+        return "submission-\(scope)-\(idempotencyKey)"
+    }
+
     // MARK: - Schema mapping (mirrors docs/DATA-MODEL.md)
 
     enum RecordType {
@@ -65,12 +106,97 @@ public struct CloudKitBackend: SyncBackend {
         return operatorConfirmed && sighting.fleetConfidence >= 0.8 && hasMarkings
     }
 
+    /// Builds the moderator-only public record without carrying creator-only
+    /// identity or review fields across the publication boundary. The caller
+    /// must still save this record with a moderator credential; app clients
+    /// never have a CloudKit create grant for `Sighting`.
+    public static func publishedRecord(from submission: OwnedSubmission) -> CKRecord? {
+        let dto = submission.dto
+        guard dto.userConfirmed != false,
+              dto.fleetConfidence >= 0.8,
+              dto.markings?.agencyText != nil || dto.markings?.unitNumber != nil else { return nil }
+        let record = CKRecord(recordType: RecordType.sighting,
+                              recordID: CKRecord.ID(recordName: "sighting-\(submission.idempotencyKey)"))
+        record["capturedAt"] = dto.capturedAt as NSDate
+        record["geohash6"] = dto.geohash6
+        record["fleetConfidence"] = dto.fleetConfidence as NSNumber
+        record["vehicleClass"] = dto.vehicle.vehicleClass
+        record["unitNumber"] = dto.markings?.unitNumber
+        record["agencyKey"] = dto.identity?.agency?.agencyKey
+        record["agencyName"] = dto.identity?.agency?.name ?? dto.markings?.agencyText
+        record["moderationState"] = Sighting.ModerationState.fleetConfirmed.rawValue
+        if mayUploadPlate(dto) {
+            record["plateText"] = dto.plate?.text
+        }
+        return record
+    }
+
+    /// Publishes one already-reviewed creator submission through the public
+    /// CloudKit boundary. This operation is deliberately separate from
+    /// `submit`: ordinary clients can create only `SightingSubmission`, while
+    /// CloudKit's record ACL must grant `Sighting` writes only to the
+    /// moderator account/tool. A caller without that role receives a clear
+    /// permission error and the private submission is left untouched.
+    @discardableResult
+    public func publish(_ submission: OwnedSubmission) async throws -> SubmissionReceipt {
+        guard let record = Self.publishedRecord(from: submission) else {
+            throw SyncError.serverRejected(reason: "submission is not confirmed fleet evidence")
+        }
+        do {
+            let saved = try await publicDB.save(record)
+            return SubmissionReceipt(
+                sightingID: Self.uuid(fromRecordName: submission.idempotencyKey),
+                moderationState: .fleetConfirmed,
+                serverReceivedAt: saved.modificationDate ?? Date(),
+                idempotencyKey: submission.idempotencyKey,
+                operatorConfirmed: true)
+        } catch let error as CKError {
+            switch error.code {
+            case .permissionFailure, .notAuthenticated:
+                throw SyncError.serverRejected(reason: "CloudKit moderator permission is required to publish Sighting records")
+            case .quotaExceeded, .requestRateLimited:
+                throw SyncError.quotaExceeded
+            case .serverRecordChanged:
+                // A retry after an accepted write is idempotent by record name.
+                return SubmissionReceipt(
+                    sightingID: Self.uuid(fromRecordName: submission.idempotencyKey),
+                    moderationState: .fleetConfirmed,
+                    serverReceivedAt: Date(),
+                    idempotencyKey: submission.idempotencyKey,
+                    operatorConfirmed: true)
+            default:
+                throw SyncError.serverRejected(reason: error.localizedDescription)
+            }
+        }
+    }
+
     // MARK: - SyncBackend
+
+    public func withdrawalHandle(for sighting: SightingSubmissionDTO, idempotencyKey: String) -> String? {
+        Self.submissionRecordName(deviceIDHash: sighting.deviceIDHash, idempotencyKey: idempotencyKey)
+    }
+
+    /// Deletes the creator-owned `SightingSubmission` (the schema grants the creator WRITE). A published `Sighting` record
+    /// is owned by the moderator's account and cannot be removed from here, so the outcome flags that it may remain.
+    public func withdraw(handle: String?, sightingID: UUID, moderationState: Sighting.ModerationState) async throws -> WithdrawalOutcome {
+        guard let handle, !handle.isEmpty else { throw SyncError.unsupported }
+        do {
+            _ = try await publicDB.deleteRecord(withID: CKRecord.ID(recordName: handle))
+        } catch let error as CKError where error.code == .unknownItem {
+            // Already gone: the goal state.
+        } catch let error as CKError where error.code == .notAuthenticated {
+            throw SyncError.notAuthenticated
+        } catch let error as CKError where [.networkUnavailable, .networkFailure].contains(error.code) {
+            throw SyncError.offline
+        }
+        return WithdrawalOutcome(kind: .recordDeleted, publicRecordMayRemain: moderationState == .fleetConfirmed)
+    }
 
     public func submit(_ sighting: SightingSubmissionDTO,
                        idempotencyKey: String) async throws -> SubmissionReceipt {
         // Default zone: the public database supports no custom zones.
-        let recordID = CKRecord.ID(recordName: "sighting-\(idempotencyKey)")
+        let recordID = CKRecord.ID(recordName: Self.submissionRecordName(
+            deviceIDHash: sighting.deviceIDHash, idempotencyKey: idempotencyKey))
         // Same stable derivation pullSightings uses, so the receipt ID
         // matches the record even on idempotent replays.
         let stableID = Self.uuid(fromRecordName: idempotencyKey)
@@ -114,6 +240,94 @@ public struct CloudKitBackend: SyncBackend {
             default: throw SyncError.serverRejected(reason: error.localizedDescription)
             }
         }
+    }
+
+    /// Reconciles creator-readable submissions into a local receipt ledger.
+    /// The returned values deliberately contain acknowledgement metadata only;
+    /// callers must not persist the queried plate or submission fields.
+    public func recoverOwnedSubmissionReceipts() async throws -> [SubmissionReceipt] {
+        let query = CKQuery(recordType: RecordType.submission, predicate: NSPredicate(value: true))
+        let desiredKeys = ["moderationState", "userConfirmed"]
+        var receipts: [SubmissionReceipt] = []
+        var page = try await publicDB.records(matching: query, inZoneWith: nil,
+                                               desiredKeys: desiredKeys, resultsLimit: 200)
+        while true {
+            receipts.append(contentsOf: page.0.compactMap { _, result in
+                guard case .success(let record) = result else { return nil }
+                let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
+                return SubmissionReceipt(
+                    sightingID: Self.uuid(fromRecordName: key),
+                    moderationState: Sighting.ModerationState(rawValue: record["moderationState"] as? String ?? "pending") ?? .pending,
+                    serverReceivedAt: record.modificationDate ?? record.creationDate ?? Date(),
+                    idempotencyKey: key,
+                    operatorConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue)
+            })
+            guard let cursor = page.1 else { break }
+            page = try await publicDB.records(continuingMatchFrom: cursor,
+                                              desiredKeys: desiredKeys, resultsLimit: 200)
+        }
+        return receipts
+    }
+
+    /// Reconstructs only the wire fields needed to hand creator-owned rows to
+    /// the reference server. No crop or exact location exists in CloudKit.
+    /// RESTBackend reapplies its redaction gate before persistence.
+    public func recoverOwnedSubmissions() async throws -> [OwnedSubmission] {
+        let query = CKQuery(recordType: RecordType.submission, predicate: NSPredicate(value: true))
+        let desiredKeys = ["capturedAt", "geohash6", "deviceIDHash", "fleetConfidence",
+                           "plateText", "plateRegion", "unitNumber", "vehicleClass",
+                           "agencyKey", "agencyName", "agencyNeedsReview", "moderationState", "userConfirmed"]
+        var submissions: [OwnedSubmission] = []
+        var page = try await publicDB.records(matching: query, inZoneWith: nil,
+                                               desiredKeys: desiredKeys, resultsLimit: 200)
+        while true {
+            submissions.append(contentsOf: page.0.compactMap { _, result in
+                guard case .success(let record) = result else { return nil }
+                return Self.ownedSubmission(from: record)
+            })
+            guard let cursor = page.1 else { break }
+            page = try await publicDB.records(continuingMatchFrom: cursor,
+                                              desiredKeys: desiredKeys, resultsLimit: 200)
+        }
+        return submissions
+    }
+
+    /// Pure record-to-wire conversion kept separate so the privacy boundary is
+    /// testable without a live CloudKit account.
+    static func ownedSubmission(from record: CKRecord) -> OwnedSubmission? {
+        guard let capturedAt = record["capturedAt"] as? Date else { return nil }
+        let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
+        let confidence = (record["fleetConfidence"] as? NSNumber)?.doubleValue ?? 0
+        let vehicleClass = record["vehicleClass"] as? String ?? "vehicle"
+        let dto = SightingSubmissionDTO(
+            capturedAt: capturedAt,
+            geohash6: record["geohash6"] as? String ?? "",
+            deviceIDHash: record["deviceIDHash"] as? String ?? "cloudkit-owner",
+            fleetConfidence: confidence,
+            plate: (record["plateText"] as? String).map {
+                PlateDTO(text: $0, issuingRegion: record["plateRegion"] as? String,
+                         confidence: confidence)
+            },
+            vehicle: VehicleObservationDTO(vehicleClass: vehicleClass,
+                                           classConfidence: confidence),
+            markings: ((record["agencyName"] as? String) != nil || (record["unitNumber"] as? String) != nil)
+                ? FleetMarkingsDTO(agencyText: record["agencyName"] as? String,
+                                   unitNumber: record["unitNumber"] as? String)
+                : nil,
+            userConfirmed: (record["userConfirmed"] as? NSNumber)?.boolValue,
+            identity: ownedIdentity(from: record))
+        return OwnedSubmission(dto: dto, idempotencyKey: key,
+                               receivedAt: record.modificationDate ?? record.creationDate ?? Date())
+    }
+
+    /// The organisation identity the device uploaded (agency key/name and whether it needed review), so moderators see
+    /// the agency. Carries no plate and no person. A record without a review flag is treated as needing review.
+    static func ownedIdentity(from record: CKRecord) -> VehicleIdentity? {
+        guard let key = record["agencyKey"] as? String, !key.isEmpty else { return nil }
+        let needsReview = (record["agencyNeedsReview"] as? NSNumber)?.boolValue ?? true
+        let agency = AgencyIdentity(name: record["agencyName"] as? String ?? key, service: nil, vehicleClass: .unknown,
+                                    agencyKey: key, confidence: 0, isInferred: false, needsReview: needsReview)
+        return VehicleIdentity(agency: agency)
     }
 
     /// CKQueryOperation.Cursor only round-trips through keyed archiving;
@@ -160,8 +374,8 @@ public struct CloudKitBackend: SyncBackend {
         for (_, result) in results {
             guard case .success(let record) = result,
                   let capturedAt = record["capturedAt"] as? Date else { continue }
-            let tail = record.recordID.recordName.components(separatedBy: "-").last ?? ""
-            let stableID = Self.uuid(fromRecordName: tail)
+            let key = Self.idempotencyKey(fromRecordName: record.recordID.recordName)
+            let stableID = Self.uuid(fromRecordName: key)
             items.append(PublicSightingDTO(
                 id: stableID,
                 capturedAt: capturedAt,

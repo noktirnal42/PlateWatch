@@ -73,3 +73,37 @@ final class AZ511CamerasTests: XCTestCase {
         }
     }
 }
+
+/// Published AZ511 / UDOT sample shape (IBI v2): snapshot URL nested under Views.
+final class IBI511SchemaTests: XCTestCase {
+    private let az = """
+    [{"Id":2056,"Source":"AZDOT","Roadway":"SR-95","Direction":"Unknown","Latitude":35.172449,"Longitude":-114.566108,
+      "Location":"SR-95 @SR68 Laughlin Rd","SortOrder":0,
+      "Views":[{"Id":960,"Url":"https://az511.com/map/Cctv/960","Status":"Enabled","Description":"SR-95 NB 249.80 @SR68 Laughlin Rd"},
+               {"Id":961,"Url":"https://az511.com/map/Cctv/961","Status":"Disabled","Description":"off"}]}]
+    """
+    func testArizonaNestedViewsImportOnlyEnabledViewsAndNeverConfirm() throws {
+        let r = try AZ511Cameras.sources(fromJSON: Data(az.utf8), key: "fixture-key")
+        XCTAssertEqual(r.sources.count, 1)
+        XCTAssertEqual(r.sources[0].state, "AZ")
+        XCTAssertEqual(r.sources[0].url.absoluteString, "https://az511.com/map/Cctv/960")
+        XCTAssertFalse(r.sources[0].mayBeAnalysed)
+        XCTAssertEqual(r.sources[0].terms.attribution, "Arizona 511 / ADOT")
+        XCTAssertFalse(String(decoding: try FeedCatalogue(sources: r.sources).encoded(), as: UTF8.self).contains("fixture-key"))
+    }
+
+    func testUtahSampleShape() throws {
+        let json = """
+        [{"Id":15157,"Source":"ADX","SourceId":"79854","Roadway":"River Rd","Direction":"North","Latitude":37.09616,
+          "Longitude":-113.55726,"Location":"River Rd @ 700 S","SortOrder":0,
+          "Views":[{"Id":15160,"Url":"https://www.udottraffic.utah.gov/map/Cctv/15160","Status":"Enabled","Description":""}]}]
+        """
+        let r = try UDOTCameras.sources(fromJSON: Data(json.utf8), key: "fixture-key")
+        XCTAssertEqual(r.sources.count, 1)
+        XCTAssertEqual(r.sources[0].state, "UT")
+        XCTAssertEqual(r.sources[0].citation.url, UDOTCameras.endpoint)
+        XCTAssertEqual(r.sources[0].name, "River Rd · Snapshot")
+        XCTAssertFalse(r.sources[0].mayBeAnalysed)
+        XCTAssertThrowsError(try UDOTCameras.sources(fromJSON: Data(json.utf8), key: " "))
+    }
+}

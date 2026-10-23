@@ -1,9 +1,31 @@
+import AppKit
 import PlateSync
 import SwiftData
 import SwiftUI
 
+/// The Hub owns a single feed scheduler and one local snapshot bridge per Mac.
+/// Launching the app twice otherwise creates two runners against the same
+/// catalogue/store, which can starve NV511 hosts and make the Live controls
+/// appear hung. Keep the oldest process and close a newer duplicate.
+final class HubApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let peers = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != currentPID }
+        guard let existing = peers.min(by: { $0.launchDate ?? .distantPast < $1.launchDate ?? .distantPast }) else { return }
+
+        // Keep the oldest instance so an ordinary relaunch does not interrupt
+        // its scheduler. The new duplicate exits before it creates a store or
+        // starts the snapshot/HLS services.
+        existing.activate(options: [.activateIgnoringOtherApps])
+        DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+    }
+}
+
 @main
 struct PlateWatchHubApp: App {
+    @NSApplicationDelegateAdaptor(HubApplicationDelegate.self) private var applicationDelegate
     let modelContainer: ModelContainer
     /// Owned here so ingest (folder watch + snapshot server) starts at launch, not when the
     /// menu-bar popover is first opened.
@@ -32,24 +54,24 @@ struct PlateWatchHubApp: App {
         Window("PlateWatch Hub", id: "console") {
             ConsoleView(hub: hub)
                 .modelContainer(modelContainer)
-                .onAppear { hub.attach(context: modelContainer.mainContext) }
+                .onAppear { hub.attach(context: modelContainer.mainContext); RecordsWorkspace.shared.startAutoRefresh() }
         }
         .defaultSize(width: 1180, height: 740)
         .commands { HubWindowCommands() }
 
         MenuBarExtra("PlateWatch Hub", systemImage: "antenna.radiowaves.left.and.right") {
-            HubStatusView(hub: hub)
+            HubStatusView(hub: hub).hubChrome()
         }
         .menuBarExtraStyle(.window)
         .modelContainer(modelContainer)
 
         Window("PlateWatch Hub Help", id: "hub-help") {
-            HubHelpView()
+            HubHelpView().hubChrome()
         }.defaultSize(width: 660, height: 650)
 
         // Feed terms review window
         Window("Feed terms", id: "feeds-review") {
-            FeedsReviewView(hub: hub)
+            FeedsReviewView(hub: hub).hubChrome()
         }
     }
 }
@@ -88,6 +110,20 @@ struct HubStatusView: View {
             row("Outbox", "\(hub.pendingCount) pending")
             row("Snapshot server", hub.snapshotServerStatus)
             FeedStatusRow(runner: hub.feedRunner)
+            if hub.confirmedNV511Count > 0 {
+                HStack {
+                    Label("NV511", systemImage: "road.lanes")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(hub.confirmedNV511Count.formatted()) confirmed")
+                        .font(.caption)
+                    Button("Watch all") { hub.watchAllNV511() }
+                        .buttonStyle(HUDProminentButtonStyle())
+                        .controlSize(.small)
+                        .help("Restore background analysis for all confirmed Nevada 511 cameras")
+                        .accessibilityLabel("Watch all confirmed Nevada 511 feeds")
+                }
+            }
             HStack {
                 Button("Import Austin cameras") { Task { await hub.importAustinCameras() } }
                 Button("Reveal feeds.json") { hub.revealFeedsFile() }

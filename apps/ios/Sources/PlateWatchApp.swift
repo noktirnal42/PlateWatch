@@ -34,24 +34,24 @@ struct PlateWatchApp: App {
     var body: some Scene {
         WindowGroup {
             TabView(selection: $selectedTab) {
-                CaptureView()
+                CaptureView().background(PWBackdrop())
                     .tabItem { Label("Capture", systemImage: "camera.viewfinder") }
                     .tag(0)
-                SightingsListView()
+                SightingsListView().background(PWBackdrop())
                     .tabItem { Label("Sightings", systemImage: "list.bullet.rectangle") }
                     .tag(1)
-                WatchlistView()
+                WatchlistView().background(PWBackdrop())
                     .tabItem { Label("Watchlist", systemImage: "eye") }
                     .tag(2)
-                HeatmapView()
+                HeatmapView().background(PWBackdrop())
                     .tabItem { Label("Explore", systemImage: "map") }
                     .tag(3)
-                SettingsView()
+                SettingsView().background(PWBackdrop())
                     .tabItem { Label("About", systemImage: "info.circle") }
                     .tag(4)
             }
+            .pwTheme()
             .modifier(PreviewAppearance())
-            .tint(PWStyle.fleetText)
             .fullScreenCover(isPresented: Binding(get: { PreviewFixtures.isEnabled ? ProcessInfo.processInfo.arguments.contains("-PWPreviewOnboarding") && !previewOnboarded : !hasOnboarded }, set: { _ in })) {
                 OnboardingView {
                     if PreviewFixtures.isEnabled { previewOnboarded = true }
@@ -73,8 +73,12 @@ struct PlateWatchApp: App {
                 }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active && !PreviewFixtures.isEnabled {
+                guard !PreviewFixtures.isEnabled else { return }
+                if phase == .active {
                     Task { await drainOutbox() }
+                    PresenceCoordinator.shared.start()
+                } else if phase == .background {
+                    PresenceCoordinator.shared.stop()
                 }
             }
         }
@@ -103,15 +107,16 @@ public extension EnvironmentValues {
 /// Keep this app boundary explicit; signed physical-device builds use PlateSync.
 enum AppSyncConfiguration {
     static func makeBackend() -> any SyncBackend {
+        let settings = SyncSettings.load()
         #if targetEnvironment(simulator)
         let configured = ProcessInfo.processInfo.environment["PLATEWATCH_MIRROR_URL"]
-        let fallback = URL(string: "http://127.0.0.1:8083")!
+        let fallback = SyncBackends.mirrorURL(override: nil, stored: settings.mirrorURL)
         let url = configured.flatMap(URL.init(string:)).flatMap {
             ["http", "https"].contains($0.scheme?.lowercased() ?? "") && $0.host != nil ? $0 : nil
         } ?? fallback
         return RESTBackend(baseURL: url)
         #else
-        return SyncBackends.makeDefault()
+        return SyncBackends.makeConfigured(settings: settings)
         #endif
     }
 }

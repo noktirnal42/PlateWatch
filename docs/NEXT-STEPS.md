@@ -1,3 +1,9 @@
+> **October 23, 2026 reconciliation:** this is a historical task brief. Its
+> original plate-detector, model-release, schema-deployment and unverified-target
+> statements are superseded by later work. Start with the
+> [current implementation audit](PROJECT-AUDIT-2026-10-23.md) and
+> [ROADMAP](ROADMAP.md); retain the acceptance procedures below where applicable.
+
 # Next steps — what is NOT done, and how to do it
 
 Written 2026-10-13 for the next agent or contributor. Read first: `AGENTS.md` (guardrails),
@@ -28,7 +34,11 @@ sit in the outbox ("Needs attention" pill) and Explore is empty.
 
 **Known risk to verify:** `CKQuery` on `Sighting` filters `moderationState == fleetConfirmed` and sorts by `capturedAt`; both fields must be QUERYABLE/SORTABLE in the deployed schema (they are in the file). A "field not queryable" error means the schema import didn't apply.
 
-### 1b. Build the moderator publish tool  *(not started)*
+### 1b. Build the moderator publish tool  *(built 2026-10-18; live run needs the owner's server-to-server key)*
+
+**Implemented:** `swift run --package-path server App publish-cloudkit [--dry-run]` (`server/Sources/App/CloudKitPublisher.swift`). It plans from the same rules as `Sighting.publicQuery` (fleet-confirmed, aged past the publish delay, not taken down, inside retention), signs Web Services requests with an ECDSA P-256 key (`CK_CONTAINER`, `CK_KEY_ID`, `CK_PRIVATE_KEY_PATH` PEM, optional `CK_ENVIRONMENT`), creates `Sighting` records named by the row UUID (retries are idempotent), withdraws records whose row was taken down or expired, and writes audit entries. Unit-tested offline (planning, field whitelist, signing); **not yet run against CloudKit.**
+
+**Original brief:**
 Accepted `SightingSubmission` records must be copied to world-readable `Sighting` by something that is
 **not** an app client (no CREATE grant for clients). Options: (a) a small Swift CLI/Vapor job using a
 CloudKit **server-to-server key**, reusing `server/Sources/App/ModeratorController.swift` logic and
@@ -148,8 +158,8 @@ multitasking are enabled; live-camera layout still needs handheld verification.
 Screenshots on the project site use labeled, synthetic, DEBUG-only preview data;
 they are not recognition or backend-delivery proof.
 
-**Open:** durable received-history, image/clip preview, backend withdrawal/removal,
-alert history, runtime mirror settings, field haptics/thermal/orientation, spoken
+**Open:** durable received-history, image/clip preview, backend withdrawal/removal (built 2026-10-18, not yet run live),
+alert history (built 2026-10-18), runtime mirror settings, field haptics/thermal/orientation, spoken
 VoiceOver and smallest-device/RTL audits. Local clear does not delete remote records.
 The icon is generated and installed; layered/tinted platform variants remain optional
 release polish. No external image-generator account authorization is needed.
@@ -164,7 +174,7 @@ release polish. No external image-generator account authorization is needed.
 - **CarPlay:** `CarPlaySceneDelegate` + the `UIApplicationSceneManifest` entry exist but Apple's CarPlay
   entitlement must be requested/granted first; until then gate the scene behind a build setting and verify the
   SwiftUI window scene still works on all OS versions.
-- **CI:** `.github/workflows/ci.yml` should build the iOS app, FoundationModelsParser (has **0 tests**) and
+- **CI:** `.github/workflows/ci.yml` should build the iOS app, FoundationModelsParser (3 package tests; runtime availability remains device-gated) and
   run the eval harness build; verify the matrix matches current targets (QA P2-12). Pages deploys from `main` via
   `.github/workflows/pages.yml`.
 
@@ -298,3 +308,7 @@ moderator-only queue/takedown/audit tools, source-aware analysis and offline hel
 remain unverified; do not mark them complete based on code presence. New host terms and developer credentials are human gates.
 
 The [USA feed audit](research/USA-FEEDS-2026-10-14.md) covers the requested AZ/NV/NM/CO/UT/AL sources, plus Oregon and existing imports.
+
+## 12. Hub feeds — owner requests 2026-10-19
+- **Feed list labels and filters (built 2026-10-19):** each camera shows its nearest Census place ("Spokane, WA", `FeedPlaceIndex`, cited to the Census Gazetteer) plus provider attribution and host, because one provider host (e.g. tripcheck.com) serves cameras in several states. New State, Terms and Media filters and City/Source sort keys. The label is a nearest-place label, not a jurisdiction boundary.
+- **Camera map tab (future, owner idea):** a Hub sidebar tab with every catalogue camera on a map (MapKit, clustering), click a pin to open it in Live (`HubController.openFeedInLive`, same terms/block gates as the list: unconfirmed or blocked cameras show a pin but no Open in Live). Reuses the geohash centre already stored per camera; no new data and nothing leaves the Mac. Not started. **Update 2026-10-21: built** — see [TRAFFICVIEW-LESSONS-2026-10-21.md](TRAFFICVIEW-LESSONS-2026-10-21.md) (Map pane, Show on map, moving video and TrafficView-style boxes in Live).

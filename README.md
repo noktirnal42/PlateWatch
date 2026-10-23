@@ -1,9 +1,8 @@
 # PlateWatch
 
-**Open accountability infrastructure: on-device recognition of publicly funded
-fleets today; the roadmap adds cited public records (rosters, FOIA releases,
-Brady lists, court dockets) that connect vehicles to the officials who run
-them — that records program (M7) has not started.**
+**Open accountability infrastructure for publicly funded fleets: on-device vehicle
+recognition, a macOS camera Hub, and cited records/FOIA workflows. Pre-alpha;
+production publication and field acceptance are still being verified.**
 Turning the tables on mass surveillance: a community platform for identifying,
 cataloging, and sharing information about taxpayer-funded vehicles — police,
 fire, public works, transit, and government fleets — using commodity cameras
@@ -18,10 +17,11 @@ and on-device machine learning.
 
 ## Project status — pre-alpha
 
-**October 14 iOS continuation:** observation details/evidence, coarse-summary sharing,
-paused-retry recovery, validated fleet watchlists with alert controls, local cleanup,
-painted app icon and simulator CloudKit startup-crash fix. See
-[the current UI handoff](docs/IOS-UI-HANDOFF.md) for tests, boundaries and remaining work.
+**Updated October 23, 2026.** The active development branch is
+[`feat/hub-moderation`](https://github.com/noktirnal42/PlateWatch/tree/feat/hub-moderation).
+It contains work beyond the default branch. The [project audit](docs/PROJECT-AUDIT-2026-10-23.md)
+compares the implementation with the specs, identifies stale documentation and
+sets acceptance checks for the remaining work.
 [Project website and screenshot gallery](https://noktirnal42.github.io/PlateWatch/).
 
 <p>
@@ -32,7 +32,8 @@ painted app icon and simulator CloudKit startup-crash fix. See
 
 These are real simulator UI captures with **synthetic local preview data**, not
 recognition, field-camera or backend-publication proof. Sightings is an outbox;
-received rows leave the queue. CloudKit deployment and moderator publishing remain open.
+delivery receipts retain local history. Production schema deployment is recorded; credentialed
+publication and two-account isolation remain acceptance gates.
 
 
 The core loop now works on real photos: **point it at (or import a photo of) a public-service
@@ -44,13 +45,15 @@ on Apple Vision alone. The evaluation document records later configurations sepa
 
 | Area | State |
 |---|---|
-| Core packages (PlateKit, CaptureKit, VehicleML, PlateSync, FleetImporters) | Built and tested in CI; current run linked below (historical counts vary by pass) |
-| iOS app | Builds, installs and runs on simulator and iPhone; photo-import → recognise → record works; live camera path unit-tested but not yet field-verified |
-| Reference server (ingest, moderation, exports, k-anonymous heatmap, agency report) | Builds, 41 tests pass; not deployed publicly |
-| CloudKit public database | Backend + schema written ([cloudkit/](cloudkit/)); **awaiting import/deploy with the developer account** |
-| CoreML models | Optional; not yet published. Apple's built-in vehicle classifier is used instead for now |
-| macOS Hub | Desktop console, snapshot-feed background analysis and Live overlays, favorites/block, state-sorted feed list, **evidence-image thumbnails on recorded vehicles** (intact local ≤40 KB crops, click to enlarge), Records & FOIA (fleet FOIA builder + cited public-records directory), USA imports, moderator audit tools and offline help. HLS feeds run continuous background analysis; RTSP awaits the VLCKit fallback. [Verification and next steps](docs/HUB-HANDOFF-2026-10-14.md). |
-| watchOS / CarPlay | Targets build in CI; physical watch alerts and CarPlay remain unverified (CarPlay needs Apple's entitlement) |
+| Core packages | Domain, capture, inference, sync, importers, records, feeds and agent packages implemented; see the audit for current local verification. |
+| iOS app | Photo capture/import, review, receipts, watchlists, event-clip export and runtime backend settings; handheld motion/low-light/thermal acceptance remains. |
+| Reference server | Ingest, moderation/audit, tombstones, exports, aggregates, agency reports and CloudKit publisher implemented; public hosting and credentialed publication remain. |
+| CloudKit | Production schema deployment and signed account diagnostics recorded; schema presence does not prove two-account isolation or public delivery. |
+| Models | [models-v0.1.0](https://github.com/noktirnal42/PlateWatch/releases/tag/models-v0.1.0) released, including the project-trained plate detector and optional vehicle models. Plate-state classifier remains experimental and unregistered. |
+| macOS Hub | Moving HLS playback with fast tracked overlays, slower fleet analysis and optional bounded body-type estimates; policy-mediated feeds, camera map, favorites/watch/block, intact local evidence, delivery history, moderation, records, FOIA and RSS/Atom intake. Raw RTSP and type-model installation and quality evaluation remain open. [Type-model runtime notes](docs/HUB-LIVE-TYPES-2026-10-23.md). |
+| Agents | Authenticated local MCP, bounded Apple/MLX assistants and explicitly selected NVIDIA public research; PCC and broader task-quality evaluation remain open. |
+| watchOS / CarPlay | Signed watch install/launch recorded; push delivery remains a physical-device gate. CarPlay requires entitlement and device verification. |
+| Beyond Apple | Read-only Android client, reference Python edge agent, web explorer and REST deployment packaging implemented; hosted/device acceptance remains. |
 
 [![CI](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml)
 
@@ -62,9 +65,9 @@ Known problems and what was fixed: [docs/QA-REPORT.md](docs/QA-REPORT.md). Plan:
 | Stage | Tech | Runs where |
 |---|---|---|
 | Vehicle detection | CoreML object detector (YOLO family) | On-device (ANE) |
-| Vehicle attributes (make/model/color/type, light bars, decals) | CoreML classifiers + Vision feature prints | On-device |
+| Vehicle attributes (make/model/color/type, light bars, decals) | Optional vehicle-type classifier, conservative colour heuristic; make/model and re-ID upgrades need evaluation | On-device |
 | Plate detection | CoreML plate detector (converted from open ONNX/YOLO models) | On-device |
-| Plate OCR | Apple Vision `VNRecognizeTextRequest` baseline; specialized plate-OCR CoreML model when downloaded | On-device |
+| Plate OCR | Apple Vision `VNRecognizeTextRequest`; specialized OCR model remains planned | On-device |
 | Fleet/Agency parse (door text → agency, unit number) | Vision text + Apple FoundationModels structured extraction (iOS/macOS 26+) | On-device |
 | Enrichment (unit # → agency roster, public records) | Public-records connectors + moderation queue | Backend |
 | Shared database | **CloudKit public database (free tier)** | All Apple devices |

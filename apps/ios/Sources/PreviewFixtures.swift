@@ -39,6 +39,14 @@ enum PreviewFixtures {
                                                  createdAt: dto.capturedAt, retryCount: index == 0 ? 8 : 0))
             }
         }
+        context.insert(ReceivedSubmissionReceipt(sightingID: UUID(uuidString: "3C8F350E-0000-4000-8000-000000000001")!,
+                                                 receivedAt: date, moderationState: .fleetConfirmed, operatorConfirmed: true,
+                                                 idempotencyKey: "preview-receipt", withdrawalHandle: "submission-preview-receipt"))
+        // Sample alert history so the screen can be checked without a push.
+        var history = AlertHistory()
+        history.record(.init(alertedAt: date, plate: "DEMO1", unitNumber: "104", geohash6: "9q8yyk", sightingID: UUID()))
+        history.record(.init(alertedAt: date.addingTimeInterval(-3600), plate: "DEMO2", unitNumber: "105", geohash6: "9q8yyj", sightingID: UUID()))
+        AlertHistoryStore.save(history)
         context.insert(WatchlistItem(plateText: "DEMO1", notifyEnabled: true))
         context.insert(WatchlistItem(plateText: "DEMO2", notifyEnabled: false))
         try? context.save()
@@ -50,11 +58,11 @@ enum PreviewFixtures {
 struct PreviewAppearance: ViewModifier {
     func body(content: Content) -> some View {
         if PreviewFixtures.isEnabled {
+            // The app's own theme (dark by default) applies unless a preview argument says otherwise.
             if ProcessInfo.processInfo.arguments.contains("-PWPreviewLargeText") {
                 content.dynamicTypeSize(.accessibility3)
-                    .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-PWPreviewDark") ? .dark : nil)
             } else {
-                content.preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-PWPreviewDark") ? .dark : nil)
+                content
             }
         } else {
             content

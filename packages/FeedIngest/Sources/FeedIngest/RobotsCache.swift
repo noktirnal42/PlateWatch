@@ -84,7 +84,7 @@ public actor RobotsCache {
                     catch { return last }
                 }
                 var request = URLRequest(url: URL(string: "\(origin)/robots.txt")!, cachePolicy: .reloadIgnoringLocalCacheData,
-                                         timeoutInterval: 15)
+                                         timeoutInterval: 25)
                 request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
                 do {
                     let (data, response) = try await session.data(for: request)
