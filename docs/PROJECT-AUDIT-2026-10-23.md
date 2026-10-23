@@ -152,6 +152,7 @@ stalled with TrafficView closed. The new health header correctly reported
 late delivery while its analysis age advanced. This exposed a second stale
 success message (`Live video`) above the health header; the follow-up makes
 that line report `Frame delivery delayed` and fades old HLS fallback boxes.
+The follow-up Hub suite passed 66 tests (four opt-in skips), zero failures.
 The app bridge reported 425 completed public-feed frames during the session;
 that aggregate does not prove uninterrupted delivery for the selected camera.
 
