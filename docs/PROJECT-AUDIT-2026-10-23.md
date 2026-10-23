@@ -160,3 +160,32 @@ Public status publication on main: `6ae4a1a`; GitHub Pages deployment
 `40025612846` succeeded and the live website was inspected. Development draft:
 [PR #25](https://github.com/noktirnal42/PlateWatch/pull/25), stacked on the Hub
 repair branch. Its new CI run is queued; no green remote app/UI claim is made.
+
+### WS3 fast-path correction
+
+Source inspection found that `boxesOnly` fell through to full OCR when the
+vehicle detector was absent, failed or returned no objects. Successful fast
+frames also ran the optional heavy type classifier. The path now always
+returns a detector-only frame with a cheap colour cue; it cannot fall through
+to OCR, plate work or the heavy type model. Empty/error/missing-model results
+produce empty overlays, preserving the distinction from full fleet analysis.
+
+The full-pass type classifier previously processed the first eight vehicles
+before checking whether their existing body type would discard its result.
+It now selects sufficiently large (at least 48 pixels on both sides), untyped
+crops before applying a four-crop live/eight-crop still budget. Existing body
+labels and fleet gating are preserved. This fixes known-type/tiny-crop budget
+waste; it is not yet a fair per-track scheduler for repeated unresolved crops.
+
+VehicleML: 52 tests, one existing local-image skip, zero failures. The new
+regression uses a synthetic POLICE UNIT 42 image: full analysis actually reads
+its text, while boxes-only analysis without a detector yields no OCR evidence.
+Further tests cover geometry, no private plate/text evidence on the overlay
+builder, filtering before the cap, live/still limits and tiny/thin crops.
+No new model-quality, live FPS or sustained CPU claim is made by these tests.
+
+A specialized detector label is also stripped of fleet class on the fast path;
+only full analysis can establish that verdict. Additional regressions cover
+that boundary, offscreen crops and the exact 48-pixel inclusion boundary.
+The eval-harness metric tests passed 3/3 and the Hub suite passed 66 tests
+(four opt-in skips), zero failures. No shared DTO or model-weight changes.
