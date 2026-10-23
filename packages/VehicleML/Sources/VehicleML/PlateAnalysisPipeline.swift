@@ -122,15 +122,12 @@ public struct PlateAnalysisPipeline: Sendable {
     public func analyze(_ frame: FramePacketLike,
                         context: AnalysisContext) async throws -> DetectionFrame {
 
-        if context.boxesOnly, context.models["vehicle-detection"] != nil,
-           let detected = try? await CoreMLDetectorStage(task: "vehicle-detection").process(frame, context: context),
-           !detected.observations.isEmpty {
-            var quick = DetectionFrame(timestamp: context.timestamp,
-                                       imageSize: CGSize(width: CVPixelBufferGetWidth(frame.pixelBuffer), height: CVPixelBufferGetHeight(frame.pixelBuffer)),
-                                       vehicles: detected.observations.map {
-                                           CoreMLDetectorStage.observation(label: $0.label, confidence: $0.confidence, box: $0.box)
-                                       })
-            await Self.addTypeAndColor(to: &quick, frame: frame, context: context)
+        if context.boxesOnly {
+            // A missing/failed/empty detector is an empty overlay, never permission
+            // to run the full text pipeline on the high-rate display path.
+            let detected = try? await CoreMLDetectorStage(task: "vehicle-detection").process(frame, context: context)
+            var quick = Self.detectorOverlay(detected?.observations ?? [], frame: frame, context: context)
+            Self.addColor(to: &quick, frame: frame)
             return quick
         }
 
@@ -198,21 +195,47 @@ public struct PlateAnalysisPipeline: Sendable {
 }
 
 extension PlateAnalysisPipeline {
-    /// Display-only attributes: body type from the optional classifier (strongest eight boxes) and a cheap colour cue.
+    static func detectorOverlay(_ detections: [(label: String, confidence: Double, box: NormalizedBox)],
+                                frame: FramePacketLike, context: AnalysisContext) -> DetectionFrame {
+        DetectionFrame(timestamp: context.timestamp,
+                       imageSize: CGSize(width: CVPixelBufferGetWidth(frame.pixelBuffer), height: CVPixelBufferGetHeight(frame.pixelBuffer)),
+                       vehicles: detections.map {
+                           var vehicle = CoreMLDetectorStage.observation(label: $0.label, confidence: $0.confidence, box: $0.box)
+                           // Even a specialized detector label is not a full fleet verdict.
+                           vehicle.vehicleClass = .unknown
+                           return vehicle
+                       })
+    }
+
+    /// Classify only usable, untyped crops. Filtering before the cap prevents
+    /// already-labelled detector boxes from consuming every available slot.
+    static func typeClassificationIndices(_ vehicles: [VehicleObservation], imageSize: CGSize, thorough: Bool) -> [Int] {
+        Array(vehicles.indices.lazy.filter { index in
+            let vehicle = vehicles[index], box = vehicle.boundingBox
+            let visibleWidth = max(0, min(1, box.x + box.width) - max(0, box.x))
+            let visibleHeight = max(0, min(1, box.y + box.height) - max(0, box.y))
+            return vehicle.attributes?.bodyType == nil
+                // Allow only floating-point roundoff at the exact 48-pixel boundary.
+                && visibleWidth * imageSize.width + 1e-9 >= 48
+                && visibleHeight * imageSize.height + 1e-9 >= 48
+        }.prefix(thorough ? 8 : 4))
+    }
+
+    /// Heavy display attributes belong only to full analysis, never high-rate overlays.
     static func addTypeAndColor(to out: inout DetectionFrame, frame: FramePacketLike, context: AnalysisContext) async {
         if context.models["vehicle-type-classification"] != nil {
             let classifier = VehicleTypeClassifierStage()
-            // Keep public-feed/live latency bounded when a wide camera view
-            // contains many vehicles. The detector's strongest eight boxes
-            // are sufficient for the operator overlay; fleet gating remains
-            // unchanged for every box.
-            for index in out.vehicles.indices.prefix(8) {
+            for index in typeClassificationIndices(out.vehicles, imageSize: out.imageSize, thorough: context.thorough) {
                 guard let body = await classifier.classify(frame, box: out.vehicles[index].boundingBox, context: context) else { continue }
                 var attributes = out.vehicles[index].attributes ?? VehicleAttributes()
-                if attributes.bodyType == nil { attributes.bodyType = body }
+                attributes.bodyType = body
                 out.vehicles[index].attributes = attributes
             }
         }
+        addColor(to: &out, frame: frame)
+    }
+
+    static func addColor(to out: inout DetectionFrame, frame: FramePacketLike) {
         for index in out.vehicles.indices where out.vehicles[index].attributes?.color == nil {
             let box = out.vehicles[index].boundingBox
             if let cue = VehicleColorClassifier.classify(frame.pixelBuffer,

@@ -196,7 +196,7 @@ tests must stay green before its status advances.
 - **Docs:** EVALUATION, NEXT-STEPS §3–5, PLATE-DESIGN-DATASET, DECISIONS.
 - **Test:** `swift test --package-path packages/VehicleML` +
   `EvalHarness eval [--models models/cache]`.
-- **Status:** baseline 59 % auto recall / 100 % precision (62-image corpus);
+- **Status:** 2026-10-23 high-rate overlay path now returns detector geometry/colour only, including empty/error/missing-model cases, without OCR or the heavy type model; the full-pass display classifier budgets only usable untyped crops (four live/eight still). 52 VehicleML tests pass with one existing local-image skip. Per-track scheduling and real-clip performance acceptance remain open. Baseline 59 % auto recall / 100 % precision (62-image corpus);
   official-plate reading landed; CoreML plate detector lifts plate reads
   10→15/62 images; vehicle-detector fusion fixed to not erase text-inferred
   fleet class. 2026-10-15: bounded detail detection recovers the owner-reported Arlington
