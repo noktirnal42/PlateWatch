@@ -94,7 +94,7 @@ tests must stay green before its status advances.
 - **Test:** `swift test --package-path packages/FeedIngest` + Hub scheme tests (see handoff).
 - **CSV import:** standard header mapping, agency and citation URL fields added; [export/source research](research/BRADY-CSV-EXPORTS-2026-10-14.md) records verified conversions and next sources.
 - **QA follow-up:** see [HUB-QA-2026-10-14.md](HUB-QA-2026-10-14.md) for post-Claude/GLM render fixes, source links and outstanding visual checks.
-- **Status:** 2026-10-15 Hub repair builds, tests and signed local installation verified; see
+- **Status:** 2026-10-23 audit and Live delivery/analysis freshness repair: 66 Hub tests (four opt-in skips), 171 FeedIngest tests (four skips), zero failures. TrafficView source comparison and remaining acceptance work are in [the project audit](PROJECT-AUDIT-2026-10-23.md). 2026-10-15 Hub repair builds, tests and signed local installation verified; see
   [repair evidence](HUB-REPAIR-2026-10-15.md). Nevada's keyed catalogue now preserves snapshots and HLS
   per view. Real NV511 HLS playback/analysis and all ten existing favorite previews verified.
   HLS decodes on demand for the selected Live camera; ordinary previews use the bounded live decoder.

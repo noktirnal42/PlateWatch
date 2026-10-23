@@ -120,10 +120,13 @@ Open **Create ML**: *Xcode → Open Developer Tool → Create ML* (or the standa
 7. Record the licence in `models/registry.json`: `"Trained in Create ML on Open Images V7 (CC BY 2.0 images)"`
    and ship the attribution file with the model.
 
-**Where the model runs.** The iPhone app and the macOS Hub both load models by registry name through
-`ModelManager`. Today **neither has a released model**: the app runs baseline Vision, and the Hub passes
-`AnalysisContext(models: [:])` (HubController.swift lines 259/341/554). The Mac eval harness is the only place the
-CoreML detectors currently run — which is why it finds plates the phone does not.
+**Where the model runs (reconciled October 23).** Hub and iOS stage cached or
+published detectors through `ModelManager`, with a Vision fallback. The
+`models-v0.1.0` release includes the project-trained plate detector and optional
+vehicle models. The earlier statement that only the eval harness runs CoreML
+is obsolete. Released make/model/re-ID assets still need task-specific
+integration/evaluation; the plate-state baselines below are not registered or
+shipped. See [the current model backlog](PROJECT-AUDIT-2026-10-23.md#model-backlog-train-versus-integrate).
 
 ### 4b. Fleet classifier — *Image Classification* project
 1. Folders `police/ fire/ ems/ transit/ public/ civilian/` from the **training** crawl (not

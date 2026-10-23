@@ -1,3 +1,9 @@
+> **October 23, 2026 reconciliation:** this is a historical task brief. Its
+> original plate-detector, model-release, schema-deployment and unverified-target
+> statements are superseded by later work. Start with the
+> [current implementation audit](PROJECT-AUDIT-2026-10-23.md) and
+> [ROADMAP](ROADMAP.md); retain the acceptance procedures below where applicable.
+
 # Next steps — what is NOT done, and how to do it
 
 Written 2026-10-13 for the next agent or contributor. Read first: `AGENTS.md` (guardrails),

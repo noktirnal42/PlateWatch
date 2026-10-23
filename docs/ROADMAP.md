@@ -2,13 +2,14 @@
 
 Legend: ✅ done · ◐ in progress · ⬜ planned
 
-> **Status as of 2026-10-17:** the packages, server and importers are built and
-> tested; the signed Hub now verifies CloudKit account access and exposes an
-> explicit moderator publication path. The iOS app still needs the handheld
-> field loop and CloudKit publication still needs credentialed production and
-> two-account isolation verification. See
-> [QA-REPORT.md](QA-REPORT.md) for the ranked list of what is blocking, and
-> **M-Alpha** below for the work that comes first.
+> **Status as of 2026-10-23:** moving HLS playback, fast tracked overlays,
+> camera map, records/FOIA/RSS workflows, bounded agents and released detectors
+> are implemented on the active development branch. Plate-state training remains
+> experimental. Production publication, two-account isolation, sustained feed
+> performance and physical field acceptance remain open. See the
+> [implementation audit](PROJECT-AUDIT-2026-10-23.md) for code/spec differences,
+> verification and the ordered continuation. Historical checkboxes below are
+> qualified by those acceptance gates.
 
 ## M-Alpha — Make it work end to end (current focus)
 Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
