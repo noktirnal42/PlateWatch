@@ -63,6 +63,9 @@ targets:
       - Sources/VehicleOverlayLabel.swift
       - Sources/LiveBoxTracker.swift
       - Sources/LiveFeedHealth.swift
+      - Sources/LiveTypeScheduler.swift
+      - Sources/LiveTypeEnricher.swift
+      - Sources/HubVehicleTypeClassifier.swift
       - Sources/FeedRunner.swift
       - Sources/FeedIdentity.swift
       - Sources/HLSPreviewBudget.swift
@@ -79,6 +82,7 @@ targets:
     dependencies:
       - package: FeedIngest
       - package: PlateKit
+      - package: VehicleML
       - package: PlateSync
       - package: AccountabilityKit
 

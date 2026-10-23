@@ -452,6 +452,9 @@ final class HubController: ObservableObject, ReviewHubProviding {
 
     func openFeedInLive(_ source: PublicFeedSource) {
         guard source.kind != .rtsp, source.mayBeAnalysed, !favorites.isBlocked(source.id) else { return }
+        liveFeedReloadToken = UUID()
+        lastLiveThorough = .distantPast
+        liveQuickMillis = nil; liveFullMillis = nil
         liveFeedFrame = nil
         liveTracker.reset()
         liveFeedStatus = "Waiting for a frame…"
@@ -462,7 +465,9 @@ final class HubController: ObservableObject, ReviewHubProviding {
 
     func stopLiveFeed() {
         feedRunner.setLiveVideoSource(nil)
+        liveFeedReloadToken = UUID()
         liveFeed = nil; liveFeedFrame = nil; liveFeedStatus = ""
+        liveQuickMillis = nil; liveFullMillis = nil
         liveTracker.reset()
         syncRunnerWatch()
     }
@@ -475,6 +480,9 @@ final class HubController: ObservableObject, ReviewHubProviding {
         liveFeedFrame = nil
         liveFeedStatus = source.kind == .hls ? "Retrying HLS…" : "Refreshing feed…"
         liveFeedReloadToken = UUID()
+        lastLiveThorough = .distantPast
+        liveQuickMillis = nil; liveFullMillis = nil
+        liveTracker.reset()
         if source.kind == .hls { feedRunner.retryLiveVideoSource(source) }
         syncRunnerWatch()
     }
@@ -750,6 +758,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
     private var lastLiveThorough = Date.distantPast
     private var liveThoroughInFlight = false
     private var liveQuickInFlight = false
+    private let liveTypes = LiveTypeEnricher()
     private static let liveCIContext = CIContext(options: [.cacheIntermediates: false])
 
     /// Detector-only boxes for the stream on screen. Display only: no OCR, no plate work, never scored, never recorded.
@@ -757,12 +766,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
         guard !liveQuickInFlight, !favorites.isBlocked(source.id), activeFeedSources[source.id]?.mayBeAnalysed == true else { return }
         liveQuickInFlight = true
         defer { liveQuickInFlight = false }
+        let epoch = liveFeedReloadToken
         var context = frameContext(contextBox, for: buffer, readPlates: false, publicFeed: true)
         context.boxesOnly = true
         context.thorough = false
         let started = ContinuousClock.now
         guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer), context: context),
-              liveFeed?.id == source.id else { return }
+              liveFeed?.id == source.id, liveFeedReloadToken == epoch else { return }
         liveQuickMillis = Int(started.duration(to: .now) / .milliseconds(1))
         let ci = CIImage(cvPixelBuffer: buffer)
         guard let image = Self.liveCIContext.createCGImage(ci, from: ci.extent) else { return }
@@ -772,6 +782,7 @@ final class HubController: ObservableObject, ReviewHubProviding {
 
     func analyseFeedVideoFrameFully(_ buffer: CVPixelBuffer, from source: PublicFeedSource) async {
         let displaysInLive = liveFeed?.id == source.id
+        let epoch = liveFeedReloadToken
         let backgroundCapacity = max(1, Self.maxFeedAnalyses - 1)
         let capacity = displaysInLive ? Self.maxFeedAnalyses : backgroundCapacity
         guard feedAnalysesInFlight < capacity else {
@@ -783,8 +794,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
         defer { feedAnalysesInFlight -= 1 }
         let tier = source.analysisTier(frameLongSide: max(CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer)))
         let readPlates = source.mayResolveIdentity && Self.platesAllowed(forGeohash6: source.geohash6)
-        guard let frame = try? await pipeline.analyze(.init(pixelBuffer: buffer),
-                                                      context: frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)) else { return }
+        let input = FramePacketLike(pixelBuffer: buffer)
+        var context = frameContext(contextBox, for: buffer, readPlates: readPlates, publicFeed: true)
+        let typeContext = context
+        let classifyLiveTypes = displaysInLive && context.models["vehicle-type-classification"] != nil
+        // Selected Live uses a fair per-track display budget after recording.
+        if displaysInLive { context.models.removeValue(forKey: "vehicle-type-classification") }
+        guard let frame = try? await pipeline.analyze(input, context: context) else { return }
         framesAnalyzed += 1
         feedFramesAnalyzed += 1
         guard !favorites.isBlocked(source.id),
@@ -793,9 +809,20 @@ final class HubController: ObservableObject, ReviewHubProviding {
         let recorded = recordFleetHits(in: frame, tier: tier, geohash6: source.geohash6,
                                        mayResolveIdentity: source.mayResolveIdentity, sourceID: source.id.uuidString,
                                        source: EvidenceCrop.SourceFrame(pixelBuffer: buffer))
-        if liveFeed?.id == source.id,
+        if displaysInLive, liveFeed?.id == source.id, liveFeedReloadToken == epoch,
            let image = CIContext().createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
-            liveFeedFrame = .init(image: image, result: liveResult(frame, hits: recorded.hits, tracked: true), updatedAt: Date())
+            let display: DetectionFrame
+            if classifyLiveTypes {
+                display = await liveTypes.enrich(frame, input: input, context: typeContext,
+                                                scope: epoch, now: ProcessInfo.processInfo.systemUptime)
+            } else { display = frame }
+            guard liveFeed?.id == source.id, liveFeedReloadToken == epoch,
+                  !favorites.isBlocked(source.id), activeFeedSources[source.id]?.mayBeAnalysed == true else { return }
+            let estimates = Set(zip(frame.vehicles, display.vehicles).compactMap { original, shown in
+                original.attributes?.bodyType != shown.attributes?.bodyType ? shown.id : nil
+            })
+            liveFeedFrame = .init(image: image, result: liveResult(display, hits: recorded.hits, tracked: true,
+                                                                 inferredBodyTypes: estimates), updatedAt: Date())
             liveFeedStatus = "Live video · boxes ~10/s, fleet scoring ~1/s"
         }
     }
@@ -1313,11 +1340,13 @@ final class HubController: ObservableObject, ReviewHubProviding {
     /// Follows boxes across the analysed frames of the feed open in Live (stable ids, smoothed labels). Reset whenever Live changes feed.
     private var liveTracker = LiveBoxTracker()
 
-    private func liveResult(_ frame: DetectionFrame, hits: Int, tracked: Bool = false, authoritative: Bool = true) -> LiveFrameResult {
+    private func liveResult(_ frame: DetectionFrame, hits: Int, tracked: Bool = false, authoritative: Bool = true,
+                            inferredBodyTypes: Set<UUID> = []) -> LiveFrameResult {
         let raw = frame.vehicles.map { vehicle -> LiveFrameResult.Box in
             let (confidence, _) = FleetScoring.vehicleGateScore(gate: gate, vehicle: vehicle)
             let isFleet = gate.verdict(fleetConfidence: confidence) == .persistAndSync
-            let label = VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence)
+            let label = VehicleOverlayLabel.text(for: vehicle, fleetConfidence: confidence,
+                                                 bodyTypeEstimated: inferredBodyTypes.contains(vehicle.id))
             return .init(id: vehicle.id, rect: vehicle.boundingBox, label: label, isFleet: isFleet,
                          uncertain: !isFleet && label.hasPrefix("Vehicle"))
         }

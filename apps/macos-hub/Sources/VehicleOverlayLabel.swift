@@ -1,7 +1,7 @@
 import PlateKit
 
 enum VehicleOverlayLabel {
-    static func text(for vehicle: VehicleObservation, fleetConfidence: Double) -> String {
+    static func text(for vehicle: VehicleObservation, fleetConfidence: Double, bodyTypeEstimated: Bool = false) -> String {
         let body = vehicle.attributes?.bodyType.flatMap { value -> String? in
             switch value.lowercased().replacingOccurrences(of: "_", with: " ") {
             case "car", "automobile", "sedan", "coupe", "hatchback": return "Car"
@@ -19,8 +19,10 @@ enum VehicleOverlayLabel {
             guard !cleaned.isEmpty else { return nil }
             return cleaned.prefix(1).uppercased() + cleaned.dropFirst().lowercased()
         }
-        let vehicleLabel = [color, body].compactMap { $0 }.joined(separator: " ")
+        let baseLabel = [color, body].compactMap { $0 }.joined(separator: " ")
+        let vehicleLabel = bodyTypeEstimated ? "\(baseLabel.isEmpty ? "Vehicle" : baseLabel) (estimate)" : baseLabel
         guard vehicle.vehicleClass.isFleet else {
+            if bodyTypeEstimated { return vehicleLabel }
             guard vehicle.classConfidence.isFinite, vehicle.classConfidence > 0 else {
                 return vehicleLabel.isEmpty ? "Vehicle" : vehicleLabel
             }
@@ -42,7 +44,8 @@ enum VehicleOverlayLabel {
         default: fleet = "Fleet"
         }
         let score = fleetConfidence.isFinite ? Int(min(1, max(0, fleetConfidence)) * 100) : 0
-        let fleetLabel = [color, body ?? "Vehicle"].compactMap { $0 }.joined(separator: " ")
+        let baseFleetLabel = [color, body ?? "Vehicle"].compactMap { $0 }.joined(separator: " ")
+        let fleetLabel = bodyTypeEstimated ? "\(baseFleetLabel) (estimate)" : baseFleetLabel
         return [fleetLabel, fleet, "fleet \(score)%"].joined(separator: " · ")
     }
 }

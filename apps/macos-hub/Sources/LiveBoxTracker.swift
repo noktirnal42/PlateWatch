@@ -93,7 +93,14 @@ struct LiveBoxTracker {
                 continue
             }
             let parts = detection.label.components(separatedBy: " · ")
-            tracks[t].votes.append(parts.first ?? detection.label)
+            let currentBase = parts.first ?? detection.label
+            if authoritative, let previous = tracks[t].shown?.label.components(separatedBy: " · ").first,
+               previous.hasSuffix(" (estimate)") != currentBase.hasSuffix(" (estimate)") {
+                // Smoothing must not extend an expired model estimate or attach
+                // the detector's confidence to a previous estimated body type.
+                tracks[t].votes = []
+            }
+            tracks[t].votes.append(currentBase)
             if tracks[t].votes.count > Self.voteWindow { tracks[t].votes.removeFirst(tracks[t].votes.count - Self.voteWindow) }
             let base = Self.winner(tracks[t].votes)
             let label = ([base] + parts.dropFirst()).joined(separator: " · ")
