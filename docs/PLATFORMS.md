@@ -13,6 +13,15 @@ non-Apple client can only consume the server. The conversion work, licences and
 benchmarks belong to WS3 and must be recorded in the registry before any
 platform claims local detection (AGENTS.md guardrail 5).
 
+## ONNX toolchain (2026-10-29)
+
+`scripts/.venv` has `onnx`, `onnxruntime` and `ultralytics`. `scripts/export_onnx.py`
+exports the YOLOv8n plate and vehicle detectors to `models/cache/onnx/`
+(gitignored). Both load and run under onnxruntime on the Mac CPU provider; the
+vehicle detector found 9 boxes above 0.25 on one corpus image. That is runtime
+evidence only: no accuracy benchmark, no registry entry and no release asset
+exist yet, so no platform may claim local detection from it.
+
 ## Status
 
 | Platform | State | What exists | Verified how |
