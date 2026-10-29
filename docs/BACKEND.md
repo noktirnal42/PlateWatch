@@ -87,6 +87,20 @@ single host. "Librarians, not gatekeepers."
 
 ### Reference server operations (`server/`)
 
+The repository includes a reproducible multi-stage image for the REST mirror:
+
+```bash
+docker compose -f server/docker-compose.yml up --build
+```
+
+The Compose stack starts Postgres first, waits for its health check, then builds
+and starts the reference server on `0.0.0.0:8083`. For a single-container
+deployment, `docker build -t platewatch-server ./server` and `docker run --rm
+--env DATABASE_URL='postgres://…?sslmode=require' -p 8083:8083 platewatch-server`
+remain supported. Put the image
+behind a TLS reverse proxy and provide a managed Postgres URL before exposing
+it publicly; building the image does not deploy it or enable CloudKit mirroring.
+
 | Setting | Default | Purpose |
 |---|---|---|
 | `PORT` | `8083` | HTTP port (8080 is often taken by a local Apache) |
@@ -135,3 +149,14 @@ It is not scheduled under `swift test`.
 | CKAsset storage | ≤ 40 KB plate crop per sighting (thumbnails), no raw video |
 | CloudKit transfer | Exponential backoff + delta pulls; watchlists are query subscriptions, not polling |
 | Mirror VM | Fits Oracle Always Free ARM shape; Postgres ≤ 20 GB |
+
+## Publication safeguards and the CloudKit publisher (2026-10-18)
+
+- **Tombstones** (`tombstones` table): when a moderator upholds a takedown (`hide`), SHA-256 digests of the observation's
+  idempotency key and crop hash are stored (never a plate, location or device id). A later submission with either key
+  is refused with `410 Gone`, even after the row was purged by retention.
+- **Sensitive vehicles:** `RedactionGateService.isSensitive` (SWAT/tactical/protective, school bus, ambulance/EMS and similar
+  whole words in markings, class or note) forces `pending` with no exact geo, so a moderator decides.
+- **CloudKit publisher:** `publish-cloudkit` command (see NEXT-STEPS §1b). Rows gain `published_at`; retention does not delete
+  a row until its CloudKit record has been withdrawn.
+

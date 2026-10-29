@@ -6,7 +6,7 @@ struct ModerationPane: View {
     @StateObject private var store = ModerationStore()
     @State private var selection: ModerationClient.Item.ID?
     @State private var takedownSelection: ModerationClient.Takedown.ID?
-    @State private var tab = 0
+    @AppStorage("hubModeration_tab") private var tab = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -24,6 +24,11 @@ struct ModerationPane: View {
                 Text("Moderation server: \(server.absoluteString) · REST, separate from CloudKit")
                     .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
+            Label("Server health: \(store.serverStatus)",
+                  systemImage: store.serverStatus == "Reachable" ? "checkmark.circle.fill" : "network.slash")
+                .font(.caption)
+                .foregroundStyle(store.serverStatus == "Reachable" ? Color.green : Color.orange)
+                .accessibilityElement(children: .combine)
             if let error = activeError { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
             if let actionError = store.actionError { Text(actionError).foregroundStyle(.red) }
             if tab == 2 { auditView } else if tab == 1 { takedownView } else { sightingsView }
@@ -82,6 +87,11 @@ struct ModerationPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(store.queueError == nil ? "\(store.items.count) pending" : "Queue unavailable · \(store.items.count) last loaded").font(.headline)
             Table(store.items, selection: $selection) {
+                TableColumn("Agency") { item in
+                    Text(item.agencyName ?? item.agencyKey ?? "Unresolved").lineLimit(2)
+                        .foregroundStyle(item.agencyKey == nil && item.agencyName == nil ? Color.secondary : Color.primary)
+                        .help(item.agencyKey ?? "No agency, or the identity is flagged for review")
+                }
                 TableColumn("Unit") { Text($0.unitNumber ?? "—") }
                 TableColumn("Area (geohash6)") { Text($0.geohash6).monospaced() }
                 TableColumn("Fleet confidence") { Text($0.fleetConfidence, format: .percent.precision(.fractionLength(0))) }

@@ -39,18 +39,40 @@ public final class ReceivedSubmissionReceipt {
     /// A short idempotency prefix is useful when comparing logs without
     /// retaining the full submission or any plate/media material.
     public var idempotencyPrefix: String?
+    /// Backend-specific handle for withdrawing this submission later (see `SyncBackend.withdrawalHandle`). Receipts
+    /// written before withdrawal support have none and cannot be withdrawn from this device.
+    public var withdrawalHandle: String?
+    /// Set when the user withdrew the submission; `withdrawalKindRaw` is a `WithdrawalOutcome.Kind` raw value.
+    public var withdrawnAt: Date?
+    public var withdrawalKindRaw: String?
+    public var withdrawalPublicRecordMayRemain: Bool?
 
     public init(sightingID: UUID, receivedAt: Date,
                 moderationState: Sighting.ModerationState,
                 operatorConfirmed: Bool = false,
                 idempotencyKey: String? = nil,
-                cropJPEGData: Data? = nil) {
+                cropJPEGData: Data? = nil,
+                withdrawalHandle: String? = nil) {
         self.sightingID = sightingID
         self.receivedAt = receivedAt
         self.moderationStateRaw = moderationState.rawValue
         self.operatorConfirmed = operatorConfirmed
         self.idempotencyPrefix = idempotencyKey.map { String($0.prefix(12)) }
         self.cropJPEGData = cropJPEGData.flatMap { $0.count <= 40 * 1024 ? $0 : nil }
+        self.withdrawalHandle = withdrawalHandle
+    }
+
+    public var isWithdrawn: Bool { withdrawnAt != nil }
+    public var withdrawalOutcome: WithdrawalOutcome? {
+        guard withdrawnAt != nil, let raw = withdrawalKindRaw, let kind = WithdrawalOutcome.Kind(rawValue: raw) else { return nil }
+        return WithdrawalOutcome(kind: kind, publicRecordMayRemain: withdrawalPublicRecordMayRemain ?? false)
+    }
+
+    /// Whether this device can still try to withdraw (backend handle known, or the REST takedown path needs none).
+    public func markWithdrawn(_ outcome: WithdrawalOutcome, at date: Date = Date()) {
+        withdrawnAt = date
+        withdrawalKindRaw = outcome.kind.rawValue
+        withdrawalPublicRecordMayRemain = outcome.publicRecordMayRemain
     }
 
     public var moderationState: Sighting.ModerationState {
@@ -112,7 +134,8 @@ public actor OutboxDrainer {
                         moderationState: receipt.moderationState,
                         operatorConfirmed: receipt.operatorConfirmed ?? false,
                         idempotencyKey: receipt.idempotencyKey ?? row.idempotencyKey,
-                        cropJPEGData: dto.cropJPEGBase64.flatMap { Data(base64Encoded: $0) }))
+                        cropJPEGData: dto.cropJPEGBase64.flatMap { Data(base64Encoded: $0) },
+                        withdrawalHandle: backend.withdrawalHandle(for: dto, idempotencyKey: row.idempotencyKey)))
                 }
                 context.delete(row)
             } catch SyncError.quotaExceeded {

@@ -1,12 +1,13 @@
 import AVFoundation
 import FeedIngest
+import PlateSync
 import SwiftUI
 
 /// The Hub's main window: one place to see and control every source, the analysis models, review, and
 /// (for enrolled moderators only) moderation.
 struct ConsoleView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
+        case dashboard = "Dashboard", live = "Live", feeds = "Public feeds", map = "Map", cameras = "Cameras & ingest", review = "Review", models = "Models", records = "Records & FOIA"
         case moderation = "Moderation", settings = "Settings", assistant = "Assistant", research = "NVIDIA research"
         var id: String { rawValue }
         var icon: String {
@@ -15,6 +16,7 @@ struct ConsoleView: View {
             case .live: return "eye"
             case .review: return "tray.full"
             case .feeds: return "antenna.radiowaves.left.and.right"
+            case .map: return "map"
             case .cameras: return "video"
             case .models: return "cpu"
             case .records: return "doc.text.magnifyingglass"
@@ -32,6 +34,7 @@ struct ConsoleView: View {
     @State private var feedsVisited = false
     @State private var visited: Set<Pane> = []
     @AppStorage("hubAppearance") private var appearance = "system"
+    @AppStorage(Phosphor.defaultsKey) private var phosphor = Phosphor.green.rawValue
     /// Whether a moderator credential exists. Read off the main thread: a Keychain access prompt must never freeze the window.
     @State private var moderator = false
 
@@ -39,18 +42,31 @@ struct ConsoleView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(panes, selection: $selection) { pane in
-                Label(pane.rawValue, systemImage: pane.icon).tag(pane)
+            VStack(alignment: .leading, spacing: 2) {
+                HUDLabel("PlateWatch Hub", color: HubTheme.accent).padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
+                ForEach(panes) { pane in
+                    Button { selection = pane } label: { HUDSidebarRow(title: pane.rawValue, icon: pane.icon, selected: selection == pane) }
+                        .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 200)
+            .padding(.horizontal, 6).padding(.vertical, 8)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(HubTheme.inset.opacity(0.9))
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } detail: {
             ZStack {
                 // Mount on first visit, then retain browser controls and native scroll on navigation.
                 if selection == .feeds || feedsVisited {
-                    FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live })
+                    FeedsPane(hub: hub, isActive: selection == .feeds, onOpenLive: { selection = .live }, onShowOnMap: { selection = .map })
                         .opacity(selection == .feeds ? 1 : 0)
                         .allowsHitTesting(selection == .feeds)
                         .accessibilityHidden(selection != .feeds).disabled(selection != .feeds)
+                }
+                if selection == .map || visited.contains(.map) {
+                    MapPane(hub: hub, isActive: selection == .map, onOpenLive: { selection = .live })
+                        .opacity(selection == .map ? 1 : 0).allowsHitTesting(selection == .map)
+                        .accessibilityHidden(selection != .map).disabled(selection != .map)
                 }
                 if selection == .live || visited.contains(.live) {
                     LivePane(hub: hub, isActive: selection == .live)
@@ -78,7 +94,7 @@ struct ConsoleView: View {
                 case .dashboard: DashboardPane(hub: hub)
                 case .live: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .review: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
-                case .feeds: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+                case .feeds, .map: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 case .cameras: CamerasPane(hub: hub)
                 case .models: ModelsPane(hub: hub)
                 case .records: Color.clear.allowsHitTesting(false).accessibilityHidden(true)
@@ -89,7 +105,9 @@ struct ConsoleView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(HUDBackdrop())
         }
+        .hubChrome(backdrop: false)
         .onChange(of: selection) { _, pane in
             if pane == .feeds { feedsVisited = true }
             if let pane { visited.insert(pane) }
@@ -119,14 +137,27 @@ private struct Stat: View {
     let title: String, value: String
     var icon = "chart.bar"
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon).font(.title3).foregroundStyle(.tint)
-            Text(value).font(.system(.title, design: .rounded).monospacedDigit()).bold()
-            Text(title).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                HUDLabel(title)
+                Spacer(minLength: 4)
+                Image(systemName: icon).font(.system(size: 12)).foregroundStyle(HubTheme.accent.opacity(0.85))
+            }
+            Text(value).font(HubTheme.mono(30, .semibold)).monospacedDigit().foregroundStyle(HubTheme.textPrimary)
+                .shadow(color: HubTheme.accent.opacity(0.35), radius: 8)
+                .minimumScaleFactor(0.6).lineLimit(1)
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
+        .padding(14).frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+        .hudPanel()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
+        .accessibilityIdentifier("dashboard-stat-\(identifierSlug)")
+    }
+
+    private var identifierSlug: String {
+        title.lowercased().replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 }
 
@@ -136,9 +167,10 @@ struct DashboardPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Your fleet observatory").font(.largeTitle.bold())
+                    HUDLabel("PlateWatch Hub · situation overview", color: HubTheme.accent)
+                    Text("Your fleet observatory").font(.system(size: 30, weight: .semibold, design: .rounded))
                     Text("On-device analysis · fleet-only evidence · counts for this session")
-                        .foregroundStyle(.secondary)
+                        .font(HubTheme.mono(11)).foregroundStyle(HubTheme.textSecondary)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
                     Stat(title: "Frames analysed", value: "\(hub.framesAnalyzed)", icon: "viewfinder")
@@ -146,18 +178,32 @@ struct DashboardPane: View {
                     Stat(title: "Fleet hits today", value: "\(hub.fleetHitsToday)", icon: "car.side")
                     Stat(title: "Skipped while busy", value: "\(hub.framesDropped)", icon: "pause.circle")
                     Stat(title: "Outbox pending", value: "\(hub.pendingCount)", icon: "tray.and.arrow.up")
+                    Stat(title: "Active PlateWatch sessions", value: hub.presenceStatus == "Live" ? "\(hub.presenceAggregate.activeSessions)" : (hub.presenceEnabled ? "—" : "Off"), icon: "person.2.wave.2")
+                    Stat(title: "Live processors", value: hub.presenceStatus == "Live" ? "\(hub.presenceAggregate.activeProcessors)" : (hub.presenceEnabled ? "—" : "Off"), icon: "wave.3.right")
                 }
                 HStack(spacing: 12) {
                     dashboardAction("Browse cameras", icon: "antenna.radiowaves.left.and.right", pane: "feeds")
                     dashboardAction("Review evidence", icon: "tray.full", pane: "review")
                     dashboardAction("Records & FOIA", icon: "doc.text.magnifyingglass", pane: "records")
-                }.buttonStyle(.bordered)
-                GroupBox("Sources") {
+                }.buttonStyle(HUDButtonStyle())
+                hudSection("Sources") {
                     VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Analysis", value: hub.modelStatus)
                         LabeledContent("Delivery", value: hub.syncStatus)
                         LabeledContent("Snapshot server", value: hub.snapshotServerStatus)
                         LabeledContent("RTSP streams", value: hub.rtspServerStatus)
+                        LabeledContent("Live demand") {
+                            if hub.presenceEnabled {
+                                if hub.presenceStatus == "Live" {
+                                    Text("\(hub.presenceAggregate.activeSessions) sessions · \(hub.presenceAggregate.activeProcessors) processors · refreshed ")
+                                    + Text(hub.presenceAggregate.generatedAt, style: .time)
+                                } else {
+                                    Text(hub.presenceStatus)
+                                }
+                            } else {
+                                Text("Opt-in in Settings")
+                            }
+                        }
                         LabeledContent("Ingest folder") {
                             Text(hub.ingestFolder.lastPathComponent).help(hub.ingestFolder.path)
                                 .textSelection(.enabled)
@@ -165,7 +211,7 @@ struct DashboardPane: View {
                         FeedStatusRow(runner: hub.feedRunner)
                     }.padding(4)
                 }
-                GroupBox("Plate reading") {
+                hudSection("Plate reading") {
                     Text(hub.platesAllowed
                          ? "Enabled for this Hub's location."
                          : "Off: no home location set (or none we can place in the US). Set the home location in Settings.")
@@ -173,6 +219,16 @@ struct DashboardPane: View {
                 }
             }.padding(24)
         }
+    }
+
+    /// A titled console panel in place of `GroupBox` (same content, HUD styling).
+    private func hudSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HUDLabel(title)
+            content().font(.callout)
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .hudPanel()
     }
 
     private func dashboardAction(_ title: String, icon: String, pane: String) -> some View {
@@ -251,15 +307,33 @@ struct SettingsPane: View {
     @AppStorage("hubGeohash6") private var geohash = ""
     @AppStorage("hubSnapshotPort") private var port = 8088
     @AppStorage("hubAppearance") private var appearance = "system"
+    @AppStorage(Phosphor.defaultsKey) private var phosphor = Phosphor.green.rawValue
     @State private var server = ""
     @State private var token = ""
     @State private var note = ""
+    @State private var presenceServer = SyncSettings.load().mirrorURL ?? ""
+    @State private var presenceServerMessage = ""
+
+    private func savePresenceServer() {
+        do {
+            var settings = SyncSettings.load()
+            settings.mirrorURL = presenceServer
+            try settings.save()
+            presenceServerMessage = "Saved. Presence uses \(SyncBackends.mirrorURL().absoluteString)."
+            hub.refreshPresence()
+        } catch { presenceServerMessage = error.localizedDescription }
+    }
 
     var body: some View {
         Form {
             BackendConnectionSection()
             NIMSettingsSection()
             Section("Appearance") {
+                Picker("Phosphor", selection: $phosphor) {
+                    ForEach(Phosphor.allCases) { Text($0.title).tag($0.rawValue) }
+                }.pickerStyle(.segmented)
+                Text("The console's glow colour: classic green, or amber. Fleet hits on video use the other colour so they stand out.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Color scheme", selection: $appearance) {
                     Text("System").tag("system")
                     Text("Light").tag("light")
@@ -279,6 +353,16 @@ struct SettingsPane: View {
             Section("Hub") {
                 TextField("Preferred snapshot port", value: $port, format: .number.grouping(.never))
                     .onSubmit { Task { await hub.restartSnapshotServer(port: UInt16(clamping: port)) } }
+                Toggle("Share live processing counts", isOn: Binding(get: { hub.presenceEnabled }, set: { hub.presenceEnabled = $0 }))
+                    .onChange(of: hub.presenceEnabled) { _, _ in hub.refreshPresence() }
+                Text("Shares only an anonymous, expiring count of active processing consoles and selected feeds. No plates, frames, names, or history leave this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("Presence status") { Text(hub.presenceStatus).foregroundStyle(hub.presenceStatus == "Live" ? Color.green : Color.secondary) }
+                Text("Signed builds share counts through iCloud (CloudKit public database: anonymous leases that expire after two minutes). Unsigned development builds use the server address below instead.")
+                    .font(.caption).foregroundStyle(.secondary)
+                TextField("Development server (https://…, blank = this Mac, port 8083)", text: $presenceServer)
+                    .onSubmit { savePresenceServer() }
+                if !presenceServerMessage.isEmpty { Text(presenceServerMessage).font(.caption).foregroundStyle(.secondary) }
             }
             if ModeratorAccess.enrollmentOffered || moderator {
                 Section("Moderator") {

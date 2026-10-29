@@ -1,0 +1,73 @@
+name: Cross-platform
+
+# Verifies the non-Apple parts of PlateWatch on hosted runners, because the
+# maintainer owns Apple hardware only. See docs/PLATFORMS.md. Jobs marked
+# experimental report but never block a merge until they have run green.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'tools/**'
+      - 'integrations/**'
+      - 'apps/android/**'
+      - 'server/**'
+      - '.github/workflows/cross-platform.yml'
+  workflow_dispatch:
+
+jobs:
+  python-tools:
+    name: Python tools (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Edge agent tests
+        run: python -I -m unittest discover -s tools/python-edge-agent -p "test_*.py" -v
+      - name: MCP bridge tests
+        run: |
+          python -m pip install -r integrations/mcp/requirements.txt
+          python -m unittest discover -s integrations/mcp/tests -v
+
+  android-build:
+    name: Android client (experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Assemble debug APK
+        working-directory: apps/android
+        run: gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: platewatch-android-debug
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+
+  server-linux:
+    name: Reference server on Linux (experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build --package-path server
+      - name: Test
+        run: swift test --package-path server

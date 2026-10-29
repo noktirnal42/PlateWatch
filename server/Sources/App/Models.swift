@@ -75,6 +75,8 @@ final class Sighting: Model, @unchecked Sendable {
     @Field(key: "moderation_state") var moderationState: String
     /// Set by the first reviewer when second-person approval is enabled.
     @OptionalField(key: "first_reviewer_fingerprint") var firstReviewerFingerprint: String?
+    /// Set once the moderator publish tool has created this row's world-readable CloudKit `Sighting` record.
+    @OptionalField(key: "published_at") var publishedAt: Date?
     /// Set when a takedown request was upheld: never published again.
     @Field(key: "taken_down") var takenDown: Bool
     /// Cross-reference identity (docs/DATA-MODEL.md): which agency the vehicle belongs to, where its

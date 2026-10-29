@@ -10,10 +10,11 @@ import WatchConnectivity
 /// `CKQuerySubscription` on fleet-confirmed sightings; the system wakes this
 /// extension with a background push, we pull the newest delta, match it
 /// against the mirrored watchlist plates, and fire a haptic for hits.
-final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDelegate, WCSessionDelegate {
+final class WatchExtensionDelegate: NSObject, ObservableObject, WKApplicationDelegate, WCSessionDelegate {
 
     /// Recent watchlist hits, surfaced by the root view.
     @Published private(set) var hits: [WatchHit] = []
+    @Published private(set) var unreadCount = 0
 
     struct WatchHit: Identifiable, Equatable {
         let id = UUID()
@@ -24,6 +25,7 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
     private let backend = SyncBackends.makeDefault()
 
     func applicationDidFinishLaunching() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         session.delegate = self
@@ -31,6 +33,8 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
         if let plates = session.applicationContext["watchlistPlates"] as? [String] {
             UserDefaults.standard.set(plates, forKey: "watchlistPlates")
         }
+        WatchPresenceCoordinator.ingest(session.receivedApplicationContext)
+        if let phosphor = session.receivedApplicationContext["phosphor"] as? String { UserDefaults.standard.set(phosphor, forKey: "pwPhosphor") }
     }
 
     nonisolated func session(_ session: WCSession,
@@ -38,13 +42,15 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
                              error: Error?) {}
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        WatchPresenceCoordinator.ingest(applicationContext)
+        if let phosphor = applicationContext["phosphor"] as? String { UserDefaults.standard.set(phosphor, forKey: "pwPhosphor") }
         guard let plates = applicationContext["watchlistPlates"] as? [String] else { return }
         UserDefaults.standard.set(plates, forKey: "watchlistPlates")
     }
 
     /// watchOS silent-push entry point.
     func didReceiveRemoteNotification(_ remoteNotification: [AnyHashable: Any],
-                                      withCompletion completionHandler: @escaping (WKBackgroundFetchResult) -> Void) {
+                                      fetchCompletionHandler completionHandler: @escaping (WKBackgroundFetchResult) -> Void) {
         Task {
             await evaluateNewest()
             completionHandler(self.hits.isEmpty ? .noData : .newData)
@@ -62,6 +68,18 @@ final class WatchExtensionDelegate: NSObject, ObservableObject, WKExtensionDeleg
             guard !hits.contains(where: { $0.title == title }) else { continue }
             hits.insert(WatchHit(title: title, when: sighting.capturedAt), at: 0)
             if hits.count > 20 { hits.removeLast(hits.count - 20) }
+            unreadCount += 1
+            WatchComplicationStore.update(fleetHits: hits.count)
+            let current = WatchComplicationStore.liveStats()
+            WatchComplicationStore.updateLiveStats(
+                activeSessions: current.activeSessions ?? 0,
+                activeProcessors: current.activeProcessors ?? 0,
+                framesAnalyzed: current.framesAnalyzed,
+                publicFeedFrames: current.publicFeedFrames,
+                fleetHitsToday: max(current.fleetHitsToday ?? 0, hits.count),
+                skippedWhileBusy: current.skippedWhileBusy,
+                outboxPending: current.outboxPending,
+                updatedAt: current.updatedAt ?? .now)
             hapticAlert(title: title)
         }
     }

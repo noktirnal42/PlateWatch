@@ -1,0 +1,46 @@
+name: Platform test report
+description: Report what happened when you ran PlateWatch on Windows, Linux, Android, Wear OS or other hardware
+title: "[platform] "
+labels: ["platform-test"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing on hardware the maintainer does not own. Use synthetic or local data only. Never post credentials, API keys, camera frames with plates or private locations.
+  - type: dropdown
+    id: target
+    attributes:
+      label: What did you test?
+      options:
+        - Reference server (Docker or native)
+        - Python edge agent
+        - Android client
+        - Wear OS
+        - Web explorer
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and version
+      placeholder: "Windows 11 24H2, Ubuntu 24.04 arm64, Android 15 on Pixel 8"
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      placeholder: "Raspberry Pi 5 8 GB with HQ camera"
+  - type: input
+    id: build
+    attributes:
+      label: Build or commit
+      placeholder: "release asset name or git SHA"
+  - type: textarea
+    id: result
+    attributes:
+      label: What worked and what broke
+      description: Steps, expected result, actual result, logs trimmed of secrets.
+    validations:
+      required: true

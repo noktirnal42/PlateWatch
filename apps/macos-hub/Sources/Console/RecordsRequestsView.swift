@@ -52,7 +52,7 @@ struct RecordsRequestsView: View {
     }
 
     @ViewBuilder private func detail(_ r: FOIARequest) -> some View {
-        let rule = FOIADeadlines.rule(forState: r.stateCode)
+        let rule = FOIADeadlines.rule(forState: r.stateCode, asOf: r.submittedOn ?? Date())
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(r.agencyName).font(.title3.bold())

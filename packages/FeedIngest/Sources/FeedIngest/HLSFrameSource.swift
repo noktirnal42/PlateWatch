@@ -26,7 +26,9 @@ public final class HLSFrameSource {
     private let retryDelay: TimeInterval
     private let requestPolicy: HLSPolicyRelay.Policy?
     private var relay: HLSPolicyRelay?
-    private let player = AVPlayer()
+    /// The decoder's player, exposed so the Live view can render the same stream the analysis taps (one decode, two uses).
+    /// The player plays through the policy relay; showing it adds no network request of its own.
+    public let player = AVPlayer()
     private var output: AVPlayerItemVideoOutput?
     private var task: Task<Void, Never>?
     private var generation = UUID()
@@ -76,6 +78,7 @@ public final class HLSFrameSource {
             }
             // Only one sink delivery can be in flight. Awaiting it provides backpressure.
             // Reacquire self each iteration so an idle decoder is not retained by its own task.
+            var failures = 0   // consecutive failed connections; any delivered frame resets it
             while !Task.isCancelled {
                 guard let self, self.isRunning, self.generation == run else { return }
                 self.openItem(url: playbackURL)
@@ -87,6 +90,7 @@ public final class HLSFrameSource {
                         if itemTime.isValid, output.hasNewPixelBuffer(forItemTime: itemTime),
                            let buffer = output.copyPixelBuffer(forItemTime: itemTime, itemTimeForDisplay: nil) {
                             lastFrame = .now
+                            failures = 0
                             self.setState(.streaming)
                             await Self.deliver(Frame(buffer: buffer), source: self.source, sink: sink)
                             guard !Task.isCancelled, self.generation == run else { return }
@@ -104,9 +108,18 @@ public final class HLSFrameSource {
                 self.player.replaceCurrentItem(with: nil)
                 self.output = nil
                 self.setState(.retrying(reason))
-                do { try await Task.sleep(for: .seconds(self.retryDelay)) } catch { return }
+                // Exponential backoff (base, 2x, 4x … capped at 60 s) so a retired route is not hit every few seconds
+                // forever. Pattern from TrafficView's decoder (2, 4, 8, 16, 32, 60 s).
+                failures += 1
+                let wait = Self.backoff(base: self.retryDelay, failures: failures)
+                do { try await Task.sleep(for: .seconds(wait)) } catch { return }
             }
         }
+    }
+
+    /// `base`, doubling per consecutive failure, never above 60 s.
+    nonisolated static func backoff(base: TimeInterval, failures: Int) -> TimeInterval {
+        min(60, base * pow(2, Double(max(0, failures - 1))))
     }
 
     public func stop() {

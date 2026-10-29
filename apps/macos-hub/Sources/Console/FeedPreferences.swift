@@ -47,12 +47,17 @@ final class FeedFavorites: ObservableObject {
 @MainActor
 final class FeedBrowserState: ObservableObject {
     enum Tab: String, CaseIterable, Identifiable { case all = "All feeds", favorites = "Favorites", blocked = "Blocked"; var id: String { rawValue } }
-    enum SortKey: String, CaseIterable, Identifiable { case state = "State", name = "Name", host = "Host", location = "Location", status = "Status"; var id: String { rawValue } }
+    enum SortKey: String, CaseIterable, Identifiable { case state = "State", city = "City", name = "Name", host = "Source host", provider = "Source", location = "Area code", status = "Status"; var id: String { rawValue } }
+    enum TermsFilter: String, CaseIterable, Identifiable { case any = "Any terms state", analysable = "Terms confirmed", awaiting = "Awaiting terms review"; var id: String { rawValue } }
+    enum KindFilter: String, CaseIterable, Identifiable { case any = "Any media", snapshot = "Snapshots", stream = "Live streams"; var id: String { rawValue } }
 
     @Published var tab: Tab = .all
     @Published var query: String = ""
     @Published var hostFilter: String = ""
     @Published var statusFilter: FeedRunner.StatusKind?
+    @Published var stateFilter: String = ""
+    @Published var termsFilter: TermsFilter = .any
+    @Published var kindFilter: KindFilter = .any
     @Published var sortKey: SortKey = .state
     @Published var ascending: Bool = true
     @Published var favoritesFirst: Bool = false
@@ -69,17 +74,23 @@ final class FeedBrowserState: ObservableObject {
         if let sortRaw = defaults.string(forKey: "hubFeedBrowserSortKey"), let s = SortKey(rawValue: sortRaw) { sortKey = s }
         ascending = (defaults.object(forKey: "hubFeedBrowserAscending") as? Bool) ?? true
         favoritesFirst = defaults.bool(forKey: "hubFeedBrowserFavoritesFirst")
+        stateFilter = defaults.string(forKey: "hubFeedBrowserStateFilter") ?? ""
+        termsFilter = defaults.string(forKey: "hubFeedBrowserTermsFilter").flatMap(TermsFilter.init(rawValue:)) ?? .any
+        kindFilter = defaults.string(forKey: "hubFeedBrowserKindFilter").flatMap(KindFilter.init(rawValue:)) ?? .any
         if let selectedStrings = defaults.stringArray(forKey: "hubFeedBrowserSelected") {
             selected = Set(selectedStrings.compactMap(UUID.init(uuidString:)))
         }
     }
 
-    var hasActiveFilters: Bool { !query.isEmpty || !hostFilter.isEmpty || statusFilter != nil }
+    var hasActiveFilters: Bool { !query.isEmpty || !hostFilter.isEmpty || statusFilter != nil || !stateFilter.isEmpty || termsFilter != .any || kindFilter != .any }
 
     func clearFilters() {
         query = ""
         hostFilter = ""
         statusFilter = nil
+        stateFilter = ""
+        termsFilter = .any
+        kindFilter = .any
         save()
     }
 
@@ -91,6 +102,9 @@ final class FeedBrowserState: ObservableObject {
         query = ""
         hostFilter = ""
         statusFilter = nil
+        stateFilter = ""
+        termsFilter = .any
+        kindFilter = .any
         selected.removeAll()
         save()
     }
@@ -103,6 +117,9 @@ final class FeedBrowserState: ObservableObject {
         defaults.set(sortKey.rawValue, forKey: "hubFeedBrowserSortKey")
         defaults.set(ascending, forKey: "hubFeedBrowserAscending")
         defaults.set(favoritesFirst, forKey: "hubFeedBrowserFavoritesFirst")
+        defaults.set(stateFilter, forKey: "hubFeedBrowserStateFilter")
+        defaults.set(termsFilter.rawValue, forKey: "hubFeedBrowserTermsFilter")
+        defaults.set(kindFilter.rawValue, forKey: "hubFeedBrowserKindFilter")
         defaults.set(selected.map(\.uuidString).sorted(), forKey: "hubFeedBrowserSelected")
     }
 }

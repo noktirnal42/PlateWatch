@@ -120,10 +120,13 @@ Open **Create ML**: *Xcode → Open Developer Tool → Create ML* (or the standa
 7. Record the licence in `models/registry.json`: `"Trained in Create ML on Open Images V7 (CC BY 2.0 images)"`
    and ship the attribution file with the model.
 
-**Where the model runs.** The iPhone app and the macOS Hub both load models by registry name through
-`ModelManager`. Today **neither has a released model**: the app runs baseline Vision, and the Hub passes
-`AnalysisContext(models: [:])` (HubController.swift lines 259/341/554). The Mac eval harness is the only place the
-CoreML detectors currently run — which is why it finds plates the phone does not.
+**Where the model runs (reconciled October 23).** Hub and iOS stage cached or
+published detectors through `ModelManager`, with a Vision fallback. The
+`models-v0.1.0` release includes the project-trained plate detector and optional
+vehicle models. The earlier statement that only the eval harness runs CoreML
+is obsolete. Released make/model/re-ID assets still need task-specific
+integration/evaluation; the plate-state baselines below are not registered or
+shipped. See [the current model backlog](PROJECT-AUDIT-2026-10-23.md#model-backlog-train-versus-integrate).
 
 ### 4b. Fleet classifier — *Image Classification* project
 1. Folders `police/ fire/ ems/ transit/ public/ civilian/` from the **training** crawl (not
@@ -182,6 +185,24 @@ wire in** until it has rear-view police data. It is not needed for the two refer
 
 ### Plate-state classifier — see the dataset notes in §4c; results appended below when trained.
 
+**2026-10-18:** not started — no crawl has been run and the licence gate in PLATE-DESIGN-DATASET.md is still open. Blockers and the acceptance test (Minneapolis crop, MN/NC/KS confusion) are written up under "Known gap" in IDENTITY.md.
+
+**2026-10-19 — first baseline (headless Create ML; NOT usable, not registered, no weights committed).**
+Crawl (owner-approved 2026-10-19, `scripts/crawl_commons_plates.py --cap 100 --allow-sa`): 1,997 Commons files, licences CC BY-SA 4.0 ×869, PD ×357, CC BY-SA 3.0 ×212, CC0 ×202, CC BY 2.0 ×129, CC BY-SA 2.0 ×92, CC BY 4.0 ×82, CC BY 3.0 ×34; manifest with source page/licence/author in `training/plate-state/manifest.json` (gitignored). Dataset: `make_classifier_dataset.py --min 12 --val 0.15 --test 0.15 --group-by-author` → 43 classes, 1,350 / 278 / 263 train/validation/test (8 states dropped for < 12 images: ID, IA, KY, ME, NH, ND, WV, WY). `scripts/check_training_overlap.py`: 1,891 images vs 62 eval titles / 64 names / 59 hashes — no overlap. Training: `scripts/train_plate_state.swift` (Scene Print v2 + logistic regressor, 25 iterations, augmentation crop/blur/exposure/noise/rotation).
+**Result: train 98.4 %, validation 61.4 %, test 62.7 %** (263 images, 43 states) — heavy overfit. Per-class test recall: **Minnesota 0 %**, Arizona 0 %, Nebraska 0 %, Massachusetts 36 %; Montana, New Mexico, Oklahoma, Rhode Island, Tennessee, Vermont 100 % (tiny test sets). This does **not** meet the spec's bar (≥ 95 % precision at ≥ 60 % coverage on real photos) and the Minneapolis acceptance crop was not run. Why it is weak, and what to change next: the Commons files are whole photos/scans, not plate crops (the classifier must be fed detector crops); many classes have < 40 training images; only flat scans and Commons photos, no real-photo set (spec P3) yet. Next: crop with the plate detector, add the 8 missing states, add augmentation by downscaling, then re-measure on real photos.
+
+**2026-10-19 — second baseline, plate-detector crops (`scripts/plate_crops.swift`, `plate-detector-createml-v1`).** 731 images cropped to the detected plate, 977 plate-shaped scans kept whole, 255 skipped (no plate found and not plate-shaped). After the ≥ 12-images-per-class filter only **32 states** remain (19 dropped, mostly < 10 crops each) → 854 / 169 / 155 train/validation/test. **Train 98.9 %, validation 71.6 %, test 68.8 %** (155 images, 32 states); Minnesota recall 50 % and Massachusetts 75 % but on 2–8 test images each, so neither is a measurement. Different class set from the first run, so the numbers are not directly comparable. Conclusion: cropping helps the design signal, but **data volume is the binding constraint** (many states have < 10 clean plate crops). Still below the acceptance bar; still no real-photo set; nothing registered or wired in. Next: widen the crawl beyond one subcategory level and per-state "plate" search terms, add DMV/state-agency specimen images only after the owner decides (open question 3), and build the local fleet-confirmation set (P3).
+
+**2026-10-19 — widening the Commons crawl does not help.** `crawl_commons_plates.py` gained `--depth N` (breadth-first subcategories). A re-run with `--depth 3 --cap 250` found the **same candidate counts per state** as depth 1 (e.g. Alabama 44, Alaska 13, Arizona 20, Arkansas 35), so the Commons "License plates of …" tree is exhausted at about **2,000 usable files** under the licence/year/title filters; I stopped it. More data has to come from somewhere else, and each option needs an owner decision: (a) Openverse/Flickr CC photo search (most in-situ photos show private plate numbers — spec open question 2), (b) state DMV specimen images (question 3), (c) the local fleet-confirmation set (question 5), (d) synthetic compositing from the clean scans (no decision needed, helps only with variation). Not started.
+
+**2026-10-19 — third baseline: synthetic degradation of the train split only (option d; `scripts/augment_plate_dataset.py`, 5 copies per image: 40–160 px down-scale, perspective, blur, brightness/contrast/colour cast, noise, JPEG 30–90).** Same 32 states and the same untouched validation/test as the crop run. 5,448 train images (1,178 originals + 4,270 synthetic). **Train 86.6 %, validation 71.0 %, test 72.1 %** (155 images) — overfitting drops (98.9 → 86.6 train) and test improves 68.8 → 72.1, Minnesota 50 % (few images), Massachusetts 87.5 %. Still below the ≥ 95 % precision at ≥ 60 % coverage bar, still no real-photo evaluation, nothing registered or wired in. Synthetic variation is worth keeping; it does not replace more real designs per state.
+
+**2026-10-20 — fourth run: + agency (DMV/DOT) images, collected by the agent through the owner's connected browser (counsel's fair-use determination, DECISIONS.md 2026-10-19).** 8 images from 6 states were gathered with their page URL and date in `training/plate-state-dmv/sources.csv` (gitignored): Alaska ×2 (Standard Gold, Grizzly Bear), Idaho ×2 (2025 sample, 2026 standard), North Dakota ×1, Rhode Island ×1 (Ocean passenger), Hawaii ×1 (Honolulu city graphic — an illustration), Mississippi ×1 (2024 standard). They were plate-cropped, expanded ×20 with `augment_plate_dataset.py` (train split only) and added as six new classes → 38 classes trained. **Test accuracy on the unchanged 155-image / 32-class test set: 72.7 % (was 72.1 %)** — no harm, but the six new states have **no test images, so nothing is known about how well they are recognised**. Not collected (page showed no standard-plate image, bot protection, or not found): Arizona, Connecticut, Delaware, Iowa, Kentucky (only a collage of specialty plates), Maine (image blocked to non-browser clients, browser download not saved), Montana, New Hampshire, New Mexico, South Carolina, Vermont, West Virginia, Wyoming. Image files are fetched with `curl` from the agency image host after the browser located the URL; some image hosts allow this although their pages return 403 (no bot-protection bypass was attempted).
+
+**2026-10-20 — fifth run: + screenshot/crop-collected agency images (Maine, Kentucky).** The owner allowed screenshots where a file cannot be saved. Maine: the Pine Tree *passenger car* plate zoomed out of the BMV's plate table (310×172 px — low resolution). Kentucky: the Regular (standard issue) "Bluegrass State / COUNTY" plate cropped from the top-left tile of drive.ky.gov's banner collage (its right edge is slightly cut). `plate_crops.swift` now keeps plate-shaped images from aspect 1.5 and creates class folders lazily. 10 agency images / 8 states → 40 classes trained (the two newest and the other six have no test images). **Test accuracy on the unchanged 155-image / 32-class test set: 72.1 %** (72.7 % with 38 classes; run-to-run noise at this size). Still no gain worth claiming and still no real-photo evaluation; Arizona (specialty plates only on the MVD page), Connecticut (no plate image), Delaware, Iowa, Montana, New Hampshire, New Mexico, South Carolina, Vermont, West Virginia and Wyoming remain uncollected.
+
+**2026-10-29 — sixth run: + 24 agency images / 13 states.** After the Montana, New Mexico, South Carolina, West Virginia and Wyoming images were added (PLATE-DESIGN-DATASET 2026-10-22), all 24 agency images were re-cropped (`plate_crops.swift`: 6 cropped, 18 kept whole), added to the train split of the Commons crop dataset (45 classes) and expanded ×5 with `augment_plate_dataset.py` (4,390 train images). Create ML, same settings. **Train 86.5 %, validation 72.5 %, test 72.7 %** on the unchanged 154-image / 32-class test set (Minnesota 50 %, Massachusetts 87.5 % on a handful of images each). That is within run-to-run noise of 72.1 % — **no gain**, and still far below the ≥ 95 % precision at ≥ 60 % coverage bar. The 13 agency-only states have no test images, so their recognition is unmeasured. Nothing registered or wired in. A first attempt on 2026-10-22 was interrupted when the external drive disconnected mid-augmentation and was rerun from scratch.
+
 ### Reproducing the fleet crop dataset (one command)
 `scripts/build_fleet_crop_dataset.sh <crawl dir> <out dir> [models dir]` runs the whole recipe from the lessons above: tag with Apple's
 classifier and keep car/truck/bus-like images → cut the main vehicle with the vehicle detector → split **by photographer**
@@ -198,3 +219,22 @@ is still **transit 98 %** — confident and wrong. Still **not safe to wire in a
 shows is that the bottleneck was data volume/diversity, and that dark low-contrast liveries still need their own examples (the Hub's
 text path and the review queue remain the primary route for them). Next: add stealth-livery and rear-view police images (Commons
 categories are thin on them), re-measure, and keep Waltham/Minneapolis as the fixed held-out check.
+
+## 8. Model plan, 2026-10-29
+
+What is trained and shipped, what is trained but not safe, and what is not
+started, in the order that unblocks the most. Nothing here is registered until
+it clears its bar on held-out real photos.
+
+| Model | State | Next step | Bar |
+|---|---|---|---|
+| Plate detector | shipped (Create ML) | ONNX export of the YOLOv8n fallback for non-Apple runtimes; benchmark against the Create ML model on the 62-image corpus | recall at 100 % precision |
+| Vehicle detector | shipped (COCO) | fine-tune on fleet and cluttered-traffic imagery; reduces confident "Motorcycle" on distant cars | no precision loss on the corpus |
+| Vehicle type | shipped, registry fixed 2026-10-29 | verify install through `ModelManager`; measure on crops | measured accuracy, not just abstention |
+| Fleet crop classifier | trained, 77 % test | add stealth-livery and rear-view police crops, keep Waltham/Minneapolis as the fixed held-out check | no confident miss on the held-out check |
+| Plate-state | trained, 72.7 % test | blocked on data: 13 agency-only states have no test images | 95 % precision |
+| Plate OCR | Vision baseline | only train a specialized model if it beats Vision on the corpus | beats Vision exact-match |
+| Make / model / colour | released, unmeasured | evaluate on the corpus before any use | measured, conservative abstain |
+
+Cross-platform runtime (ONNX / TFLite) conversion is tracked in
+[PLATFORMS.md](PLATFORMS.md).

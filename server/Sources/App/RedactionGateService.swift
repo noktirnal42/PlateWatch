@@ -25,6 +25,12 @@ enum RedactionGateService {
             return .init(state: .rejected, exactGeoAllowed: false,
                          dropReason: "below keep-on-device threshold")
         }
+        // Sensitive vehicles (docs/FEED-SOURCES.md §6b): tactical/protective units, school buses and ambulances never
+        // auto-confirm; a moderator must look, with no exact geo, whatever the confidence.
+        if isSensitive(dto), dto.fleetConfidence >= 0.15 {
+            return .init(state: .pending, exactGeoAllowed: false,
+                         dropReason: "sensitive vehicle class — moderator review only")
+        }
         // Fleet-confirmed: markings or known classification + strong signal.
         let hasMarkings = (dto.markings?.agencyText != nil) || (dto.markings?.unitNumber != nil)
         let governmentDesign = dto.plate?.plateDesign?.lowercased()
@@ -44,5 +50,17 @@ enum RedactionGateService {
         }
         return .init(state: .redacted, exactGeoAllowed: false,
                      dropReason: "insufficient fleet evidence — stored redacted if at all")
+    }
+
+    /// Words that mark vehicles whose location should not be published automatically. Matched on whole words in the
+    /// OCR'd markings, the vehicle class and the field note; a miss is not proof of safety, hence moderator review.
+    static let sensitiveTerms: Set<String> = ["swat", "tactical", "protective", "executive", "dignitary", "undercover",
+                                              "school", "ambulance", "medic", "paramedic", "ems", "hearse"]
+
+    static func isSensitive(_ dto: SightingSubmissionDTO) -> Bool {
+        let text = [dto.markings?.agencyText, dto.markings?.serviceClassText, dto.markings?.note, dto.vehicle.vehicleClass]
+            .compactMap { $0 }.joined(separator: " ").lowercased()
+        let words = Set(text.split(whereSeparator: { !$0.isLetter }).map(String.init))
+        return !words.isDisjoint(with: sensitiveTerms)
     }
 }

@@ -85,3 +85,14 @@ final class HLSFrameSourceTests: XCTestCase {
         XCTAssertEqual(decoder.state, .stopped)
     }
 }
+
+final class HLSBackoffTests: XCTestCase {
+    func testBackoffDoublesFromTheBaseAndCapsAtSixtySeconds() {
+        XCTAssertEqual(HLSFrameSource.backoff(base: 2, failures: 1), 2)
+        XCTAssertEqual(HLSFrameSource.backoff(base: 2, failures: 2), 4)
+        XCTAssertEqual(HLSFrameSource.backoff(base: 2, failures: 5), 32)
+        XCTAssertEqual(HLSFrameSource.backoff(base: 2, failures: 6), 60)
+        XCTAssertEqual(HLSFrameSource.backoff(base: 5, failures: 30), 60)
+        XCTAssertEqual(HLSFrameSource.backoff(base: 0.1, failures: 1), 0.1, accuracy: 1e-9)
+    }
+}

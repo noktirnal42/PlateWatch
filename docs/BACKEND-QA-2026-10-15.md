@@ -13,6 +13,17 @@ any outbox delivery, so a local Review item was never proof of server delivery.
   Adding the entitlement initially exposed SwiftData's automatic CloudKit selection and
   caused a startup failure; the local-only store repair was built and relaunched successfully.
   Existing local Review count remains two. No store reset or queue submission was performed.
+
+## 2026-10-17 entitlement regression and repair
+
+During follow-up QA, the installed app had again been replaced by a CI-style
+`CODE_SIGNING_ALLOWED=NO` build. The project entitlements were still correct, but the running
+binary consequently reported `Unavailable — this build has no CloudKit entitlement` and used the
+loopback server only. The Hub was rebuilt with automatic signing, verified to contain
+`iCloud.org.platewatch.platewatch` and the CloudKit service entitlement, then relaunched. The live
+Settings probe now reports `Connected · public database readable` while the separate reference
+server probe reports its health-only status. A signed-install script now refuses to replace the
+operator app when those entitlements are absent.
 - Corrected REST fallback to 8083 and reject malformed/credential-bearing or remote HTTP
   overrides. Two new backend-selection tests pass; all 15 PlateSync tests and 36 Hub tests pass (four opt-in skips).
 - Settings now has read-only connection checks. The signed running Hub reports an available
@@ -85,3 +96,30 @@ unchanged. A PlateSync regression test covers repeat calls and distinct names.
 
 The local REST moderation queue and CloudKit are separate stores. A healthy server or an
 available iCloud account must never be labeled a completed end-to-end publication pipeline.
+
+## Recovery after an older Hub sync — 2026-10-16
+
+An older signed Hub removed a local `PendingSubmission` after CloudKit accepted it
+without retaining a local receipt. Those records are creator-readable
+`SightingSubmission` rows in the same iCloud account; they do not appear in the
+loopback REST Moderation queue until a moderator publishes them. The repaired Hub
+adds **Review → Recover CloudKit history**, which queries only the current user's
+creator-readable submission metadata and rebuilds bounded local receipt rows. It
+does not restore plate text, raw frames, exact coordinates, or submission payloads.
+Use it after installing an entitled build while signed into the same iCloud account.
+
+The same Review pane also offers **Send CloudKit to Moderation**. This is an
+explicit, operator-triggered handoff for the local reference server: it reads
+creator-owned submission fields, reconstructs the moderation DTO without crops or
+exact coordinates, and sends each row through `RESTBackend` so its privacy gate
+and idempotency rules run again. It does not delete or mutate CloudKit records and
+is not automatic two-way mirroring.
+
+## REST mirror packaging verification — 2026-10-16
+
+The multi-stage `server/Dockerfile` was built with Colima for `linux/arm64` and
+tagged `platewatch-server:qa` (image digest `sha256:e7d7d838bb8c42d4695809d819bfc582f687cb5b36dbb01faaa70bf728fd605e`).
+The Linux build includes the server test target and uses `swift-crypto` when
+CryptoKit is unavailable. `swift test --package-path server --disable-sandbox`
+passed 56 tests with zero failures. This verifies packaging only; it does not
+prove a production database, CloudKit publication, or two-account isolation.

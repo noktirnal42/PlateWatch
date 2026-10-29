@@ -87,10 +87,11 @@ struct TermsReviewSheet: View {
                 Spacer()
                 Button("Cancel") { onDone() }.keyboardShortcut(.cancelAction)
                 Button("Confirm \(host.totalCount) camera\(host.totalCount == 1 ? "" : "s")") { confirm() }
-                    .buttonStyle(.borderedProminent).disabled(!canConfirm).keyboardShortcut(.defaultAction)
+                    .buttonStyle(HUDProminentButtonStyle()).disabled(!canConfirm).keyboardShortcut(.defaultAction)
             }.padding()
         }
         .frame(width: 640, height: 620)
+        .hubChrome()
         .onAppear {
             if let s = sample {
                 licenseClass = s.terms.licenseClass

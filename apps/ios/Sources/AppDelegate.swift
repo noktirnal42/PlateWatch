@@ -38,6 +38,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         var hit = false
         for sighting in delta.sightings where matchesWatchlist(sighting, plates: plates) {
             hit = true
+            // Keep the alert after the notification is dismissed (deduped by sighting, bounded).
+            AlertHistoryStore.append(WatchlistAlertRecord(
+                capturedAt: sighting.capturedAt, plate: Plate.normalize(sighting.plateText ?? ""),
+                unitNumber: sighting.unitNumber, geohash6: sighting.geohash6, sightingID: sighting.id))
             let content = UNMutableNotificationContent()
             content.title = "Watchlist hit"
             content.body = "\(Plate.normalize(sighting.plateText ?? "")) · \(sighting.unitNumber ?? "unit ?")"

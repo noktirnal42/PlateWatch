@@ -98,14 +98,14 @@ struct FeedsReviewView: View {
                             Button("Confirm all \(host.totalCount) camera\(host.totalCount == 1 ? "" : "s") on this host") {
                                 confirmTerms(for: host)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(HUDProminentButtonStyle())
                             .disabled(!canConfirm)
 
                             if host.confirmedCount > 0 {
                                 Button("Revoke confirmation") {
                                     revokeTerms(for: host)
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(HUDButtonStyle())
                                 .foregroundStyle(.red)
                             }
                         }

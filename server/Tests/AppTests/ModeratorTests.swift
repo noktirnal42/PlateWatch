@@ -96,6 +96,13 @@ final class ModeratorCSRFTests: XCTestCase {
         XCTAssertFalse(first.contains("reviewer"))
     }
 
+    func testSecondReviewPolicyRequiresASecondDistinctReviewer() {
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: false, firstReviewer: nil, reviewer: "a"), .allow)
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: true, firstReviewer: nil, reviewer: "a"), .recordFirst)
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: true, firstReviewer: "a", reviewer: "a"), .rejectSameReviewer)
+        XCTAssertEqual(ModeratorController.secondReviewStep(required: true, firstReviewer: "a", reviewer: "b"), .allow)
+    }
+
     func testEscapeNeutralisesMarkup() {
         let escaped = ModeratorController.escape(#"<script>alert("x") & 'y'</script>"#)
         XCTAssertFalse(escaped.contains("<script>"))
@@ -217,5 +224,16 @@ final class ModeratorAuditAuthTests: XCTestCase {
             let noAuth = try await app.sendRequest(.GET, "moderator/api/audit", headers: [ModeratorController.apiHeader: "1"])
             XCTAssertEqual(noAuth.status, .unauthorized)
         }
+    }
+
+    func testQueueItemShowsAgencyOnlyWhenNotFlaggedForReview() {
+        let row = Sighting()
+        row.agencyKey = "US-MA/waltham/police"; row.agencyName = "Waltham Police Department"
+        XCTAssertEqual(ModeratorController.APIQueueItem.agencyKey(for: row), "US-MA/waltham/police")
+        row.agencyNeedsReview = false
+        XCTAssertEqual(ModeratorController.APIQueueItem.agencyName(for: row), "Waltham Police Department")
+        row.agencyNeedsReview = true
+        XCTAssertNil(ModeratorController.APIQueueItem.agencyKey(for: row))
+        XCTAssertNil(ModeratorController.APIQueueItem.agencyName(for: row))
     }
 }

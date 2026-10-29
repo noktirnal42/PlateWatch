@@ -52,7 +52,7 @@ class BridgeTests(unittest.TestCase):
     def test_tool_surface_and_permissions(self):
         tools = asyncio.run(pw.server.list_tools())
         names = {t.name for t in tools}
-        self.assertEqual(len(names), 14)
+        self.assertEqual(len(names), 18)
         self.assertIn('platewatch_records_import_csv', names)
         self.assertFalse(any('accept' in n or 'moderate' in n or 'terms_confirm' in n or 'pacer' in n for n in names))
         tool = next(t for t in tools if t.name == 'platewatch_feed_preference')

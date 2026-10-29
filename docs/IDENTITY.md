@@ -78,6 +78,15 @@ unresolved ("Minneapolis, state unknown — which one?"; MN is offered first). T
 plate-design classifier (MODEL-TRAINING §4c, Create ML Image Classification on plate crops, one
 class per state) — not more OCR. Case is eval id 902 (`eval/user/`, gitignored).
 
+**Status 2026-10-18 — what is blocked, precisely.** Nothing has been trained: `training/plate-state/` does not exist on this
+machine (no images downloaded), so there is no model, no Create ML run and no held-out measurement. The tooling exists
+(`scripts/crawl_commons_plates.py`, CC0/PD/CC BY plus CC BY-SA by the 2026-10-13 owner decision; `scripts/make_classifier_dataset.py`).
+Three things stand between here and a result: (1) the crawl downloads a few thousand Commons files and needs the owner's go-ahead;
+(2) [PLATE-DESIGN-DATASET.md](PLATE-DESIGN-DATASET.md) still lists its licence gate as not cleared — each file's licence must be
+recorded from the manifest the crawler writes; (3) the flat Commons scans will not look like a 12 px banner in a phone photo, so
+the real acceptance test is the Minneapolis crop (eval id 902) and an MN/NC/KS confusion check, not the Create ML test split. Until a
+model passes that, the state stays unresolved and the Hub keeps asking "which one?". No claim is made that the classifier will solve it.
+
 ## Where the location hint comes from (it is a property of the frame's *source*)
 The identity resolver uses a coarse location only to settle ambiguous place names ("Minneapolis" is in MN, NC and KS).
 It must come from where the **frame** was captured, never from the device that happens to be running the analysis:
@@ -89,7 +98,25 @@ It must come from where the **frame** was captured, never from the device that h
 | Public camera feed (511/DOT, transit, port cams) | the camera's catalogued fixed position — `PublicFeedSource.geohash6` is mandatory |
 | Hub (IP cameras, folder drops) | the operator-set `homeGeohash6` for that camera |
 
-Not yet wired: the Hub and feed pipelines do not run `IdentityResolver` at all today (their submissions carry no `identity`),
-so feed frames currently get no benefit. When they do, pass the source's geohash centre as the `LocationHint`. Feed frames
-have **no phone GPS and no EXIF** — fixed-camera metadata is the only reliable location there. A source with no known
-location falls back to "state unknown — which one?" (and, later, to plate-state evidence).
+Wired in the Hub (verified 2026-10-18): every ingest path — folder drops, the local HTTP endpoint, public camera feeds and
+selected Live frames — records fleet hits through `HubController.recordFleetHits`, which calls `FeedIdentity.resolve`
+(`apps/macos-hub/Sources/FeedIdentity.swift`) and puts the result in the submission's `identity`. The location hint is the
+frame source's geohash centre (a feed's catalogued position or the operator-set home bucket for Hub cameras), never this Mac's;
+frames below full resolution are flagged for review and carry no registration; the smallest frames assert no identity. Pinned by
+`FeedIdentityTests` (camera position settles Minneapolis MN vs elsewhere, tier rules, identity survives the wire encoding) on top of
+the PlateKit resolver tests. Feed frames have **no phone GPS and no EXIF** — fixed-camera metadata is the only reliable location
+there. A source with no known location falls back to "state unknown — which one?" (and, later, to plate-state evidence).
+Live check 2026-10-18 (installed signed Hub, Waltham eval photo POSTed to the Hub's local `/snapshot` endpoint, which shares
+`recordFleetHits` with feeds): the Review pane showed the agency from the resolver (`US-MA/unknown/police`, tier full, 70 %). The place
+"Waltham" was **not** resolved in the Hub path although the detector-free eval harness resolves it for the same photo. **Cause found and
+fixed (2026-10-18):** `PlateAnalysisPipeline` fused detector boxes with the baseline's plates and scene text but dropped
+`enhancedText` (the contrast-enhanced dark-region read that names the agency), so any run with the CoreML vehicle detector loaded
+lost the place name. `attachEnhancedText` now carries those lines onto fused vehicles that have fleet evidence (only lines near
+the box when several vehicles qualify; never onto non-fleet vehicles). Measured with `--models models/cache`: Waltham photo
+`US-MA/waltham/police` conf 0.80 and the stealth-lettering variant 0.93 (both were unresolved before); the live Hub now records
+`US-MA/waltham/police` for the same photo. The Minneapolis photo remains "state unknown" (the Known gap below).
+The Moderation pane could not show an agency at that point because the moderator queue API and the CloudKit→moderation handoff
+carried none; both now do (agency key/name only, withheld while flagged for review), covered by server and PlateSync tests. The live
+hand-off was blocked by a CloudKit schema gap (`createdBy` not queryable on `SightingSubmission`); `cloudkit/schema.ckdb` now
+declares it, but the owner must import and deploy the schema before the handoff works. Still open: the place-name gap above and the
+plate-design classifier for plate state (see "Known gap").

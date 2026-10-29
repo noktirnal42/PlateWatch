@@ -24,6 +24,15 @@ public protocol SyncBackend: Sendable {
     /// Aggregated public report for one agency. It contains no individual movement data.
     func agencyReport(id: UUID) async throws -> AgencyReportDTO
 
+    /// A backend-specific handle that lets this device withdraw a submission later (CloudKit: the creator-owned record
+    /// name). Stored on the local receipt at delivery time; nil when the backend needs no handle.
+    func withdrawalHandle(for sighting: SightingSubmissionDTO, idempotencyKey: String) -> String?
+
+    /// Withdraw a submission this device delivered. CloudKit deletes the creator-owned submission record; the reference
+    /// server records a takedown request for moderators. Neither can retract a record a moderator already published
+    /// from this device alone, and the outcome says so (`publicRecordMayRemain`).
+    func withdraw(handle: String?, sightingID: UUID, moderationState: Sighting.ModerationState) async throws -> WithdrawalOutcome
+
     /// Register (or refresh) a watchlist-driven push subscription.
     /// No-op for REST deployments without push infrastructure.
     func ensureWatchlistSubscription() async throws
@@ -100,6 +109,33 @@ public struct AgencyReportDTO: Sendable, Codable, Equatable {
         self.agency = agency; self.fleetSize = fleetSize; self.sightings30d = sightings30d
         self.activeUnits = activeUnits; self.publicContactURL = publicContactURL
         self.budgetURL = budgetURL; self.generatedAt = generatedAt
+    }
+}
+
+/// What a withdrawal actually achieved, in words the UI can show without over-claiming.
+public struct WithdrawalOutcome: Sendable, Equatable {
+    public enum Kind: String, Sendable, Codable { case recordDeleted, takedownRequested }
+    public var kind: Kind
+    /// True when the submission may already have been published as a world-readable record that only a moderator can remove.
+    public var publicRecordMayRemain: Bool
+    public init(kind: Kind, publicRecordMayRemain: Bool) { self.kind = kind; self.publicRecordMayRemain = publicRecordMayRemain }
+
+    public var message: String {
+        switch kind {
+        case .recordDeleted:
+            return publicRecordMayRemain
+                ? "Your submission was deleted. If it had already been published, a moderator must still remove the public record."
+                : "Your submission was deleted from the backend."
+        case .takedownRequested:
+            return "A takedown request was sent. A moderator will review it; the sighting is hidden once they act."
+        }
+    }
+}
+
+public extension SyncBackend {
+    func withdrawalHandle(for sighting: SightingSubmissionDTO, idempotencyKey: String) -> String? { nil }
+    func withdraw(handle: String?, sightingID: UUID, moderationState: Sighting.ModerationState) async throws -> WithdrawalOutcome {
+        throw SyncError.unsupported
     }
 }
 

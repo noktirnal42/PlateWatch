@@ -2,11 +2,14 @@
 
 Legend: ✅ done · ◐ in progress · ⬜ planned
 
-> **Status as of 2026-10-13:** the packages, server and importers are built and
-> tested (129 tests), but the iOS app does not yet complete the core loop
-> (camera → plate read → published sighting) and CloudKit publication is not complete. The production schema is deployed; client delivery and moderator publishing need verification. See
-> [QA-REPORT.md](QA-REPORT.md) for the ranked list of what is blocking, and
-> **M-Alpha** below for the work that comes first.
+> **Status as of 2026-10-23:** moving HLS playback, fast tracked overlays,
+> camera map, records/FOIA/RSS workflows, bounded agents and released detectors
+> are implemented on the active development branch. Plate-state training remains
+> experimental. Production publication, two-account isolation, sustained feed
+> performance and physical field acceptance remain open. See the
+> [implementation audit](PROJECT-AUDIT-2026-10-23.md) for code/spec differences,
+> verification and the ordered continuation. Historical checkboxes below are
+> qualified by those acceptance gates.
 
 ## M-Alpha — Make it work end to end (current focus)
 Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
@@ -19,7 +22,7 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Evaluation corpus + harness (`eval/`), verified on a physical iPhone
 - ✅ Crash fix: any recorded fleet detection crashed the app (CoreLocation delegate)
 - ✅ Server build fixed; agency report HTML escaping fixed (QA F1, F2)
-- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub client capability/diagnostics and operator-triggered reviewed delivery are wired, while two-account isolation and moderator publish tooling remain (P0-5)
+- ◐ CloudKit: backend restructured + `cloudkit/schema.ckdb` written; production schema deployment verified 2026-10-15; Hub capability/diagnostics, receipt recovery, explicit CloudKit→REST moderation handoff, guarded `CloudKitBackend.publish(_:)`, and owner-scoped creator submission IDs are wired. Credentialed production publication and live two-account isolation remain deployment gates (P0-5)
 - ✅ `models-v0.1.0` published (2026-10-14): home-trained Create ML plate detector (head-to-head winner) + YOLOv8n fallback + vehicle/type/make-model/reid models; registry SHAs pinned to the published assets; `.aar` packaging + isolated, symlink-rejecting `ModelArchive` extraction wired into `ModelManager` (P0-3)
 - ⬜ Live-camera verification on a handheld device (mirroring cannot expose the camera) and a drive test
 - ◐ iOS visual/review polish: detail + coarse-summary sharing, retry recovery, fleet watchlist validation/alert controls, local cleanup, semantic colors, painted icon, privacy-safe backend receipt history, bounded received review crops, local event-clip export, mobile published-fleet sightings, backend connection diagnostics, and all-vehicle class overlays landed (2026-10-16); full field/accessibility audit remains
@@ -50,8 +53,11 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ◐ Hub: HLS ingest is production-wired with policy relay, child-playlist handling, bounded cancellation and NV511 fixtures; raw RTSP still needs the separately licensed VLCKit/GStreamer path
 
 ## M2 — Identification depth
-- ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); offline manifest evaluation now reports normalized exact-match and character error rate; plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
-- ⬜ Make/model/color classifier — colour model not yet found with a recordable licence (`docs/DECISIONS.md`)
+- ◐ CoreML plate detector — ✅ home-trained Create ML detector shipped (registry 0.2.0, head-to-head winner); offline manifest evaluation now reports normalized exact-match and character error rate; bundled/cached registry fallback keeps installed detectors usable offline; plate OCR still Vision baseline (TrOCR/plate-OCR conversion open)
+- ◐ Make/model/color classifier — conservative on-device colour and optional licensed vehicle-type classification
+  now populate generic vehicle attributes without affecting fleet confidence; a trained make/model/colour model
+  remains open
+  (`docs/DECISIONS.md`)
 - ◐ Fleet markings parser: Vision text → FoundationModels `@Generable` extraction (agency name, unit #, "POLICE"/"FIRE" class text) — wired into the iOS capture path
 - ◐ Plate-design classifier — conservative standard/exempt/government/official family mapping now lands in PlateKit and is gate-safe; trained plate-crop model and licensed family corpus remain open (`docs/DECISIONS.md`)
 - ⬜ Vehicle Re-ID upgrade: OSNet CoreML model replacing feature prints
@@ -66,7 +72,9 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ Moderator console (server-rendered `GET /moderator` on the reference server; disabled unless `MODERATOR_TOKEN` is set)
 
 ## M4 — Network & UX
-- ✅ CloudKit watchlist subscriptions → watchOS haptic alerts (subscription save, silent-push wake, delta matching and haptic/local alert handling implemented; entitlement and physical-device push QA remain)
+- ✅ CloudKit watchlist subscriptions → watchOS haptic/local alerts (subscription save, silent-push wake, delta matching, wrist haptic, notification permission, and visible unread-hit count)
+- ✅ watchOS complication target (circular, rectangular, and inline families show recent fleet-hit count plus opt-in active-user count; the user count stays `—` until a current presence heartbeat is available)
+- ✅ watchOS live stats surface: the companion now receives privacy-safe aggregate Hub counters (frames, public-feed frames, fleet hits, skipped work, outbox) alongside active sessions/processors and refreshes them every 30 seconds while visible
 - ◐ Heatmap + timeline: k-anonymous aggregate API, REST agency filter, and iOS map/timeline scope picker shipped (`GET /v1/aggregates/heatmap`, k=5, see `docs/DECISIONS.md`); agency scoping still needs deployed vehicle linking on CloudKit
 - ◐ "Agency report card": server-rendered report page and iOS agency directory/detail surface implemented (fleet size, 30-day sightings, active units, budget link); CloudKit now has an explicit agencyKey join and aggregate query path, pending schema deployment/population
 - ✅ Public dataset exports: reference server ships /v1/export/sightings.csv + .geojson (bucketed); nightly scheduled job (`NightlyExportJob` in server)
@@ -74,11 +82,17 @@ Sources: [QA-REPORT.md](QA-REPORT.md), [EVALUATION.md](EVALUATION.md).
 - ✅ iOS UI pass: plate-style badges, privacy chip, Open Settings, sync pills, app icon, launch screen, onboarding, About, branded empty states, Explore map (full redesign still open — see M-Alpha)
 - ◐ CarPlay passive capture mode: scene delegate written; needs the Apple CarPlay entitlement and on-device verification (QA P1-8)
 
+- ◐ Live operator presence and feed demand counts (P1-9)
+  - ✅ Ephemeral TTL heartbeats for opted-in Hub/iOS processing and foreground watch sessions.
+  - ✅ Hub dashboard total active sessions/live processors and per-feed active processor counts.
+  - ✅ Privacy-safe opt-out, expiry, and a local-processing outage fallback that hides stale server counts.
+  - ◐ Accessibility QA and hosted deployment remain open; signed physical watch launch is verified.
+
 ## M5 — Beyond Apple
-- ⬜ REST mirror publicly deployed (Oracle Always Free)
-- ⬜ Reference Python edge agent (Raspberry Pi HQ cam / OAK-4)
-- ⬜ Android client via shared DTO spec + ONNX models
-- ⬜ Web read-only explorer (Lite: exports; Full: mirror API)
+- ◐ REST mirror container is prepared (`server/Dockerfile` + deployment notes); Oracle Always Free deployment remains open
+- ✅ Reference Python edge agent (Raspberry Pi HQ cam / OAK-4): standard-library REST client with content-addressed retries and fail-closed fleet/media policy; detector/model runtime remains local and separately reviewed
+- ◐ Android client: read-only public-sighting consumer now builds against the shared REST DTO; on-device ONNX capture inference and physical-device QA remain open
+- ✅ Web read-only explorer: public CSV/GeoJSON exports, k-anonymous heatmap page, agency directory/report pages, and read-only mirror API; no write surface is exposed.
 
 ## M6 — Remote camera sources & public feeds (macOS Hub)
 Sources: [CAMERA-SOURCES.md](CAMERA-SOURCES.md). Every source feeds the same
@@ -90,7 +104,7 @@ Sources: [CAMERA-SOURCES.md](CAMERA-SOURCES.md). Every source feeds the same
 - ✅ Favorites, reversible local blocks, and selected snapshot analysis overlays in Live.
 - ✅ Offline help, native desktop toolbar/sidebar and primary glass action; UI/hardware coverage tracked in the [Hub handoff](HUB-HANDOFF-2026-10-14.md).
 - ✅ Offline importer/poller/policy fixtures and hostless Hub regressions in CI.
-- ◐ Continuous public-video playback and sampled analysis: real NV511 HLS and cancellation/restart fixtures verified 2026-10-15; full child-playlist/CDN/segment policy enforcement remains open. See [repair evidence](HUB-REPAIR-2026-10-15.md).
+- ◐ Continuous public-video playback and sampled analysis: real NV511 HLS and cancellation/restart fixtures verified 2026-10-15; selected Live attempts now fail within 15 seconds, refresh a stale keyed route once per five-minute cooldown, and fetch a paired approved snapshot in parallel while falling back when a provider retires an HLS route (2026-10-17). Full child-playlist/CDN/segment policy enforcement remains open. See [repair evidence](HUB-REPAIR-2026-10-15.md).
 
 ## M7 — Accountability records (people & vehicles cross-reference)
 Sources: [ACCOUNTABILITY-DATA.md](ACCOUNTABILITY-DATA.md),
@@ -99,16 +113,20 @@ any collection code lands**; the `AccountabilityKit` type skeleton may land
 first.
 - ✅ `AccountabilityKit` package: `OfficialProfile`, `IncidentRecord`,
   citation enforcement (no record without `SourceCitation`)
-- ⬜ Roster/assignment importers extended to person-level records
+- ✅ Roster/assignment importers extended to person-level records (CSV plus eight-source catalogue; pending review, citation-only fields, and hidden unit links)
 - 🟡 Brady/decertification register (CSV) + lawsuit docket (CourtListener, PACER with a dollar budget) importers — built,
-  verbatim, cited, pending-until-accepted; live CourtListener/PACER endpoints not yet exercised
+  verbatim, cited, pending-until-accepted; the opt-in CourtListener live smoke test passed on 2026-10-16, while
+  PACER still requires the owner's account and remains unexercised
 - 🟡 Cross-reference chain: unit → confirmed link → official → records, location-free, shown in Hub Review — built;
-  operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; second-person
-  moderation and any publication path are not. Moderator audit entries carry a non-reversible reviewer fingerprint,
-  and opt-in `REQUIRE_SECOND_REVIEW=1` now enforces distinct reviewers for approval.
+  operator-side People tab (cited profiles, hidden-until-confirmed unit links, explicit record attachment) built; opt-in
+  second-person moderation is enforced for both HTML and API paths. Any publication path remains external/deployment-gated.
+  Moderator audit entries carry a non-reversible reviewer fingerprint, and `REQUIRE_SECOND_REVIEW=1` enforces distinct reviewers for approval.
 - ✅ FOIA request tracker (Hub: Requests tab — due dates, appeal text, cited releases)
-- ⬜ Aggregation of existing public-interest publishers (cite-first, no
-  re-hosting without attribution)
+- 🟡 Aggregation of existing public-interest publishers (cite-first, no
+  re-hosting without attribution) — Hub Records → Feeds RSS/Atom reader built (2026-10-18): https-only
+  subscriptions, groups, timed auto-refresh, OPML, a six-feed verified suggestion list, and save-for-review as a
+  pending cited candidate. Still open: Brady/decertification/court-publisher feed coverage beyond the starter list
+  and per-publisher licence notes.
 - ✅ FOIA request generator (`FleetImporters`, M3) — foundation for records
   requests that feed this program
 

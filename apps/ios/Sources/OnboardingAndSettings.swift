@@ -88,6 +88,30 @@ struct SettingsView: View {
     @State private var errorText: String?
     @State private var connectionStatus = "Not checked"
     @State private var checkingConnection = false
+    @AppStorage("presenceEnabled") private var presenceEnabled = false
+    @AppStorage(PWPhosphor.defaultsKey) private var phosphor = PWPhosphor.green.rawValue
+    @AppStorage("pwAppearance") private var appearance = "dark"
+    @State private var draftDestination = SyncSettings.load().destination
+    @State private var draftMirrorURL = SyncSettings.load().mirrorURL ?? ""
+    @State private var backendSettingsMessage: String?
+    @State private var backendSettingsIsError = false
+
+    private var backendDraftChanged: Bool {
+        let saved = SyncSettings.load()
+        return draftDestination != saved.destination
+            || draftMirrorURL.trimmingCharacters(in: .whitespacesAndNewlines) != (saved.mirrorURL ?? "")
+    }
+
+    private func saveBackendSettings() {
+        do {
+            try SyncSettings(destination: draftDestination, mirrorURL: draftMirrorURL).save()
+            backendSettingsIsError = false
+            backendSettingsMessage = "Saved. Relaunch PlateWatch to use it."
+        } catch {
+            backendSettingsIsError = true
+            backendSettingsMessage = error.localizedDescription
+        }
+    }
 
     private var backendName: String {
         backend is CloudKitBackend ? "iCloud (CloudKit public database)" : "Self-hosted server"
@@ -112,6 +136,16 @@ struct SettingsView: View {
                         }
                     }.padding(.vertical, 8)
                 }
+                Section {
+                    Picker("Phosphor", selection: $phosphor) { ForEach(PWPhosphor.allCases) { Text($0.title).tag($0.rawValue) } }
+                        .pickerStyle(.segmented)
+                        .onChange(of: phosphor) { _, value in WatchlistConnectivity.shared.send(phosphor: value) }
+                    Picker("Appearance", selection: $appearance) {
+                        Text("Dark").tag("dark"); Text("System").tag("system")
+                    }.pickerStyle(.segmented)
+                } header: { Text("Appearance") } footer: {
+                    Text("Console glow colour: classic green or amber. Dark is the default look; System follows light/dark mode.")
+                }
                 Section("Analysis & delivery") {
                     LabeledContent("Shared database") { Text(backendName).multilineTextAlignment(.trailing) }
                     LabeledContent("Connection") {
@@ -135,6 +169,33 @@ struct SettingsView: View {
                     } label: {
                         Label("Agency report cards", systemImage: "building.columns")
                     }
+                }
+                Section {
+                    Picker("Destination", selection: $draftDestination) {
+                        Text("Automatic").tag(SyncBackends.Destination.automatic)
+                        Text("Self-hosted server").tag(SyncBackends.Destination.referenceServer)
+                    }
+                    TextField("https://your-server.example", text: $draftMirrorURL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .keyboardType(.URL).textContentType(.URL)
+                        .accessibilityLabel("Server address")
+                    Button("Save backend settings", systemImage: "checkmark.circle") { saveBackendSettings() }
+                        .disabled(!backendDraftChanged)
+                    if let backendSettingsMessage {
+                        Text(backendSettingsMessage).font(.caption)
+                            .foregroundStyle(backendSettingsIsError ? .red : .secondary)
+                    }
+                } header: { Text("Backend") } footer: {
+                    Text("Automatic uses iCloud when this build is signed for it, otherwise the server address below (default: this device, port 8083). The server address must be https://, or http:// for localhost only. Changes apply the next time PlateWatch launches. Nothing here changes what is collected.")
+                }
+                Section("Live presence") {
+                    Toggle("Share active processing count", isOn: $presenceEnabled)
+                        .onChange(of: presenceEnabled) { _, enabled in
+                            if enabled { PresenceCoordinator.shared.start() }
+                            else { PresenceCoordinator.shared.stop() }
+                        }
+                    Text("Optional and off by default. Shares only an anonymous expiring count while this device is actively scanning; no plates, frames, names, or history are sent.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section {
                     LabeledContent("Queued observations", value: String(queued.count))

@@ -50,6 +50,9 @@ struct ModerationClient: Sendable {
         let geohash6: String
         let unitNumber: String?
         let fleetConfidence: Double
+        /// Present when the server resolved an agency that was not flagged for review.
+        let agencyKey: String?
+        let agencyName: String?
     }
     enum Decision: String, Sendable { case approve, reject }
     enum ClientError: Error, LocalizedError {
@@ -90,6 +93,16 @@ struct ModerationClient: Sendable {
         let (data, response) = try await session.data(for: request("moderator/api/queue", method: "GET"))
         if let code = (response as? HTTPURLResponse)?.statusCode, code != 200 { throw ClientError.http(code) }
         return try Self.decoder().decode([Item].self, from: data)
+    }
+
+    func health() async throws {
+        var request = URLRequest(url: baseURL.appending(path: "health"))
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (_, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw ClientError.http((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
     }
 
     struct Takedown: Decodable, Identifiable, Sendable {

@@ -100,7 +100,7 @@ final class FeedRunner: ObservableObject {
         case .blockedByRobots: return .init(text: "Host policy refused", icon: "hand.raised.fill", color: .red, kind: .blocked)
         case .blockedByUser: return .init(text: "Blocked on this Mac", icon: "nosign", color: .secondary, kind: .userBlocked)
         case .imageUnavailable(let reason): return .init(text: reason, icon: "photo.badge.exclamationmark", color: .orange, kind: .frameUnavailable)
-        case .videoConnecting: return .init(text: "Connecting HLS…", icon: "video", color: .secondary, kind: .checking)
+        case .videoConnecting: return .init(text: "Connecting HLS (NV511 can take 30–60 s)…", icon: "video", color: .secondary, kind: .checking)
         case .videoIdle: return .init(text: watchedIDs.contains(source.id) && explicitWatchSelection ? "HLS queued · rotating" : "HLS ready · watch or open in Live", icon: "play.circle", color: .secondary, kind: .confirmed)
         case .suspended: return source.kind == .rtsp
             ? .init(text: "RTSP needs the VLCKit fallback (not bundled)", icon: "video.slash", color: .secondary, kind: .suspended)
@@ -118,6 +118,15 @@ final class FeedRunner: ObservableObject {
     private var videoSink: ClosureVideoSink?
     /// Live decoders for `.hls` sources, keyed by source id (stopped in `stop()`/on block).
     var activeVideoCount: Int { hlsSources.count }
+    /// The player of a running HLS decoder (the Live-pinned one), for on-screen playback. Nil until the decoder exists.
+    func livePlayer(for id: UUID) -> AVPlayer? { hlsSources[id]?.player }
+    /// True once the decoder reports frames flowing (the Live pane then shows moving video instead of sampled stills).
+    func isStreaming(_ id: UUID) -> Bool { hlsSources[id] != nil && sourceStates[id] == .polling }
+    /// Number of watched HLS sources waiting for their turn in the bounded
+    /// rotation. Keeping this separate from `activeVideoCount` makes the
+    /// status row explain why a catalogue can be healthy while most HLS rows
+    /// say "queued".
+    var queuedVideoCount: Int { max(0, eligibleHLSIDs.count - activeVideoCount) }
     private var requestedHLSID: UUID?
     private var hlsRotation: Task<Void, Never>?
     private var hlsRotationOffset = 0
@@ -136,7 +145,10 @@ final class FeedRunner: ObservableObject {
         let pinned = requestedHLSID.flatMap { eligible.contains($0) ? $0 : nil }
         let background = eligible.filter { $0 != pinned }
         var selected = Set(pinned.map { [$0] } ?? [])
-        let slots = min(Self.maxConcurrentHLS - selected.count, background.count)
+        // While the camera on screen is still connecting, background watches wait: they hit the same slow NV511 hosts from the
+        // same address and measurably starve the stream the operator is looking at (2026-10-22). They resume once it streams.
+        let pinnedConnecting = pinned.map { sourceStates[$0] == .videoConnecting } ?? false
+        let slots = !pinnedConnecting ? min(Self.maxConcurrentHLS - selected.count, background.count) : 0
         for index in 0..<slots { selected.insert(background[(hlsRotationOffset + index) % background.count]) }
         return selected
     }
@@ -376,6 +388,17 @@ final class FeedRunner: ObservableObject {
         updateStatus()
     }
 
+    /// Drop and recreate one selected HLS decoder without restarting all
+    /// snapshot polling. This is used by the Live retry action after a
+    /// provider has left a stale player connected.
+    func retryLiveVideoSource(_ source: PublicFeedSource) {
+        guard source.kind == .hls, source.id == requestedHLSID else { return }
+        stopHLS(source.id)
+        sourceStates[source.id] = .videoConnecting
+        beginHLSPolling(source, run: generation)
+        updateStatus()
+    }
+
     /// A redirect or playlist reference may only use an origin whose media terms
     /// are already approved in this catalogue. The robots decision is per path.
     private func resourcePolicy(for source: PublicFeedSource) -> HLSPolicyRelay.Policy {
@@ -395,13 +418,21 @@ final class FeedRunner: ObservableObject {
         guard selectedHLSIDs.contains(source.id) else { sourceStates[source.id] = .videoIdle; return }
         let id = source.id
         sourceStates[id] = .videoConnecting
-        let decoder = HLSFrameSource(source: source, requestPolicy: resourcePolicy(for: source))
-        decoder.tapInterval = 1
+        // Surface dead provider segments promptly. The Live pane has an
+        // explicit retry action, so a short bounded attempt is preferable to
+        // leaving a video tile in "Connecting" for half a minute.
+        // The camera the operator is watching gets more patience: NV511 hosts often take 10–60 s to answer a playlist request
+        // (measured 2026-10-21: connect ~8 s, first byte ~9 s, or no answer for 60 s), so a 15 s limit made Live look dead.
+        let decoder = HLSFrameSource(source: source, stallTimeout: source.id == requestedHLSID ? 75 : 15, requestPolicy: resourcePolicy(for: source))
+        // The camera on screen is sampled ~10x/s for overlay boxes (the detector-only pass takes ~10 ms) (the Hub runs the heavy pass about once a second); background watches stay at 1/s.
+        decoder.tapInterval = source.id == requestedHLSID ? 0.1 : 1
         decoder.onStateChange = { [weak self, weak decoder] state in
             guard let self, self.generation == run, !self.blockedIDs.contains(id), self.hlsSources[id] != nil else { return }
             switch state {
             case .connecting: self.sourceStates[id] = .videoConnecting
-            case .streaming: self.sourceStates[id] = .polling
+            case .streaming:
+                self.sourceStates[id] = .polling
+                if id == self.requestedHLSID { self.setLiveVideoSource(id) }   // the pinned stream is up: let background watches resume
             case .retrying(let reason):
                 self.sourceStates[id] = .videoUnavailable(reason)
                 if decoder?.isRunning == false { self.hlsSources[id] = nil }
@@ -411,6 +442,15 @@ final class FeedRunner: ObservableObject {
         }
         hlsSources[id] = decoder
         decoder.start(sink: videoSink)
+        // The pinned camera is now connecting: release the background decoders that were started before it (selection was
+        // computed while its state was still unset, so they were all allowed).
+        if id == requestedHLSID {
+            let keep = selectedHLSIDs
+            for other in Array(hlsSources.keys) where !keep.contains(other) {
+                stopHLS(other)
+                if !blockedIDs.contains(other) { sourceStates[other] = watchedIDs.contains(other) ? .videoIdle : nil }
+            }
+        }
         updateStatus()
     }
 
@@ -449,6 +489,11 @@ final class FeedRunner: ObservableObject {
         let locallyBlocked = sourceStates.values.filter { $0 == .blockedByUser }.count
         if locallyBlocked > 0 { parts.append("\(locallyBlocked) blocked locally") }
         if suspended > 0 { parts.append("\(suspended) suspended") }
+        if activeVideoCount > 0 || queuedVideoCount > 0 {
+            let active = activeVideoCount == 1 ? "1 HLS stream active" : "\(activeVideoCount) HLS streams active"
+            let queued = queuedVideoCount == 1 ? "1 queued" : "\(queuedVideoCount) queued"
+            parts.append("\(active); \(queued) rotate every minute")
+        }
         status = parts.isEmpty ? Self.describe(running: 0, awaiting: 0, total: catalogue?.sources.count ?? 0) : parts.joined(separator: "; ")
     }
 
@@ -521,7 +566,7 @@ final class FeedRunner: ObservableObject {
 
     /// Decode ordinary live HLS without requiring the optional I-frame rendition
     /// needed by AVAssetImageGenerator. The bounded decoder is always released.
-    static func hlsPreviewFrame(source: PublicFeedSource, timeout: TimeInterval = 15, requestPolicy: HLSPolicyRelay.Policy? = nil) async throws -> Data {
+    static func hlsPreviewFrame(source: PublicFeedSource, timeout: TimeInterval = 30, requestPolicy: HLSPolicyRelay.Policy? = nil) async throws -> Data {
         guard source.mayBeAnalysed else { throw PreviewError.notConfirmed }
         guard await previewBudget.acquire() else { throw CancellationError() }
         defer { Task { await Self.previewBudget.release() } }

@@ -45,8 +45,11 @@ extension Sighting {
     /// Deletes every row past retention. Returns how many were removed.
     @discardableResult
     static func purgeExpired(on db: any Database, policy: PublicationPolicy = .fromEnvironment(), now: Date = Date()) async throws -> Int {
-        let expired = try await Sighting.query(on: db).filter(\.$capturedAt < policy.purgeCutoff(now: now)).count()
-        if expired > 0 { try await Sighting.query(on: db).filter(\.$capturedAt < policy.purgeCutoff(now: now)).delete() }
+        // Rows still published to CloudKit wait for the publish tool to withdraw the public record first; deleting
+        // them here would orphan a world-readable record past the retention promise.
+        let cutoff = policy.purgeCutoff(now: now)
+        let expired = try await Sighting.query(on: db).filter(\.$capturedAt < cutoff).filter(\.$publishedAt == nil).count()
+        if expired > 0 { try await Sighting.query(on: db).filter(\.$capturedAt < cutoff).filter(\.$publishedAt == nil).delete() }
         return expired
     }
 }

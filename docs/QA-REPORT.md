@@ -58,7 +58,7 @@ Most P0/P1 findings were fixed the same day; accuracy is measured in
 | VehicleML | 13 pass |
 | PlateSync | 13 pass |
 | FleetImporters | 38 pass |
-| FoundationModelsParser | 0 tests (target has none) |
+| FoundationModelsParser | 3 tests (struct/error-shape coverage; runtime availability remains device-gated) |
 | server | 41 pass |
 | iOS app (simulator + device, Debug) | builds |
 | watchOS app, macOS Hub | **not built in this pass** |

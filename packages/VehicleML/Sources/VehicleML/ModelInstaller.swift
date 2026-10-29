@@ -25,7 +25,10 @@ extension ModelManager {
     @discardableResult
     public func install(tasks: [String], into box: AnalysisContextBox) async -> Int {
         let registry = (try? await fetchRegistry()) ?? ModelRegistry(entries: [])
-        var models: [String: MLModel] = [:]
+        // Preserve already-installed stages when an optional model is installed
+        // in a later pass. A failed classifier download must never clear the
+        // working vehicle and plate detectors.
+        var models = box.current.models
         for task in tasks {
             if let compiled = try? await model(forTask: task, registry: registry) {
                 models[task] = compiled.mlModel

@@ -40,3 +40,16 @@ cross-referencing; it does not run collection or identify people in camera frame
 4. Record the response as a `SourceCitation` with `sourceType = foiaRelease`
    (URL of the released file, retrieval date, excerpt hash). That citation is
    what makes any enrichment built on the response traceable.
+
+## Following public-records news (Records → Feeds)
+
+The Feeds tab is a local RSS/Atom reader for agency release pages, court feeds and public-interest publishers. Entries
+can become a request draft in the Requests tracker ("Draft request from this…") or a pending cited candidate. Feeds are
+read-only and https-only; see ACCOUNTABILITY-DATA.md for the storage and safety rules.
+
+## Deadline table status
+
+Due dates come from `FOIADeadlines`. Virginia (Va. Code § 2.2-3704(B)) was read from the statute text on 2026-10-18.
+California's AB 1821 was chaptered 2026-09-30; the table keeps the current 10-calendar-day rule for requests filed
+before 2027-01-01 and switches to 10 business days afterwards. The federal rule and TX, IL, MA, WA, NY, CT and NH were also read from statute text on 2026-10-18 (TX via a republication of the code because the official site is script-rendered). California's § 7922.535 (as amended by AB 370, Stats. 2025 ch. 34) and the chaptered AB 1821 text were read at leginfo.legislature.ca.gov on 2026-10-18 (the built-in browser reads it; plain HTTP clients get 403), so both CA rows are verified; the 2027-01-01 effective date follows from the bill being non-urgency (Cal. Const. art. IV, § 8(c)), not from the bill text. Business days skip weekends only, not holidays. The tracker counts business days as weekdays only; legal holidays are not skipped.
+

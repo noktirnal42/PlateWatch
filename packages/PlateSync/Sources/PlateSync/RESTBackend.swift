@@ -23,6 +23,26 @@ public struct RESTBackend: SyncBackend {
         return receipt
     }
 
+    /// Files a takedown request with the reference server's public intake; a moderator decides. The server hides the
+    /// sighting from every public surface once the request is upheld, and keeps a content-free tombstone.
+    public func withdraw(handle: String?, sightingID: UUID, moderationState: Sighting.ModerationState) async throws -> WithdrawalOutcome {
+        var request = URLRequest(url: baseURL.appending(path: "v1/takedowns"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "sightingID": sightingID.uuidString,
+            "reason": "Withdrawn by the submitting device",
+        ])
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw SyncError.offline }
+        switch http.statusCode {
+        case 200...299: return WithdrawalOutcome(kind: .takedownRequested, publicRecordMayRemain: false)
+        case 401, 403: throw SyncError.notAuthenticated
+        case 429: throw SyncError.quotaExceeded
+        default: throw SyncError.serverRejected(reason: "HTTP \(http.statusCode)")
+        }
+    }
+
     /// The local review DTO carries a thumbnail; the network protocol carries only its hash.
     /// Reapply privacy rules here so an older local queue cannot bypass the ingest gate.
     static func networkPayload(_ sighting: SightingSubmissionDTO) -> SightingSubmissionDTO {

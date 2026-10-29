@@ -192,9 +192,9 @@ Full notes with VERIFIED/UNVERIFIED labels: [research/FEED-LEGAL-RESEARCH.md](re
 | Terms recorded and human-confirmed before any poll | ✅ `FeedTerms` + pollers refuse unconfirmed sources |
 | Resolution-tiered identity (low-res frames never assert identity) | ✅ `AnalysisTier` |
 | Handheld iPhone capture under the same jurisdiction policy | ⬜ not applied yet — open question for counsel (the *user* operates it) |
-| Aggregation delay (24–72 h), ~1 km coarsening, k-suppression, no live police map | ⬜ server/publishing side, not built |
-| Exclude unmarked/undercover, SWAT/protective, school buses with children, ambulances with patients | ⬜ classifier/moderation work; unmarked vehicles are already undetectable from text |
-| TTL: 21 days full precision then aggregates; access audit log; takedown channel + tombstones | ⬜ server |
+| Aggregation delay (24–72 h), ~1 km coarsening, k-suppression, no live police map | ✅ REST server: `PublicationPolicy` (default 24 h delay, max 720), geohash-6 cells, `KAnonymity` on aggregates; the CloudKit publisher applies the same delay and never copies exact coordinates, heading or device hash (2026-10-18). Hosted deployment still open |
+| Exclude unmarked/undercover, SWAT/protective, school buses with children, ambulances with patients | ◐ server gate forces moderator review (never auto-confirm, no exact geo) when markings, class or note contain sensitive whole words; a trained classifier for these classes is still open; unmarked vehicles are already undetectable from text |
+| TTL: 21 days full precision then aggregates; access audit log; takedown channel + tombstones | ✅ REST server: 21-day purge (`RetentionJob`), `audit_log`, public `/v1/takedowns` + moderator resolution, content-free `tombstones` that block re-ingest of a withdrawn observation (2026-10-18); CloudKit records are withdrawn by `publish-cloudkit` before the row is purged |
 | robots.txt, identifying User-Agent with contact URL, stop-and-flag on 403/429 (no IP rotation) | ✅ `RobotsPolicy`/`RobotsCache` (RFC 9309; Nemotron 3 Ultra, reviewed) gate every poll; 401/403/429/network error on `robots.txt` ⇒ do not fetch; 5xx defaults closed, with only the cited Caltrans image-path exception described below; transient failure cached 60 s; actual auth/rate refusal 10 min; Hub UA names the project and repo; image-level 403/429 ⇒ existing back-off/suspension. Verified: blocked camera 0 requests, `robots.txt` fetched once |
 
 ## 7. Open items / next research

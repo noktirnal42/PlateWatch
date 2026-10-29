@@ -11,6 +11,9 @@ protocol ReviewHubProviding {
     var syncStatus: String { get }
     var lastReceiptSummary: String { get }
     func syncPending() async
+    func recoverDeliveredReceipts() async
+    func sendCloudKitHistoryToModeration() async
+    func publishCloudKitHistory() async
 }
 
 struct ReviewPane: View {
@@ -25,6 +28,10 @@ struct ReviewPane: View {
     @Query(sort: \ReceivedSubmissionReceipt.receivedAt, order: .reverse) private var receipts: [ReceivedSubmissionReceipt]
     @State private var selection: Set<PersistentIdentifier> = []
     @State private var discardError = ""
+    @AppStorage("hubReview_showDeliveryHistory") private var showDeliveryHistory = true
+    @State private var recoveringReceipts = false
+    @State private var sendingCloudKit = false
+    @State private var publishingCloudKit = false
 
     private struct Row: Identifiable {
         let id: PersistentIdentifier
@@ -83,13 +90,43 @@ struct ReviewPane: View {
                     do { try ReviewQueue.reject(selection, context: context); onQueueChange(); selection.removeAll(); discardError = "" }
                     catch { discardError = "Could not reject selected items: \(error.localizedDescription)" }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(HUDButtonStyle())
                 .disabled(selection.isEmpty)
-                Button("Sync pending", systemImage: "arrow.up.circle") {
-                    Task { await hub?.syncPending() }
+                Menu("Backend actions", systemImage: "icloud") {
+                    Button("Sync pending", systemImage: "arrow.up.circle") {
+                        Task { await hub?.syncPending() }
+                    }
+                    .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
+                    .help("Deliver confirmed, redaction-gated submissions to the configured backend; moderation remains separate")
+                    Button(recoveringReceipts ? "Recovering…" : "Recover CloudKit history", systemImage: "arrow.down.circle") {
+                        recoveringReceipts = true
+                        Task {
+                            await hub?.recoverDeliveredReceipts()
+                            recoveringReceipts = false
+                        }
+                    }
+                    .disabled(recoveringReceipts)
+                    .help("Reconcile creator-readable CloudKit submissions into local delivery history")
+                    Button(sendingCloudKit ? "Sending…" : "Send CloudKit to Moderation", systemImage: "arrow.right.circle") {
+                        sendingCloudKit = true
+                        Task {
+                            await hub?.sendCloudKitHistoryToModeration()
+                            sendingCloudKit = false
+                        }
+                    }
+                    .disabled(sendingCloudKit)
+                    .help("Copy creator-owned CloudKit submissions through the redaction gate into the reference moderation queue")
+                    Button(publishingCloudKit ? "Publishing…" : "Publish confirmed CloudKit", systemImage: "checkmark.seal") {
+                        publishingCloudKit = true
+                        Task {
+                            await hub?.publishCloudKitHistory()
+                            publishingCloudKit = false
+                        }
+                    }
+                    .disabled(publishingCloudKit || !SyncBackends.cloudKitAvailable())
+                    .help("Moderator-only: publish confirmed fleet submissions as public Sighting records. This never uploads evidence images.")
                 }
-                .disabled(rows.isEmpty || hub?.syncStatus == "Syncing pending…")
-                .help("Deliver confirmed, redaction-gated submissions to the configured backend; moderation remains separate")
+                .help("Backend delivery, CloudKit recovery, moderation handoff and moderator publication")
             }
             Text(hub?.syncStatus ?? "Local review only · backend delivery is not connected")
                 .font(.caption).foregroundStyle(.secondary)
@@ -134,6 +171,42 @@ struct ReviewPane: View {
             if selection.count == 1, let row = table.first(where: { selection.contains($0.id) }) { UnitRecordsStrip(unit: row.unit, agencyKey: row.agencyKey) }
             Text("Evidence crops ride in the local queue and are view-only here; the backend keeps the crop hash, never image bytes. Discarding here does not retract anything already delivered.")
                 .font(.caption).foregroundStyle(.secondary)
+            if !receipts.isEmpty {
+                // A plain toggle rather than DisclosureGroup: the expanded DisclosureGroup left the whole Hub window
+                // unrendered once a delivery receipt existed (found 2026-10-18 during the live identity check).
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        showDeliveryHistory.toggle()
+                    } label: {
+                        Label("Delivery history · \(receipts.count)", systemImage: showDeliveryHistory ? "chevron.down" : "chevron.right")
+                            .font(.headline)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(showDeliveryHistory ? "expanded" : "collapsed")
+                    if showDeliveryHistory {
+                        // A plain bounded grid rather than a nested Table.
+                        ScrollView {
+                            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                                GridRow {
+                                    Text("Received"); Text("Sighting"); Text("State"); Text("Review"); Text("Evidence")
+                                }.font(.caption.bold()).foregroundStyle(.secondary)
+                                ForEach(receiptRows) { row in
+                                    GridRow {
+                                        Text(row.receivedAt, format: .dateTime)
+                                        Text(row.sightingID.uuidString.prefix(8)).monospaced()
+                                        Text(row.state)
+                                        Text(row.confirmed ? "Confirmed" : "Unconfirmed")
+                                        Text(row.hasEvidence ? "Saved" : "Hash only")
+                                    }.font(.callout)
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(height: min(CGFloat(receiptRows.count * 26 + 34), 190))
+                        Text("These are local delivery receipts. CloudKit submissions remain private until a moderator publishes them; an empty Moderation pane is expected when delivery used CloudKit.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
         }.padding()
         .task(id: rows.map(\.idempotencyKey)) {
             for row in rows {
@@ -145,6 +218,23 @@ struct ReviewPane: View {
                 }
                 await Task.yield()
             }
+        }
+    }
+
+    private struct ReceiptRow: Identifiable {
+        let id: UUID
+        let sightingID: UUID
+        let receivedAt: Date
+        let state: String
+        let confirmed: Bool
+        let hasEvidence: Bool
+    }
+
+    private var receiptRows: [ReceiptRow] {
+        receipts.map {
+            ReceiptRow(id: $0.sightingID, sightingID: $0.sightingID, receivedAt: $0.receivedAt,
+                       state: $0.moderationState.rawValue, confirmed: $0.operatorConfirmed,
+                       hasEvidence: $0.cropJPEGData != nil)
         }
     }
 }

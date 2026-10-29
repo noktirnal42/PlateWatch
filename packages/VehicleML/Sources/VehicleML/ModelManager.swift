@@ -40,11 +40,27 @@ public actor ModelManager {
     public func state(of name: String) -> State { states[name] ?? .notInstalled }
 
     public func fetchRegistry() async throws -> ModelRegistry {
-        let (data, response) = try await session.data(from: config.registryURL)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+        do {
+            let (data, response) = try await session.data(from: config.registryURL)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw ManagerError.registryUnavailable }
+            let registry = try JSONDecoder().decode(ModelRegistry.self, from: data)
+            try? FileManager.default.createDirectory(at: config.cacheDirectory, withIntermediateDirectories: true)
+            try? data.write(to: config.cacheDirectory.appendingPathComponent("registry.json"), options: .atomic)
+            return registry
+        } catch {
+            // A cached or bundled registry keeps already-installed models usable
+            // during an offline launch. No download is started by this fallback.
+            let cached = config.cacheDirectory.appendingPathComponent("registry.json")
+            if let data = try? Data(contentsOf: cached), let registry = try? JSONDecoder().decode(ModelRegistry.self, from: data) {
+                return registry
+            }
+            if let bundled = Bundle.module.url(forResource: "registry", withExtension: "json"),
+               let data = try? Data(contentsOf: bundled),
+               let registry = try? JSONDecoder().decode(ModelRegistry.self, from: data) {
+                return registry
+            }
             throw ManagerError.registryUnavailable
         }
-        return try JSONDecoder().decode(ModelRegistry.self, from: data)
     }
 
     /// Ensure the latest model for `task` is downloaded + compiled, and return
