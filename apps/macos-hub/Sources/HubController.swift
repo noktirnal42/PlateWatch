@@ -309,7 +309,12 @@ final class HubController: ObservableObject, ReviewHubProviding {
                 request.setValue(FeedRunner.userAgent, forHTTPHeaderField: "User-Agent")
                 request.timeoutInterval = 60
                 let (data, response) = try await fetchSigned(request)
-                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard status == 200 else {
+                    let reason = String(data: data.prefix(200), encoding: .utf8)?.replacingOccurrences(of: key, with: "…") ?? ""
+                    importStatus = "Nevada 511 catalogue request failed: HTTP \(status) \(reason)"
+                    return
+                }
                 result = try NV511Cameras.sources(fromJSON: data, key: key)
             case .caltrans:
                 let op = Importers.Operator(datasetURL: URL(string: "https://cwwp2.dot.ca.gov/documentation/cctv/cctv.htm")!,
