@@ -53,7 +53,7 @@ on Apple Vision alone. The evaluation document records later configurations sepa
 | macOS Hub | Moving HLS playback with fast tracked overlays, slower fleet analysis and optional bounded body-type estimates; policy-mediated feeds, camera map, favorites/watch/block, intact local evidence, delivery history, moderation, records, FOIA and RSS/Atom intake. Raw RTSP and type-model installation and quality evaluation remain open. [Type-model runtime notes](docs/HUB-LIVE-TYPES-2026-10-23.md). |
 | Agents | Authenticated local MCP, bounded Apple/MLX assistants and explicitly selected NVIDIA public research; PCC and broader task-quality evaluation remain open. |
 | watchOS / CarPlay | Signed watch install/launch recorded; push delivery remains a physical-device gate. CarPlay requires entitlement and device verification. |
-| Beyond Apple | Read-only Android client, reference Python edge agent, web explorer and REST deployment packaging implemented; hosted/device acceptance remains. |
+| Beyond Apple | Read-only Android client, reference Python edge agent, web explorer and REST deployment packaging implemented; hosted/device acceptance remains. Windows, Linux desktop, Android capture, Wear OS and Android Auto are not started: see [docs/PLATFORMS.md](docs/PLATFORMS.md). Contributors with that hardware are very welcome. |
 
 [![CI](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noktirnal42/PlateWatch/actions/workflows/ci.yml)
 
