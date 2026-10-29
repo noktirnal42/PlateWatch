@@ -1,6 +1,9 @@
 import PlateKit
 
 enum VehicleOverlayLabel {
+    /// Below this class confidence an ordinary vehicle is not given a body type or color.
+    static let minimumTypeConfidence = 0.5
+
     static func text(for vehicle: VehicleObservation, fleetConfidence: Double, bodyTypeEstimated: Bool = false) -> String {
         let body = vehicle.attributes?.bodyType.flatMap { value -> String? in
             switch value.lowercased().replacingOccurrences(of: "_", with: " ") {
@@ -27,6 +30,8 @@ enum VehicleOverlayLabel {
                 return vehicleLabel.isEmpty ? "Vehicle" : vehicleLabel
             }
             let score = Int(min(1, max(0, vehicle.classConfidence)) * 100)
+            // Low-confidence body types (small or distant cars read as "Motorcycle") stay "Vehicle" and draw dashed.
+            if vehicle.classConfidence < minimumTypeConfidence { return "Vehicle · class \(score)%" }
             return "\(vehicleLabel.isEmpty ? "Vehicle" : vehicleLabel) · class \(score)%"
         }
         let fleet: String

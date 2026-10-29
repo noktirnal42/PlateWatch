@@ -32,6 +32,12 @@ final class VehicleOverlayLabelTests: XCTestCase {
         XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "Vehicle · class 61%")
     }
 
+    func testLowConfidenceBodyTypeFallsBackToVehicle() {
+        let vehicle = VehicleObservation(boundingBox: .init(x: 0, y: 0, width: 1, height: 1), classConfidence: 0.35,
+                                         attributes: .init(color: "yellow", bodyType: "motorcycle"))
+        XCTAssertEqual(VehicleOverlayLabel.text(for: vehicle, fleetConfidence: 0), "Vehicle · class 35%")
+    }
+
     func testCommonBodyAliasesAreReadable() {
         for (body, expected) in [("suv", "SUV"), ("van", "Van"), ("pickup_truck", "Pickup"),
                                  ("sedan", "Car"), ("sport_utility_vehicle", "SUV"),
