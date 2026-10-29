@@ -219,3 +219,22 @@ is still **transit 98 %** — confident and wrong. Still **not safe to wire in a
 shows is that the bottleneck was data volume/diversity, and that dark low-contrast liveries still need their own examples (the Hub's
 text path and the review queue remain the primary route for them). Next: add stealth-livery and rear-view police images (Commons
 categories are thin on them), re-measure, and keep Waltham/Minneapolis as the fixed held-out check.
+
+## 8. Model plan, 2026-10-29
+
+What is trained and shipped, what is trained but not safe, and what is not
+started, in the order that unblocks the most. Nothing here is registered until
+it clears its bar on held-out real photos.
+
+| Model | State | Next step | Bar |
+|---|---|---|---|
+| Plate detector | shipped (Create ML) | ONNX export of the YOLOv8n fallback for non-Apple runtimes; benchmark against the Create ML model on the 62-image corpus | recall at 100 % precision |
+| Vehicle detector | shipped (COCO) | fine-tune on fleet and cluttered-traffic imagery; reduces confident "Motorcycle" on distant cars | no precision loss on the corpus |
+| Vehicle type | shipped, registry fixed 2026-10-29 | verify install through `ModelManager`; measure on crops | measured accuracy, not just abstention |
+| Fleet crop classifier | trained, 77 % test | add stealth-livery and rear-view police crops, keep Waltham/Minneapolis as the fixed held-out check | no confident miss on the held-out check |
+| Plate-state | trained, 72.7 % test | blocked on data: 13 agency-only states have no test images | 95 % precision |
+| Plate OCR | Vision baseline | only train a specialized model if it beats Vision on the corpus | beats Vision exact-match |
+| Make / model / colour | released, unmeasured | evaluate on the corpus before any use | measured, conservative abstain |
+
+Cross-platform runtime (ONNX / TFLite) conversion is tracked in
+[PLATFORMS.md](PLATFORMS.md).

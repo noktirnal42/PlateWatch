@@ -121,3 +121,14 @@ It now uses the final cumulative count and explicitly marks the type model
 unavailable. The verified registry digest/input-description repair belongs to
 the next WS3 checkpoint; checksum enforcement is preserved. This is a real
 availability gate for selected-HLS type estimates, not a completed deployment.
+
+### Resolved 2026-10-29
+
+`models/registry.json` and the bundled `VehicleML` registry now pin the published
+`vehicle-type-classifier.aar` digest (`728ff6aa…`), confirmed against the
+`models-v0.1.0` release asset digests from `gh release view` and the local
+`models/release` archive. The `vehicle-make-model-classifier` digest was
+also stale (`ab041e76…`) and now pins the published `b1f589…`. The type
+model's registry input description now states the tensor contract. VehicleML
+tests pass (52, one skipped). Installing the type model in a running Hub is
+still unverified: the Hub must re-fetch it through `ModelManager`.

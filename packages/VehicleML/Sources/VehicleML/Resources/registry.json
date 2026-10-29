@@ -30,7 +30,7 @@
       "task": "vehicle-type-classification",
       "version": "0.1.0",
       "url": "https://github.com/noktirnal42/PlateWatch/releases/download/models-v0.1.0/vehicle-type-classifier.aar",
-      "sha256": "6f0aa0e85c247838158c8824de7ef648b003efb1c8e80b84cff293387c8e6b32",
+      "sha256": "728ff6aaca8da8d20cad646c5a8edd68b23311a4e501f2644d12948cd88ce01e",
       "sourceURL": "https://huggingface.co/dima806/vehicle_10_types_image_detection",
       "license": "Apache-2.0",
       "inputDescription": "IMAGE 224x224 RGB; coarse vehicle type classification",
